@@ -6,20 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Edit3, Trash2, User as UserIcon, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle } from "lucide-react";
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/auth-context";
 
 interface TicketItemProps {
   ticket: Ticket;
   leads: Lead[];
   users: User[];
   onEdit: (ticket: Ticket) => void;
-  onDelete: (ticketId: string) => void; // Assuming delete functionality might be added
+  onDelete: (ticketId: string) => void; 
 }
 
 export function TicketItem({ ticket, leads, users, onEdit, onDelete }: TicketItemProps) {
+  const { currentUser } = useAuth();
   const relatedLead = ticket.relatedLeadId ? leads.find(l => l.id === ticket.relatedLeadId) : null;
   const reporter = users.find(u => u.id === ticket.reporterUserId);
   const assignee = ticket.assigneeUserId ? users.find(u => u.id === ticket.assigneeUserId) : null;
@@ -43,19 +45,24 @@ export function TicketItem({ ticket, leads, users, onEdit, onDelete }: TicketIte
     }
   };
   
-  const UserAvatarTooltip = ({ user }: { user?: User }) => {
-    if (!user) return <span className="text-xs text-muted-foreground">N/A</span>;
+  const UserAvatarNameTooltip = ({ user, label }: { user?: User, label: string }) => {
+    if (!user) return <span className="text-xs text-muted-foreground">{label}: N/A</span>;
     return (
       <TooltipProvider delayDuration={100}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Avatar className="h-6 w-6">
-              <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint="user avatar" />
-              <AvatarFallback>{user.name.substring(0, 1).toUpperCase()}</AvatarFallback>
-            </Avatar>
+            <div className="flex items-center gap-1.5">
+                {label === "Reportado por" && <UserIcon className="h-4 w-4" />}
+                {label === "Asignado a" && <UserIcon className="h-4 w-4 text-green-500" />}
+                <Avatar className="h-5 w-5">
+                  <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.email}.png`} alt={user.name} data-ai-hint="user avatar" />
+                  <AvatarFallback>{user.name.substring(0, 1).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <span className="text-xs hidden sm:inline">{user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}</span>
+            </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p>{user.name}</p>
+            <p>{label}: {user.name}</p>
             <p className="text-xs text-muted-foreground">{user.email}</p>
           </TooltipContent>
         </Tooltip>
@@ -104,14 +111,14 @@ export function TicketItem({ ticket, leads, users, onEdit, onDelete }: TicketIte
               <span>{format(parseISO(ticket.updatedAt), "PP", { locale: es })}</span>
             </div>
           )}
-          <div className="flex items-center gap-1.5" title="Reportado por">
-            <UserIcon className="h-4 w-4" />
-            <UserAvatarTooltip user={reporter} />
-          </div>
-          <div className="flex items-center gap-1.5" title="Asignado a">
-            <UserIcon className="h-4 w-4 text-green-500" />
-             {assignee ? <UserAvatarTooltip user={assignee} /> : <span className="text-xs text-muted-foreground">Sin asignar</span>}
-          </div>
+           <UserAvatarNameTooltip user={reporter} label="Reportado por" />
+           {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" /> : 
+            <div className="flex items-center gap-1.5" title="Asignado a">
+                <UserIcon className="h-4 w-4 text-green-500" />
+                <span className="text-xs text-muted-foreground">Sin asignar</span>
+            </div>
+           }
+
 
           {relatedLead && (
             <div className="flex items-center gap-1.5 col-span-full sm:col-span-1" title="Lead Relacionado">

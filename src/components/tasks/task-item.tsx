@@ -1,29 +1,29 @@
 
 "use client";
 
-import type { Task, Lead, User } from "@/lib/types"; // Added User
+import type { Task, Lead, User } from "@/lib/types"; 
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon } from "lucide-react"; // Renamed User to UserIcon
+import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon } from "lucide-react"; 
 import { format, parseISO, differenceInDays } from 'date-fns';
-import { es } from 'date-fns/locale'; // Spanish locale for date-fns
-import { CURRENT_USER_ID } from "@/lib/constants";
+import { es } from 'date-fns/locale'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/contexts/auth-context";
 
 
 interface TaskItemProps {
   task: Task;
   leads: Lead[];
-  users: User[]; // Added users prop
+  users: User[]; 
   onToggleComplete: (taskId: string) => void;
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
-const UserAvatarTooltip = ({ user, labelPrefix }: { user?: User, labelPrefix?: string }) => {
+const UserAvatarTooltip = ({ user, labelPrefix, currentAuthUser }: { user?: User, labelPrefix?: string, currentAuthUser?: User | null }) => {
   if (!user) return <span className="text-xs text-muted-foreground">N/A</span>;
   return (
     <TooltipProvider delayDuration={100}>
@@ -32,10 +32,10 @@ const UserAvatarTooltip = ({ user, labelPrefix }: { user?: User, labelPrefix?: s
           <div className="flex items-center gap-1">
             {labelPrefix && <span className="text-xs">{labelPrefix}</span>}
             <Avatar className="h-5 w-5">
-              <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint="user avatar" />
+              <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.email}.png`} alt={user.name} data-ai-hint="user avatar" />
               <AvatarFallback>{user.name.substring(0, 1).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <span className="text-xs hidden sm:inline">{user.name} {user.id === CURRENT_USER_ID ? "(Yo)" : ""}</span>
+            <span className="text-xs hidden sm:inline">{user.name} {currentAuthUser && user.id === currentAuthUser.id ? "(Yo)" : ""}</span>
           </div>
         </TooltipTrigger>
         <TooltipContent>
@@ -49,15 +49,15 @@ const UserAvatarTooltip = ({ user, labelPrefix }: { user?: User, labelPrefix?: s
 
 
 export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelete }: TaskItemProps) {
+  const { currentUser } = useAuth();
   const relatedLead = task.relatedLeadId ? leads.find(l => l.id === task.relatedLeadId) : null;
   const assignee = task.assigneeUserId ? users.find(u => u.id === task.assigneeUserId) : null;
-  // const reporter = users.find(u => u.id === task.reporterUserId); // Reporter not actively displayed but could be useful
   
   const getDueDateBadge = () => {
     if (!task.dueDate) return null;
     const dueDate = parseISO(task.dueDate);
     const today = new Date();
-    today.setHours(0,0,0,0); // Normalize today to start of day for accurate diff
+    today.setHours(0,0,0,0); 
     const daysDiff = differenceInDays(dueDate, today);
 
     if (task.completed) return <Badge variant="outline">Completada</Badge>;
@@ -127,7 +127,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
               </TooltipProvider>
             )}
              {assignee ? (
-                <UserAvatarTooltip user={assignee} labelPrefix="Para:"/>
+                <UserAvatarTooltip user={assignee} labelPrefix="Para:" currentAuthUser={currentUser} />
             ) : (
               <span className="flex items-center gap-1 p-1 px-1.5 bg-muted rounded-md text-xs">
                 <UserIcon className="h-3 w-3" /> Sin asignar

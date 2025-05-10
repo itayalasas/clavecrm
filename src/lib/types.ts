@@ -1,4 +1,5 @@
 
+
 export interface Lead {
   id: string;
   name: string;
@@ -38,7 +39,8 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  avatarUrl?: string;
+  avatarUrl?: string; // Made optional
+  role?: 'admin' | 'supervisor' | 'user'; // Added role
 }
 
 export interface Ticket {

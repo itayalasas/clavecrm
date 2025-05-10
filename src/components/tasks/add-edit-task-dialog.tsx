@@ -27,15 +27,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { es } from 'date-fns/locale'; // Spanish locale for date-fns
+import { es } from 'date-fns/locale'; 
 import { cn } from "@/lib/utils";
-import { CURRENT_USER_ID } from "@/lib/constants";
+import { useAuth } from "@/contexts/auth-context";
+
 
 interface AddEditTaskDialogProps {
   trigger: React.ReactNode;
   taskToEdit?: Task | null;
   leads: Lead[];
-  users: User[]; // Added users prop
+  users: User[]; 
   onSave: (task: Task) => void;
 }
 
@@ -54,10 +55,12 @@ const NO_USER_SELECTED_VALUE = "__no_user_selected__";
 
 export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }: AddEditTaskDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  // Ensure reporterUserId is part of the form data state, even if not directly editable in this version of the form.
+  const { currentUser } = useAuth();
+  
   const [formData, setFormData] = useState<Omit<Task, 'id' | 'createdAt'>>({
     ...defaultTask,
-    reporterUserId: taskToEdit ? taskToEdit.reporterUserId : CURRENT_USER_ID,
+    reporterUserId: taskToEdit ? taskToEdit.reporterUserId : (currentUser?.id || ""),
+    assigneeUserId: taskToEdit ? taskToEdit.assigneeUserId : (currentUser?.id || undefined) // Default to current user or undefined
   });
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
@@ -77,11 +80,12 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
     } else {
       setFormData({
         ...defaultTask,
-        reporterUserId: CURRENT_USER_ID, // Set reporter to current user for new tasks
+        reporterUserId: currentUser?.id || "", 
+        assigneeUserId: currentUser?.id || undefined, // Default new tasks to current user or unassigned
       });
       setSelectedDate(undefined);
     }
-  }, [taskToEdit, isOpen]);
+  }, [taskToEdit, isOpen, currentUser]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -108,16 +112,21 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
       alert("El título es obligatorio."); 
       return;
     }
+    if (!currentUser?.id && !taskToEdit) { // Ensure reporterId is set if creating new
+        alert("No se pudo identificar al usuario reportador. Intenta recargar la página.");
+        return;
+    }
+
     const newTaskData: Omit<Task, 'id' | 'createdAt'> = {
       ...formData,
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
+      reporterUserId: taskToEdit ? formData.reporterUserId : (currentUser?.id || ""), // Ensure reporter is current user for new tasks
     };
 
     const finalTask: Task = {
       ...newTaskData,
       id: taskToEdit ? taskToEdit.id : `task-${Date.now()}`,
       createdAt: taskToEdit ? taskToEdit.createdAt : new Date().toISOString(),
-      reporterUserId: taskToEdit ? taskToEdit.reporterUserId : CURRENT_USER_ID, // Ensure reporterId is set
     };
     onSave(finalTask);
     setIsOpen(false);
@@ -140,7 +149,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor="description" className="text-right pt-2">Descripción</Label>
-            <Textarea id="description" name="description" value={formData.description} onChange={handleChange} className="col-span-3" rows={3} />
+            <Textarea id="description" name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={3} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="dueDate" className="text-right">Fecha de Vencimiento</Label>
@@ -195,7 +204,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
                 <SelectItem value={NO_USER_SELECTED_VALUE}>Sin asignar</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
-                    {user.name} {user.id === CURRENT_USER_ID ? "(Yo)" : ""}
+                    {user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

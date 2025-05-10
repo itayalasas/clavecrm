@@ -1,3 +1,4 @@
+
 import type { Lead, PipelineStage, Task, Ticket, User, TicketStatus, TicketPriority } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList } from 'lucide-react';
 
@@ -29,21 +30,22 @@ export const INITIAL_LEADS: Lead[] = [
   { id: 'lead-5', name: 'Epsilon Retail', email: 'shop@epsilon.store', stageId: 'stage-4', createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), details: 'Negociando términos para el plan empresarial.', value: 25000 },
 ];
 
+// These are mock users. Real users will come from Firebase Auth / Firestore
+// Their IDs ('user-1', 'user-2', etc.) are used in mock tasks/tickets.
+// The app should eventually fetch users from Firestore.
 export const INITIAL_USERS: User[] = [
-  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100' },
-  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100' },
-  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100' },
-  { id: 'user-4', name: 'Usuario Demo', email: 'usuario@ejemplo.com', avatarUrl: 'https://picsum.photos/id/237/200/200' }, // Current user
+  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100', role: 'user' },
+  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100', role: 'supervisor' },
+  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100', role: 'user' },
+  // The concept of a "demo user" that's hardcoded like this is removed.
+  // The logged-in user will be the 'current user'.
 ];
 
-// Assuming current logged-in user
-export const CURRENT_USER_ID = 'user-4';
-
 export const INITIAL_TASKS: Task[] = [
-  { id: 'task-1', title: 'Llamada de seguimiento con Acme Corp', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-1', createdAt: new Date().toISOString(), priority: 'high', reporterUserId: 'user-1', assigneeUserId: CURRENT_USER_ID },
-  { id: 'task-2', title: 'Preparar demo para Beta Solutions', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-2', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: CURRENT_USER_ID, assigneeUserId: 'user-2' },
-  { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'low', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), reporterUserId: 'user-2' /* Unassigned */ },
-  { id: 'task-4', title: 'Investigar competidores de Delta Services', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-4', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: CURRENT_USER_ID, assigneeUserId: CURRENT_USER_ID },
+  { id: 'task-1', title: 'Llamada de seguimiento con Acme Corp', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-1', createdAt: new Date().toISOString(), priority: 'high', reporterUserId: 'user-1', assigneeUserId: 'user-2' },
+  { id: 'task-2', title: 'Preparar demo para Beta Solutions', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-2', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
+  { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'low', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), reporterUserId: 'user-2' /* Unassigned by default */ },
+  { id: 'task-4', title: 'Investigar competidores de Delta Services', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-4', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
 ];
 
 
@@ -80,7 +82,7 @@ export const INITIAL_TICKETS: Ticket[] = [
     status: 'Abierto',
     priority: 'Media',
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    reporterUserId: CURRENT_USER_ID, // Reported by current demo user
+    reporterUserId: 'user-1', 
     assigneeUserId: 'user-1',
     relatedLeadId: 'lead-2',
   },
@@ -105,7 +107,7 @@ export const INITIAL_TICKETS: Ticket[] = [
     createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
     reporterUserId: 'user-1',
-    assigneeUserId: CURRENT_USER_ID,
+    assigneeUserId: 'user-1',
     relatedLeadId: 'lead-5',
   }
 ];

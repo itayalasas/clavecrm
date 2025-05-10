@@ -23,7 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CURRENT_USER_ID, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
+import { TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
+import { useAuth } from "@/contexts/auth-context";
 
 interface AddEditTicketDialogProps {
   trigger: React.ReactNode;
@@ -45,7 +46,6 @@ const defaultTicket: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId'> = {
   updatedAt: undefined,
 };
 
-// Special values for "none" options in Select components
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
 const NO_USER_SELECTED_VALUE = "__no_user_selected__";
 
@@ -62,8 +62,13 @@ export function AddEditTicketDialog({
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
   const setIsOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalIsOpen;
+  
+  const { currentUser } = useAuth();
 
-  const [formData, setFormData] = useState<Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId'>>(defaultTicket);
+  const [formData, setFormData] = useState<Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId'>>({
+    ...defaultTicket,
+    assigneeUserId: currentUser?.id || undefined, // Default to current user or unassigned
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -78,10 +83,13 @@ export function AddEditTicketDialog({
           updatedAt: ticketToEdit.updatedAt,
         });
       } else {
-        setFormData(defaultTicket);
+        setFormData({
+            ...defaultTicket,
+            assigneeUserId: currentUser?.id || undefined,
+        });
       }
     }
-  }, [ticketToEdit, isOpen]);
+  }, [ticketToEdit, isOpen, currentUser]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -89,7 +97,14 @@ export function AddEditTicketDialog({
   };
 
   const handleSelectChange = (name: 'status' | 'priority' | 'assigneeUserId' | 'relatedLeadId', value: string | undefined) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === 'assigneeUserId') {
+        setFormData((prev) => ({ ...prev, assigneeUserId: value === NO_USER_SELECTED_VALUE ? undefined : value }));
+    } else if (name === 'relatedLeadId') {
+        setFormData((prev) => ({ ...prev, relatedLeadId: value === NO_LEAD_SELECTED_VALUE ? undefined : value }));
+    }
+    else {
+        setFormData((prev) => ({ ...prev, [name]: value as TicketStatus | TicketPriority }));
+    }
   };
 
   const handleSubmit = () => {
@@ -97,11 +112,16 @@ export function AddEditTicketDialog({
       alert("El título y la descripción son obligatorios.");
       return;
     }
+    if (!currentUser?.id && !ticketToEdit) {
+        alert("No se pudo identificar al usuario reportador. Intenta recargar la página.");
+        return;
+    }
+
     const now = new Date().toISOString();
     const newTicket: Ticket = {
       ...formData,
       id: ticketToEdit ? ticketToEdit.id : `ticket-${Date.now()}`,
-      reporterUserId: ticketToEdit ? ticketToEdit.reporterUserId : CURRENT_USER_ID,
+      reporterUserId: ticketToEdit ? ticketToEdit.reporterUserId : (currentUser?.id || ""),
       createdAt: ticketToEdit ? ticketToEdit.createdAt : now,
       updatedAt: now,
     };
@@ -159,7 +179,7 @@ export function AddEditTicketDialog({
             <Select
               name="assigneeUserId"
               value={formData.assigneeUserId || NO_USER_SELECTED_VALUE}
-              onValueChange={(value) => handleSelectChange('assigneeUserId', value === NO_USER_SELECTED_VALUE ? undefined : value)}
+              onValueChange={(value) => handleSelectChange('assigneeUserId', value)}
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un usuario (opcional)" />
@@ -168,7 +188,7 @@ export function AddEditTicketDialog({
                 <SelectItem value={NO_USER_SELECTED_VALUE}>Sin asignar</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
-                    {user.name}
+                    {user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -179,7 +199,7 @@ export function AddEditTicketDialog({
             <Select
               name="relatedLeadId"
               value={formData.relatedLeadId || NO_LEAD_SELECTED_VALUE}
-              onValueChange={(value) => handleSelectChange('relatedLeadId', value === NO_LEAD_SELECTED_VALUE ? undefined : value)}
+              onValueChange={(value) => handleSelectChange('relatedLeadId', value)}
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un lead (opcional)" />
@@ -203,4 +223,3 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
-
