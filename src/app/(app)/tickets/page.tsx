@@ -37,6 +37,8 @@ export default function TicketsPage() {
   }, []);
 
   const handleSaveTicket = (ticket: Ticket) => {
+    const isEditOperation = !!editingTicket; // Capture if it was an edit before clearing editingTicket
+
     setTickets(prevTickets => {
       const existingTicketIndex = prevTickets.findIndex(t => t.id === ticket.id);
       let newTickets;
@@ -58,8 +60,8 @@ export default function TicketsPage() {
     setIsDialogOpen(false);
     setEditingTicket(null);
     toast({
-        title: ticketToEdit ? "Ticket Actualizado" : "Ticket Creado",
-        description: `El ticket "${ticket.title}" ha sido ${ticketToEdit ? 'actualizado' : 'creado'} exitosamente.`,
+        title: isEditOperation ? "Ticket Actualizado" : "Ticket Creado",
+        description: `El ticket "${ticket.title}" ha sido ${isEditOperation ? 'actualizado' : 'creado'} exitosamente.`,
     });
   };
 
@@ -192,3 +194,4 @@ export default function TicketsPage() {
     </div>
   );
 }
+
