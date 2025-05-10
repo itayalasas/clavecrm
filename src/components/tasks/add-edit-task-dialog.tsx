@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -45,6 +46,8 @@ const defaultTask: Omit<Task, 'id' | 'createdAt'> = {
   priority: 'medium',
 };
 
+const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
+
 export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEditTaskDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState<Omit<Task, 'id' | 'createdAt'>>(defaultTask);
@@ -73,7 +76,11 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
   };
 
   const handleSelectChange = (name: 'relatedLeadId' | 'priority', value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value || undefined }));
+    if (name === 'relatedLeadId') {
+      setFormData((prev) => ({ ...prev, relatedLeadId: value === NO_LEAD_SELECTED_VALUE ? undefined : value }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleDateChange = (date: Date | undefined) => {
@@ -155,12 +162,16 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="relatedLeadId" className="text-right">Lead Relacionado</Label>
-            <Select name="relatedLeadId" value={formData.relatedLeadId} onValueChange={(value) => handleSelectChange('relatedLeadId', value)}>
+            <Select
+              name="relatedLeadId"
+              value={formData.relatedLeadId || NO_LEAD_SELECTED_VALUE}
+              onValueChange={(value) => handleSelectChange('relatedLeadId', value)}
+            >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un lead (opcional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Ninguno</SelectItem>
+                <SelectItem value={NO_LEAD_SELECTED_VALUE}>Ninguno</SelectItem>
                 {leads.map((lead) => (
                   <SelectItem key={lead.id} value={lead.id}>
                     {lead.name}
@@ -178,3 +189,4 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
     </Dialog>
   );
 }
+
