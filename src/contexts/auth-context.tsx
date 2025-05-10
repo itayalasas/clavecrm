@@ -1,204 +1,190 @@
+// src/contexts/auth-context.tsx
+'use client';
 
-"use client";
-
-import type { User as FirebaseUser, UserCredential } from "firebase/auth";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { auth, db } from "@/lib/firebase";
-import { 
-  onAuthStateChanged, 
-  signOut as firebaseSignOut, 
-  createUserWithEmailAndPassword, 
+import type { ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signOut,
   sendEmailVerification,
-  sendPasswordResetEmail
-} from "firebase/auth";
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore"; // Added collection, getDocs, deleteDoc
-import type { User, UserRole } from "@/lib/types"; 
-import { DEFAULT_USER_ROLE } from "@/lib/constants";
+  sendPasswordResetEmail,
+  type User as FirebaseUser,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import type { User, UserRole } from '@/lib/types';
+import { DEFAULT_USER_ROLE } from '@/lib/constants';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
-  currentUser: User | null; 
-  firebaseUser: FirebaseUser | null; 
+  currentUser: User | null;
+  firebaseUser: FirebaseUser | null;
   loading: boolean;
-  error: Error | null;
-  login: (email: string, pass: string) => Promise<UserCredential>;
-  signup: (email: string, pass: string, name: string, role: UserRole) => Promise<UserCredential>; // name is now mandatory
+  login: (email: string, pass: string) => Promise<void>;
+  signup: (email: string, pass: string, name: string, role?: UserRole) => Promise<FirebaseUser>;
   logout: () => Promise<void>;
-  getAllUsers: () => Promise<User[]>; // New function
-  // deleteUser: (userId: string) => Promise<void>; // Placeholder for future
+  getAllUsers: () => Promise<User[]>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-}
-
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setLoading(true); // Set loading true at the start of auth state change processing
-      setError(null); // Clear previous errors
-      try {
-        setFirebaseUser(user);
-        if (user) {
-          const userDocRef = doc(db, "users", user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            setCurrentUser({ 
-              id: user.uid, 
-              email: user.email || "", // Ensure email is always present
-              name: userData.name || user.displayName || user.email?.split('@')[0] || "Usuario Anónimo", // Ensure name is present
-              role: userData.role || DEFAULT_USER_ROLE, // Ensure role is present
-              avatarUrl: userData.avatarUrl, // Include avatarUrl if present
-              ...userData, // Spread other potential fields from Firestore
-            } as User);
-          } else {
-            // User exists in Auth but not Firestore. Create Firestore doc.
-            // This scenario typically occurs if signup process was interrupted or for externally created users.
-            const newUserProfile: User = {
-              id: user.uid,
-              email: user.email || "",
-              name: user.displayName || user.email?.split('@')[0] || "Usuario Anónimo",
-              role: DEFAULT_USER_ROLE, // Assign default role
-              // avatarUrl can be added later if needed
-            };
-            await setDoc(userDocRef, { 
-              email: newUserProfile.email, 
-              name: newUserProfile.name,
-              role: newUserProfile.role 
-            });
-            setCurrentUser(newUserProfile);
-          }
+      setFirebaseUser(user);
+      if (user) {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          setCurrentUser({ id: user.uid, ...userDocSnap.data() } as User);
         } else {
-          setCurrentUser(null);
+          console.warn("User document not found in Firestore for UID:", user.uid, "Creating a default one or logging out.");
+          // This situation should ideally be handled based on specific app logic.
+          // For now, if a user is auth'd but has no Firestore doc, we can log them out or create a default.
+          // Given the flow where admin creates users, this might be an edge case.
+          // Let's assume if they are authenticated, we try to give them a basic profile.
+           setCurrentUser({
+             id: user.uid,
+             email: user.email || "",
+             name: user.displayName || "Usuario",
+             role: DEFAULT_USER_ROLE, // Fallback role
+           });
         }
-      } catch (e: any) {
-        console.error("Error processing auth state change:", e);
-        setError(e);
-        setCurrentUser(null); // Ensure user is cleared on error
-      } finally {
-        setLoading(false); // Ensure loading is set to false after processing
+      } else {
+        setCurrentUser(null);
       }
-    }, (authError) => { // Error callback for onAuthStateChanged listener itself
-      console.error("Firebase onAuthStateChanged error:", authError);
-      setError(authError);
-      setCurrentUser(null);
-      setFirebaseUser(null);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const login = (email: string, pass: string) => {
+  const login = async (email: string, pass: string) => {
     setLoading(true);
-    setError(null); 
-    return signInWithEmailAndPassword(auth, email, pass)
-      .catch(err => { setError(err); setLoading(false); throw err; });
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+      // onAuthStateChanged will handle setting currentUser
+    } catch (error: any) {
+      console.error("Error en login:", error);
+      let errorMessage = "Ocurrió un error al iniciar sesión.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = "Correo electrónico o contraseña incorrectos.";
+      }
+      toast({
+        title: "Error de Inicio de Sesión",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setLoading(false); // Ensure loading is false on error
+      throw error;
+    }
+    // setLoading(false) is handled by onAuthStateChanged
   };
 
-  const signup = async (email: string, pass: string, name: string, role: UserRole) => {
-    // This signup is for creating new users by an admin, not for self-registration by the current user.
-    // Global loading state should not be affected by this admin action.
+  // Signup function used by an admin to create a new user.
+  // This function does NOT log in the newly created user.
+  const signup = async (email: string, pass: string, name: string, role?: UserRole): Promise<FirebaseUser> => {
+    // Note: setLoading(true/false) is not managed here as this is an admin action,
+    // and the admin's loading state should not be affected.
+    // The component calling signup should manage its own UI loading state.
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      const firebaseAuthUser = userCredential.user;
-      
-      const newUserProfileData = { 
-        email: firebaseAuthUser.email || "",
-        name: name, // Use provided name
-        role: role, // Use provided role
-      };
+      const newUser = userCredential.user;
 
-      const userDocRef = doc(db, "users", firebaseAuthUser.uid);
-      await setDoc(userDocRef, newUserProfileData);
+      // Save user details to Firestore
+      const userDocRef = doc(db, "users", newUser.uid);
+      await setDoc(userDocRef, {
+        uid: newUser.uid,
+        email: newUser.email,
+        name: name,
+        role: role || DEFAULT_USER_ROLE,
+        createdAt: new Date().toISOString(),
+        avatarUrl: `https://avatar.vercel.sh/${newUser.email}.png` // Default avatar
+      });
+
+      // Send verification email to the new user
+      await sendEmailVerification(newUser);
+
+      // Send password reset email to the new user so they can set their password
+      await sendPasswordResetEmail(auth, email);
       
-      // Send verification and password reset emails
-      if (firebaseAuthUser) {
-        await sendEmailVerification(firebaseAuthUser);
-        // Consider if sending password reset immediately is desired for admin-created users.
-        // It might be better to let them use the initial password or have a separate "force password reset" flow.
-        // For now, we'll send it as per previous implementation.
-        await sendPasswordResetEmail(auth, email); 
+      // Do not call setCurrentUser or change global loading state here.
+      // The admin performing this action remains logged in.
+      return newUser; // Return the FirebaseUser object
+    } catch (error: any) {
+      console.error("Error en signup (admin):", error);
+      let errorMessage = "Ocurrió un error al crear el usuario.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "Este correo electrónico ya está en uso.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "La contraseña es demasiado débil. Debe tener al menos 6 caracteres.";
       }
-      
-      return userCredential;
-    } catch (err: any) {
-      // Log error, but don't set global error/loading for this admin action
-      console.error("Error during admin signup:", err);
-      throw err;
+      toast({
+        title: "Error al Crear Usuario",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      throw error;
     }
   };
 
-  const logout = () => {
-    // setLoading(true) will be handled by onAuthStateChanged when user becomes null
-    return firebaseSignOut(auth);
+  const logout = async () => {
+    setLoading(true);
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+      setFirebaseUser(null);
+    } catch (error: any) {
+      console.error("Error en logout:", error);
+       toast({
+        title: "Error al Cerrar Sesión",
+        description: "Ocurrió un error inesperado.",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setLoading(false); // onAuthStateChanged might also set this, but ensure it's false.
+    }
   };
 
   const getAllUsers = async (): Promise<User[]> => {
-    // This function fetches data for a specific page,
-    // it should not manage the global loading/error state of AuthContext.
-    // The calling component (UserManagementPage) will handle its own loading/error states.
     try {
-      const usersCol = collection(db, "users");
-      const userSnapshot = await getDocs(usersCol);
-      const userList = userSnapshot.docs.map(docSnap => ({ 
-          id: docSnap.id, 
-          email: docSnap.data().email || "",
-          name: docSnap.data().name || "Usuario Anónimo",
-          role: docSnap.data().role || DEFAULT_USER_ROLE,
-          avatarUrl: docSnap.data().avatarUrl,
-          ...docSnap.data() 
-        } as User));
-      return userList;
-    } catch (err: any) {
-      console.error("Error fetching all users:", err);
-      throw err; // Rethrow for the calling component to handle
+      const usersCollectionRef = collection(db, "users");
+      const querySnapshot = await getDocs(usersCollectionRef);
+      const usersList = querySnapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as User));
+      return usersList;
+    } catch (error) {
+      console.error("Error fetching all users:", error);
+      toast({
+        title: "Error al Cargar Usuarios",
+        description: "No se pudieron cargar los datos de los usuarios.",
+        variant: "destructive",
+      });
+      throw error;
     }
   };
 
-  // Placeholder for delete user function
-  // const deleteUser = async (userId: string): Promise<void> => {
-  //   try {
-  //     // This is complex: needs an admin SDK or a Cloud Function to delete Firebase Auth user.
-  //     // Deleting Firestore doc is easy:
-  //     // await deleteDoc(doc(db, "users", userId));
-  //     // For now, this is a placeholder.
-  //     console.warn("User deletion from Firebase Auth requires Admin SDK or Cloud Function.");
-  //     await deleteDoc(doc(db, "users", userId)); // Example: delete from Firestore only
-  //   } catch (err: any) {
-  //     console.error("Error deleting user:", err);
-  //     throw err;
-  //   }
-  // };
+  return (
+    <AuthContext.Provider value={{ currentUser, firebaseUser, loading, login, signup, logout, getAllUsers }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
 
-  const value = {
-    currentUser,
-    firebaseUser,
-    loading,
-    error,
-    login,
-    signup,
-    logout,
-    getAllUsers,
-    // deleteUser, 
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
