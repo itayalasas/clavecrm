@@ -45,6 +45,11 @@ const defaultTicket: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId'> = {
   updatedAt: undefined,
 };
 
+// Special values for "none" options in Select components
+const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
+const NO_USER_SELECTED_VALUE = "__no_user_selected__";
+
+
 export function AddEditTicketDialog({
   trigger,
   ticketToEdit,
@@ -83,8 +88,8 @@ export function AddEditTicketDialog({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: 'status' | 'priority' | 'assigneeUserId' | 'relatedLeadId', value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value || undefined }));
+  const handleSelectChange = (name: 'status' | 'priority' | 'assigneeUserId' | 'relatedLeadId', value: string | undefined) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = () => {
@@ -151,12 +156,16 @@ export function AddEditTicketDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="assigneeUserId" className="text-right">Asignar a</Label>
-            <Select name="assigneeUserId" value={formData.assigneeUserId} onValueChange={(value) => handleSelectChange('assigneeUserId', value)}>
+            <Select
+              name="assigneeUserId"
+              value={formData.assigneeUserId || NO_USER_SELECTED_VALUE}
+              onValueChange={(value) => handleSelectChange('assigneeUserId', value === NO_USER_SELECTED_VALUE ? undefined : value)}
+            >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un usuario (opcional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin asignar</SelectItem>
+                <SelectItem value={NO_USER_SELECTED_VALUE}>Sin asignar</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
                     {user.name}
@@ -167,12 +176,16 @@ export function AddEditTicketDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="relatedLeadId" className="text-right">Lead Relacionado</Label>
-            <Select name="relatedLeadId" value={formData.relatedLeadId} onValueChange={(value) => handleSelectChange('relatedLeadId', value)}>
+            <Select
+              name="relatedLeadId"
+              value={formData.relatedLeadId || NO_LEAD_SELECTED_VALUE}
+              onValueChange={(value) => handleSelectChange('relatedLeadId', value === NO_LEAD_SELECTED_VALUE ? undefined : value)}
+            >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un lead (opcional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Ninguno</SelectItem>
+                <SelectItem value={NO_LEAD_SELECTED_VALUE}>Ninguno</SelectItem>
                 {leads.map((lead) => (
                   <SelectItem key={lead.id} value={lead.id}>
                     {lead.name}
@@ -190,3 +203,4 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
+
