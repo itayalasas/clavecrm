@@ -6,6 +6,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { INITIAL_LEADS, INITIAL_PIPELINE_STAGES, INITIAL_TASKS } from "@/lib/constants";
 import type { Lead, PipelineStage, Task } from "@/lib/types";
 import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target } from 'lucide-react';
+import { es } from 'date-fns/locale'; // For Spanish date formatting if needed with date-fns format
+import { format } from 'date-fns';
+
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D'];
 
@@ -23,7 +26,7 @@ export default function DashboardPage() {
 
   const totalLeads = leads.length;
   const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
-  const wonLeads = leads.filter(lead => lead.stageId === 'stage-5').length;
+  const wonLeads = leads.filter(lead => lead.stageId === 'stage-5').length; // Assuming stage-5 is "Closed Won"
   const conversionRate = totalLeads > 0 ? (wonLeads / totalLeads) * 100 : 0;
   
   const openTasks = tasks.filter(task => !task.completed).length;
@@ -34,18 +37,19 @@ export default function DashboardPage() {
     leads: leads.filter(lead => lead.stageId === stage.id).length,
   }));
 
+  // Mock data, translating month names for consistency in Spanish UI
   const salesPerformanceData = [
-    { month: 'Jan', sales: Math.floor(Math.random() * 5000) + 1000 },
+    { month: 'Ene', sales: Math.floor(Math.random() * 5000) + 1000 },
     { month: 'Feb', sales: Math.floor(Math.random() * 5000) + 1000 },
     { month: 'Mar', sales: Math.floor(Math.random() * 5000) + 1000 },
-    { month: 'Apr', sales: Math.floor(Math.random() * 5000) + 1000 },
+    { month: 'Abr', sales: Math.floor(Math.random() * 5000) + 1000 },
     { month: 'May', sales: Math.floor(Math.random() * 5000) + 1000 },
     { month: 'Jun', sales: Math.floor(Math.random() * 5000) + 1000 },
   ];
   
   const taskStatusData = [
-    { name: 'Open Tasks', value: openTasks },
-    { name: 'Completed Tasks', value: completedTasks },
+    { name: 'Tareas Abiertas', value: openTasks },
+    { name: 'Tareas Completadas', value: completedTasks },
   ];
 
 
@@ -54,42 +58,42 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
             <Users className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalLeads}</div>
-            <p className="text-xs text-muted-foreground">+10% from last month</p>
+            <p className="text-xs text-muted-foreground">+10% desde el mes pasado</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pipeline Value</CardTitle>
+            <CardTitle className="text-sm font-medium">Valor del Embudo</CardTitle>
             <DollarSign className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalValue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">+5.2% from last month</p>
+            <div className="text-2xl font-bold">${totalValue.toLocaleString('es-ES')}</div>
+            <p className="text-xs text-muted-foreground">+5.2% desde el mes pasado</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Tasa de Conversión</CardTitle>
             <Target className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{conversionRate.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground">+2.1% from last month</p>
+            <div className="text-2xl font-bold">{conversionRate.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</div>
+            <p className="text-xs text-muted-foreground">+2.1% desde el mes pasado</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Deals</CardTitle>
+            <CardTitle className="text-sm font-medium">Negocios Activos</CardTitle>
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{leads.filter(l => l.stageId !== 'stage-5' && l.stageId !== 'stage-6').length}</div>
-            <p className="text-xs text-muted-foreground">Currently in pipeline</p>
+            <p className="text-xs text-muted-foreground">Actualmente en el embudo</p>
           </CardContent>
         </Card>
       </div>
@@ -97,8 +101,8 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Leads by Stage</CardTitle>
-            <CardDescription>Distribution of leads across sales pipeline stages.</CardDescription>
+            <CardTitle>Leads por Etapa</CardTitle>
+            <CardDescription>Distribución de leads en las etapas del embudo de ventas.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -118,8 +122,8 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Task Status</CardTitle>
-            <CardDescription>Overview of open and completed tasks.</CardDescription>
+            <CardTitle>Estado de Tareas</CardTitle>
+            <CardDescription>Resumen de tareas abiertas y completadas.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -151,8 +155,8 @@ export default function DashboardPage() {
       
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Latest updates and interactions.</CardDescription>
+          <CardTitle>Actividad Reciente</CardTitle>
+          <CardDescription>Últimas actualizaciones e interacciones.</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="space-y-3">
@@ -162,8 +166,8 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium">{task.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {task.relatedLeadId ? `Related to ${leads.find(l => l.id === task.relatedLeadId)?.name || 'Lead'}` : 'General Task'}
-                    {task.dueDate ? ` - Due: ${new Date(task.dueDate).toLocaleDateString()}` : ''}
+                    {task.relatedLeadId ? `Relacionado con ${leads.find(l => l.id === task.relatedLeadId)?.name || 'Cliente Potencial'}` : 'Tarea General'}
+                    {task.dueDate ? ` - Vence: ${new Date(task.dueDate).toLocaleDateString('es-ES')}` : ''}
                   </p>
                 </div>
               </li>
@@ -172,9 +176,9 @@ export default function DashboardPage() {
               <li key={lead.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
                 <Users className="h-5 w-5 text-primary" />
                  <div>
-                  <p className="text-sm font-medium">New Lead: {lead.name}</p>
+                  <p className="text-sm font-medium">Nuevo Lead: {lead.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Added on {new Date(lead.createdAt).toLocaleDateString()}
+                    Agregado el {new Date(lead.createdAt).toLocaleDateString('es-ES')}
                   </p>
                 </div>
               </li>

@@ -42,11 +42,11 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onEdit(lead)}>
                 <Edit3 className="mr-2 h-4 w-4" />
-                Edit Lead
+                Editar Lead
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Mail className="mr-2 h-4 w-4" />
-                Send Email
+                Enviar Correo
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -75,11 +75,11 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
         {lead.value && (
           <div className="flex items-center font-semibold text-primary">
             <DollarSign className="h-4 w-4 mr-1" />
-            {lead.value.toLocaleString()}
+            {lead.value.toLocaleString('es-ES')}
           </div>
         )}
         <span className="text-xs text-muted-foreground">
-          Added: {new Date(lead.createdAt).toLocaleDateString()}
+          Agregado: {new Date(lead.createdAt).toLocaleDateString('es-ES')}
         </span>
       </CardFooter>
     </Card>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { PipelineStage, Lead } from "@/lib/types";
-import { INITIAL_PIPELINE_STAGES, INITIAL_LEADS } from "@/lib/constants";
+import { INITIAL_PIPELINE_STAGES, INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants";
 import { PipelineStageColumn } from "@/components/pipeline/pipeline-stage-column";
 import { AddEditLeadDialog } from "@/components/pipeline/add-edit-lead-dialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,9 @@ export default function PipelinePage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+
+  const pipelineNavItem = NAV_ITEMS.find(item => item.href === '/pipeline');
+
 
   useEffect(() => {
     // Simulate fetching data
@@ -41,11 +44,11 @@ export default function PipelinePage() {
   return (
     <div className="flex flex-col h-[calc(100vh-var(--header-height,4rem)-2rem)]"> {/* Adjust height considering header and padding */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold">Sales Pipeline</h2>
+        <h2 className="text-2xl font-semibold">{pipelineNavItem ? pipelineNavItem.label : "Embudo de Ventas"}</h2>
         <AddEditLeadDialog
           trigger={
             <Button>
-              <PlusCircle className="mr-2 h-5 w-5" /> Add Lead
+              <PlusCircle className="mr-2 h-5 w-5" /> Añadir Lead
             </Button>
           }
           stages={stages}

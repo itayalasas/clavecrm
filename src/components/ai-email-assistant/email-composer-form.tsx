@@ -11,14 +11,16 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Sparkles } from "lucide-react";
+import { NAV_ITEMS } from "@/lib/constants";
+
 
 const formSchema = z.object({
-  leadName: z.string().min(1, "Lead name is required"),
-  leadDetails: z.string().min(10, "Lead details must be at least 10 characters"),
-  salesAgentName: z.string().min(1, "Sales agent name is required"),
-  companyName: z.string().min(1, "Company name is required"),
-  companyDescription: z.string().min(10, "Company description must be at least 10 characters"),
-  emailPurpose: z.string().min(5, "Email purpose must be at least 5 characters"),
+  leadName: z.string().min(1, "El nombre del cliente potencial es obligatorio"),
+  leadDetails: z.string().min(10, "Los detalles del cliente potencial deben tener al menos 10 caracteres"),
+  salesAgentName: z.string().min(1, "El nombre del agente de ventas es obligatorio"),
+  companyName: z.string().min(1, "El nombre de la empresa es obligatorio"),
+  companyDescription: z.string().min(10, "La descripción de la empresa debe tener al menos 10 caracteres"),
+  emailPurpose: z.string().min(5, "El propósito del correo debe tener al menos 5 caracteres"),
 });
 
 interface EmailComposerFormProps {
@@ -27,15 +29,17 @@ interface EmailComposerFormProps {
 }
 
 export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProps) {
+  const emailAssistantNavItem = NAV_ITEMS.find(item => item.href === '/ai-email-assistant');
+
   const form = useForm<EmailDraftInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       leadName: "",
       leadDetails: "",
-      salesAgentName: "Your Name",
-      companyName: "Your Company",
+      salesAgentName: "Tu Nombre",
+      companyName: "Tu Compañía",
       companyDescription: "",
-      emailPurpose: "Initial outreach",
+      emailPurpose: "Contacto inicial",
     },
   });
 
@@ -48,10 +52,10 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
       <CardHeader>
         <CardTitle className="text-2xl flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-primary" />
-          AI Email Assistant
+          {emailAssistantNavItem ? emailAssistantNavItem.label : "Asistente IA de Correo"}
         </CardTitle>
         <CardDescription>
-          Provide details below and let AI craft a personalized email draft for your lead.
+          Proporciona los detalles a continuación y deja que la IA elabore un borrador de correo personalizado para tu cliente potencial.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -63,9 +67,9 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
                 name="leadName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Lead Name</FormLabel>
+                    <FormLabel>Nombre del Cliente Potencial</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Jane Doe" {...field} />
+                      <Input placeholder="ej., Ana Pérez" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -76,9 +80,9 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
                 name="salesAgentName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Your Name (Sales Agent)</FormLabel>
+                    <FormLabel>Tu Nombre (Agente de Ventas)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., John Smith" {...field} />
+                      <Input placeholder="ej., Juan García" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -91,11 +95,11 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
               name="leadDetails"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Lead Details</FormLabel>
+                  <FormLabel>Detalles del Cliente Potencial</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="e.g., Interested in product X, met at conference Y, works at Z Corp..." {...field} rows={3} />
+                    <Textarea placeholder="ej., Interesado en el producto X, nos conocimos en la conferencia Y, trabaja en Z Corp..." {...field} rows={3} />
                   </FormControl>
-                  <FormDescription>Provide context about the lead and their company.</FormDescription>
+                  <FormDescription>Proporciona contexto sobre el cliente potencial y su empresa.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -107,9 +111,9 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
                 name="companyName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Your Company Name</FormLabel>
+                    <FormLabel>Nombre de Tu Compañía</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Acme Innovations" {...field} />
+                      <Input placeholder="ej., Innovaciones Acme" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -120,9 +124,9 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
                 name="emailPurpose"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purpose of Email</FormLabel>
+                    <FormLabel>Propósito del Correo</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Follow-up, Introduction, Demo request" {...field} />
+                      <Input placeholder="ej., Seguimiento, Introducción, Solicitud de demo" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -135,11 +139,11 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
               name="companyDescription"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Your Company Description</FormLabel>
+                  <FormLabel>Descripción de Tu Compañía</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="e.g., We help businesses achieve X by providing Y solutions..." {...field} rows={3} />
+                    <Textarea placeholder="ej., Ayudamos a las empresas a lograr X proporcionando soluciones Y..." {...field} rows={3} />
                   </FormControl>
-                  <FormDescription>A brief description of what your company does.</FormDescription>
+                  <FormDescription>Una breve descripción de lo que hace tu empresa.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -153,11 +157,11 @@ export function EmailComposerForm({ onSubmit, isLoading }: EmailComposerFormProp
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Generating...
+                  Generando...
                 </div>
               ) : (
                 <div className="flex items-center">
-                  <Sparkles className="mr-2 h-5 w-5" /> Generate Email Draft
+                  <Sparkles className="mr-2 h-5 w-5" /> Generar Borrador de Correo
                 </div>
               )}
             </Button>

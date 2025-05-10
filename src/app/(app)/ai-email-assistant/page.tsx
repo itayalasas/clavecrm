@@ -20,15 +20,15 @@ export default function AiEmailAssistantPage() {
       const result: EmailDraftOutput = await generateEmailDraft(data);
       setGeneratedEmail(result.emailDraft);
       toast({
-        title: "Email Draft Generated!",
-        description: "Your personalized email draft is ready below.",
+        title: "¡Borrador de Correo Generado!",
+        description: "Tu borrador de correo personalizado está listo abajo.",
         variant: "default",
       });
     } catch (error) {
       console.error("Error generating email draft:", error);
       toast({
-        title: "Error Generating Email",
-        description: "An unexpected error occurred. Please try again.",
+        title: "Error al Generar Correo",
+        description: "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
         variant: "destructive",
       });
     } finally {
@@ -40,11 +40,11 @@ export default function AiEmailAssistantPage() {
     if (generatedEmail) {
       navigator.clipboard.writeText(generatedEmail)
         .then(() => {
-          toast({ title: "Copied to Clipboard!", description: "Email draft copied." });
+          toast({ title: "¡Copiado al Portapapeles!", description: "Borrador de correo copiado." });
         })
         .catch(err => {
           console.error('Failed to copy: ', err);
-          toast({ title: "Copy Failed", description: "Could not copy to clipboard.", variant: "destructive" });
+          toast({ title: "Error al Copiar", description: "No se pudo copiar al portapapeles.", variant: "destructive" });
         });
     }
   };
@@ -56,8 +56,8 @@ export default function AiEmailAssistantPage() {
       {isLoading && (
         <Card className="w-full max-w-2xl animate-pulse">
           <CardHeader>
-            <CardTitle>Generating Email Draft...</CardTitle>
-            <CardDescription>Please wait while the AI crafts your email.</CardDescription>
+            <CardTitle>Generando Borrador de Correo...</CardTitle>
+            <CardDescription>Por favor, espera mientras la IA elabora tu correo.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="h-4 bg-muted rounded w-3/4"></div>
@@ -72,10 +72,10 @@ export default function AiEmailAssistantPage() {
         <Card className="w-full max-w-2xl shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Generated Email Draft</CardTitle>
-              <CardDescription>Review and copy the draft below.</CardDescription>
+              <CardTitle>Borrador de Correo Generado</CardTitle>
+              <CardDescription>Revisa y copia el borrador a continuación.</CardDescription>
             </div>
-            <Button variant="outline" size="icon" onClick={handleCopyToClipboard} aria-label="Copy email draft">
+            <Button variant="outline" size="icon" onClick={handleCopyToClipboard} aria-label="Copiar borrador de correo">
               <Copy className="h-5 w-5" />
             </Button>
           </CardHeader>

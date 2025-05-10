@@ -29,7 +29,7 @@ export function PipelineStageColumn({ stage, leads, onEditLead }: PipelineStageC
         <CardContent className="p-3 space-y-3 h-full">
           {leads.length === 0 ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground py-8">
-              No leads in this stage.
+              No hay leads en esta etapa.
             </div>
           ) : (
             leads.map((lead) => (

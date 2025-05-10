@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import type { Task, Lead } from "@/lib/types";
-import { INITIAL_TASKS, INITIAL_LEADS } from "@/lib/constants";
+import { INITIAL_TASKS, INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants";
 import { TaskItem } from "@/components/tasks/task-item";
 import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ export default function TasksPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
+
+  const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
 
   useEffect(() => {
     // Simulate fetching data
@@ -65,33 +67,32 @@ export default function TasksPage() {
         task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Sort by creation date desc
-      .sort((a,b) => Number(a.completed) - Number(b.completed)); // Keep completed tasks at bottom
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) 
+      .sort((a,b) => Number(a.completed) - Number(b.completed)); 
   }, [tasks, searchTerm, filterStatus, filterPriority]);
   
   const openDialogForNewTask = () => {
-    setEditingTask(null); // Ensure it's a new task
-    // The dialog should have its own open state managed by its trigger
+    setEditingTask(null); 
   };
 
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h2 className="text-2xl font-semibold">Task Management</h2>
+        <h2 className="text-2xl font-semibold">{tasksNavItem ? tasksNavItem.label : "Gestión de Tareas"}</h2>
         <AddEditTaskDialog
             trigger={
               <Button onClick={openDialogForNewTask}>
-                <PlusCircle className="mr-2 h-5 w-5" /> Add Task
+                <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
-            taskToEdit={editingTask} // This will be null for new task
+            taskToEdit={editingTask} 
             leads={leads}
             onSave={handleSaveTask}
           />
-        {editingTask && ( // This is for editing, ensures dialog opens if editingTask is set
+        {editingTask && ( 
           <AddEditTaskDialog
-            trigger={<span className="hidden" />} // Hidden trigger
+            trigger={<span className="hidden" />} 
             taskToEdit={editingTask}
             leads={leads}
             onSave={handleSaveTask}
@@ -104,7 +105,7 @@ export default function TasksPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search tasks..."
+            placeholder="Buscar tareas..."
             className="pl-8 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -114,13 +115,13 @@ export default function TasksPage() {
           <Select value={filterPriority} onValueChange={(value: Task['priority'] | "all") => setFilterPriority(value)}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Filter by priority" />
+              <SelectValue placeholder="Filtrar por prioridad" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Priorities</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="all">Todas las Prioridades</SelectItem>
+              <SelectItem value="high">Alta</SelectItem>
+              <SelectItem value="medium">Media</SelectItem>
+              <SelectItem value="low">Baja</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -128,9 +129,9 @@ export default function TasksPage() {
 
       <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as "all" | "pending" | "completed")}>
         <TabsList className="grid w-full grid-cols-3 sm:w-auto sm:inline-flex">
-          <TabsTrigger value="all">All Tasks</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="all">Todas las Tareas</TabsTrigger>
+          <TabsTrigger value="pending">Pendientes</TabsTrigger>
+          <TabsTrigger value="completed">Completadas</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -149,8 +150,8 @@ export default function TasksPage() {
         </div>
       ) : (
         <div className="text-center py-10 text-muted-foreground">
-          <p className="text-lg">No tasks found.</p>
-          <p>Try adjusting your filters or add a new task.</p>
+          <p className="text-lg">No se encontraron tareas.</p>
+          <p>Intenta ajustar tus filtros o añade una nueva tarea.</p>
         </div>
       )}
     </div>

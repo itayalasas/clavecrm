@@ -12,17 +12,17 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const EmailDraftInputSchema = z.object({
-  leadName: z.string().describe('The name of the lead.'),
-  leadDetails: z.string().describe('Details about the lead and their company.'),
-  salesAgentName: z.string().describe('The name of the sales agent.'),
-  companyName: z.string().describe('The name of the agent company.'),
-  companyDescription: z.string().describe('Brief Description of the agent company.'),
-  emailPurpose: z.string().describe('The purpose of the email.'),
+  leadName: z.string().describe('El nombre del cliente potencial.'),
+  leadDetails: z.string().describe('Detalles sobre el cliente potencial y su empresa.'),
+  salesAgentName: z.string().describe('El nombre del agente de ventas.'),
+  companyName: z.string().describe('El nombre de la empresa del agente.'),
+  companyDescription: z.string().describe('Breve descripción de la empresa del agente.'),
+  emailPurpose: z.string().describe('El propósito del correo electrónico.'),
 });
 export type EmailDraftInput = z.infer<typeof EmailDraftInputSchema>;
 
 const EmailDraftOutputSchema = z.object({
-  emailDraft: z.string().describe('The generated email draft.'),
+  emailDraft: z.string().describe('El borrador de correo electrónico generado.'),
 });
 export type EmailDraftOutput = z.infer<typeof EmailDraftOutputSchema>;
 
@@ -34,18 +34,18 @@ const generateEmailPrompt = ai.definePrompt({
   name: 'generateEmailPrompt',
   input: {schema: EmailDraftInputSchema},
   output: {schema: EmailDraftOutputSchema},
-  prompt: `You are an AI email assistant designed to generate personalized email drafts for sales agents.
+  prompt: `Eres un asistente de correo electrónico IA diseñado para generar borradores de correos personalizados para agentes de ventas.
 
-  Based on the information provided, create an email draft that the sales agent can use to communicate with the lead.
+  Basándote en la información proporcionada, crea un borrador de correo electrónico que el agente de ventas pueda usar para comunicarse con el cliente potencial.
 
-  Lead Name: {{{leadName}}}
-  Lead Details: {{{leadDetails}}}
-  Sales Agent Name: {{{salesAgentName}}}
-  Company Name: {{{companyName}}}
-  Company Description: {{{companyDescription}}}
-  Email Purpose: {{{emailPurpose}}}
+  Nombre del Cliente Potencial: {{{leadName}}}
+  Detalles del Cliente Potencial: {{{leadDetails}}}
+  Nombre del Agente de Ventas: {{{salesAgentName}}}
+  Nombre de la Empresa: {{{companyName}}}
+  Descripción de la Empresa: {{{companyDescription}}}
+  Propósito del Correo: {{{emailPurpose}}}
   
-  Email Draft:`, // No need to be too verbose, this is an email
+  Borrador del Correo:`,
 });
 
 const generateEmailDraftFlow = ai.defineFlow(

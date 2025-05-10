@@ -71,13 +71,12 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
 
   const handleSubmit = () => {
     if (!formData.name || !formData.stageId) {
-      // Add proper validation/toast later
-      alert("Name and Stage are required.");
+      alert("El nombre y la etapa son obligatorios.");
       return;
     }
     const newLead: Lead = {
       ...formData,
-      id: leadToEdit ? leadToEdit.id : `lead-${Date.now()}`, // Simple ID generation for demo
+      id: leadToEdit ? leadToEdit.id : `lead-${Date.now()}`, 
       createdAt: leadToEdit ? leadToEdit.createdAt : new Date().toISOString(),
     };
     onSave(newLead);
@@ -89,49 +88,49 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>{leadToEdit ? "Edit Lead" : "Add New Lead"}</DialogTitle>
+          <DialogTitle>{leadToEdit ? "Editar Lead" : "Añadir Nuevo Lead"}</DialogTitle>
           <DialogDescription>
-            {leadToEdit ? "Update the details for this lead." : "Fill in the information for the new lead."}
+            {leadToEdit ? "Actualiza los detalles de este lead." : "Completa la información para el nuevo lead."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="name" className="text-right">
-              Name
+              Nombre
             </Label>
             <Input id="name" name="name" value={formData.name} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="email" className="text-right">
-              Email
+              Correo Electrónico
             </Label>
             <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="phone" className="text-right">
-              Phone
+              Teléfono
             </Label>
             <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="company" className="text-right">
-              Company
+              Empresa
             </Label>
             <Input id="company" name="company" value={formData.company} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="value" className="text-right">
-              Value ($)
+              Valor ($)
             </Label>
             <Input id="value" name="value" type="number" value={formData.value} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="stageId" className="text-right">
-              Stage
+              Etapa
             </Label>
             <Select name="stageId" value={formData.stageId} onValueChange={handleStageChange}>
               <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a stage" />
+                <SelectValue placeholder="Selecciona una etapa" />
               </SelectTrigger>
               <SelectContent>
                 {stages.map((stage) => (
@@ -144,14 +143,14 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor="details" className="text-right pt-2">
-              Details
+              Detalles
             </Label>
             <Textarea id="details" name="details" value={formData.details} onChange={handleChange} className="col-span-3" rows={3} />
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-          <Button type="submit" onClick={handleSubmit}>Save Lead</Button>
+          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
+          <Button type="submit" onClick={handleSubmit}>Guardar Lead</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

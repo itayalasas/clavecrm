@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { es } from 'date-fns/locale'; // Spanish locale for date-fns
 import { cn } from "@/lib/utils";
 
 interface AddEditTaskDialogProps {
@@ -82,7 +83,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
 
   const handleSubmit = () => {
     if (!formData.title) {
-      alert("Title is required."); // Basic validation
+      alert("El título es obligatorio."); 
       return;
     }
     const newTask: Task = {
@@ -99,22 +100,22 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>{taskToEdit ? "Edit Task" : "Add New Task"}</DialogTitle>
+          <DialogTitle>{taskToEdit ? "Editar Tarea" : "Añadir Nueva Tarea"}</DialogTitle>
           <DialogDescription>
-            {taskToEdit ? "Update the details for this task." : "Fill in the information for the new task."}
+            {taskToEdit ? "Actualiza los detalles de esta tarea." : "Completa la información para la nueva tarea."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="title" className="text-right">Title</Label>
+            <Label htmlFor="title" className="text-right">Título</Label>
             <Input id="title" name="title" value={formData.title} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="description" className="text-right pt-2">Description</Label>
+            <Label htmlFor="description" className="text-right pt-2">Descripción</Label>
             <Textarea id="description" name="description" value={formData.description} onChange={handleChange} className="col-span-3" rows={3} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="dueDate" className="text-right">Due Date</Label>
+            <Label htmlFor="dueDate" className="text-right">Fecha de Vencimiento</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -125,11 +126,12 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                  {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Elige una fecha</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+              <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
+                  locale={es}
                   mode="single"
                   selected={selectedDate}
                   onSelect={handleDateChange}
@@ -139,26 +141,26 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
             </Popover>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="priority" className="text-right">Priority</Label>
+            <Label htmlFor="priority" className="text-right">Prioridad</Label>
             <Select name="priority" value={formData.priority} onValueChange={(value) => handleSelectChange('priority', value)}>
               <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select priority" />
+                <SelectValue placeholder="Selecciona prioridad" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="low">Baja</SelectItem>
+                <SelectItem value="medium">Media</SelectItem>
+                <SelectItem value="high">Alta</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="relatedLeadId" className="text-right">Related Lead</Label>
+            <Label htmlFor="relatedLeadId" className="text-right">Lead Relacionado</Label>
             <Select name="relatedLeadId" value={formData.relatedLeadId} onValueChange={(value) => handleSelectChange('relatedLeadId', value)}>
               <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a lead (optional)" />
+                <SelectValue placeholder="Selecciona un lead (opcional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="">Ninguno</SelectItem>
                 {leads.map((lead) => (
                   <SelectItem key={lead.id} value={lead.id}>
                     {lead.name}
@@ -169,8 +171,8 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, onSave }: AddEdi
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-          <Button type="submit" onClick={handleSubmit}>Save Task</Button>
+          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
+          <Button type="submit" onClick={handleSubmit}>Guardar Tarea</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -27,7 +27,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      variant="sidebar" // Or "inset" or "floating"
+      variant="sidebar" 
       collapsible={isMobile ? "offcanvas" : "icon"}
       className="border-r"
     >
@@ -73,10 +73,10 @@ export function AppSidebar() {
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
             <div>
-              <p className="text-sm font-medium">Demo User</p>
-              <p className="text-xs text-muted-foreground">user@example.com</p>
+              <p className="text-sm font-medium">Usuario Demo</p>
+              <p className="text-xs text-muted-foreground">usuario@ejemplo.com</p>
             </div>
-            <Button variant="ghost" size="icon" className="ml-auto">
+            <Button variant="ghost" size="icon" className="ml-auto" title="Cerrar Sesión">
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
@@ -86,10 +86,10 @@ export function AppSidebar() {
                 <AvatarImage src="https://picsum.photos/id/237/200/200" alt="User Avatar" data-ai-hint="user avatar" />
                 <AvatarFallback>U</AvatarFallback>
               </Avatar>
-            <Button variant="ghost" size="icon" title="Settings">
+            <Button variant="ghost" size="icon" title="Configuración">
               <Settings className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" title="Logout">
+            <Button variant="ghost" size="icon" title="Cerrar Sesión">
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
