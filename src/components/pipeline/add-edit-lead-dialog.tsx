@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect }_ from "react";
+import { useState, useEffect } from "react";
 import type { Lead, PipelineStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
