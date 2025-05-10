@@ -1,5 +1,5 @@
 
-import type { Lead, PipelineStage, Task, Ticket, User, TicketStatus, TicketPriority } from './types';
+import type { Lead, PipelineStage, Task, Ticket, User, TicketStatus, TicketPriority, UserRole } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
@@ -12,6 +12,10 @@ export const NAV_ITEMS = [
   { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
   { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
 ];
+
+export const USER_ROLES: UserRole[] = ['admin', 'supervisor', 'empleado', 'analista', 'desarrollador', 'vendedor', 'user'];
+export const DEFAULT_USER_ROLE: UserRole = 'user';
+
 
 export const INITIAL_PIPELINE_STAGES: PipelineStage[] = [
   { id: 'stage-1', name: 'Nuevo Lead', order: 1, color: 'bg-sky-500' },
@@ -30,21 +34,16 @@ export const INITIAL_LEADS: Lead[] = [
   { id: 'lead-5', name: 'Epsilon Retail', email: 'shop@epsilon.store', stageId: 'stage-4', createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), details: 'Negociando términos para el plan empresarial.', value: 25000 },
 ];
 
-// These are mock users. Real users will come from Firebase Auth / Firestore
-// Their IDs ('user-1', 'user-2', etc.) are used in mock tasks/tickets.
-// The app should eventually fetch users from Firestore.
 export const INITIAL_USERS: User[] = [
   { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100', role: 'user' },
   { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100', role: 'supervisor' },
-  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100', role: 'user' },
-  // The concept of a "demo user" that's hardcoded like this is removed.
-  // The logged-in user will be the 'current user'.
+  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100', role: 'admin' },
 ];
 
 export const INITIAL_TASKS: Task[] = [
   { id: 'task-1', title: 'Llamada de seguimiento con Acme Corp', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-1', createdAt: new Date().toISOString(), priority: 'high', reporterUserId: 'user-1', assigneeUserId: 'user-2' },
   { id: 'task-2', title: 'Preparar demo para Beta Solutions', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-2', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
-  { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'low', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), reporterUserId: 'user-2' /* Unassigned by default */ },
+  { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'low', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), reporterUserId: 'user-2' },
   { id: 'task-4', title: 'Investigar competidores de Delta Services', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-4', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
 ];
 

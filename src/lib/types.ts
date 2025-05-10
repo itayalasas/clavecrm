@@ -1,4 +1,5 @@
 
+export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
 export interface Lead {
   id: string;
@@ -39,8 +40,8 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  avatarUrl?: string; // Made optional
-  role?: 'admin' | 'supervisor' | 'user'; // Added role
+  avatarUrl?: string; 
+  role: UserRole; // Updated to use UserRole
 }
 
 export interface Ticket {
