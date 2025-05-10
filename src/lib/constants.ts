@@ -1,6 +1,6 @@
 
 import type { Lead, PipelineStage, Task, Ticket, User, TicketStatus, TicketPriority, UserRole } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
   { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig },
   { href: '/tasks', label: 'Tareas', icon: ListChecks },
   { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
+  { href: '/user-management', label: 'Gestión de Usuarios', icon: Users },
   { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
 ];
 

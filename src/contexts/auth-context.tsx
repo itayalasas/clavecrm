@@ -12,7 +12,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore"; // Added collection, getDocs, deleteDoc
 import type { User, UserRole } from "@/lib/types"; 
 import { DEFAULT_USER_ROLE } from "@/lib/constants";
 
@@ -22,8 +22,10 @@ interface AuthContextType {
   loading: boolean;
   error: Error | null;
   login: (email: string, pass: string) => Promise<UserCredential>;
-  signup: (email: string, pass: string, name?: string, role?: UserRole) => Promise<UserCredential>;
+  signup: (email: string, pass: string, name: string, role: UserRole) => Promise<UserCredential>; // name is now mandatory
   logout: () => Promise<void>;
+  getAllUsers: () => Promise<User[]>; // New function
+  // deleteUser: (userId: string) => Promise<void>; // Placeholder for future
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -103,32 +105,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
       .catch(err => { setError(err); setLoading(false); throw err; });
   };
 
-  const signup = async (email: string, pass: string, name?: string, role?: UserRole) => {
+  const signup = async (email: string, pass: string, name: string, role: UserRole) => {
     setLoading(true);
     setError(null); 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const firebaseAuthUser = userCredential.user;
       
-      const userRole = role || DEFAULT_USER_ROLE;
       const newUserProfileData = { 
         email: firebaseAuthUser.email || "",
-        name: name || firebaseAuthUser.displayName || firebaseAuthUser.email?.split('@')[0] || "Nuevo Usuario",
-        role: userRole,
+        name: name, // Use provided name
+        role: role, // Use provided role
       };
 
       const userDocRef = doc(db, "users", firebaseAuthUser.uid);
       await setDoc(userDocRef, newUserProfileData);
       
+      // Send verification and password reset emails
       if (firebaseAuthUser) {
         await sendEmailVerification(firebaseAuthUser);
-        // No need to send password reset email immediately on signup,
-        // user has just set their password. This can be a separate flow if needed.
-        // await sendPasswordResetEmail(auth, email); 
+        await sendPasswordResetEmail(auth, email); 
       }
       
-      // onAuthStateChanged will handle setting currentUser and loading to false.
-      // setLoading(false); // Not strictly needed here as onAuthStateChanged will fire
+      // onAuthStateChanged will handle setting currentUser if this signup logs the user in.
+      // For admin creation, this user won't become the currentUser for the admin.
+      // setLoading(false); // Not strictly needed here as onAuthStateChanged might fire
       return userCredential;
     } catch (err: any) {
       setError(err);
@@ -141,6 +142,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return firebaseSignOut(auth);
   };
 
+  const getAllUsers = async (): Promise<User[]> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const usersCol = collection(db, "users");
+      const userSnapshot = await getDocs(usersCol);
+      const userList = userSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as User));
+      setLoading(false);
+      return userList;
+    } catch (err: any) {
+      setError(err);
+      setLoading(false);
+      throw err;
+    }
+  };
+
+  // Placeholder for delete user function
+  // const deleteUser = async (userId: string): Promise<void> => {
+  //   setLoading(true);
+  //   setError(null);
+  //   try {
+  //     // This is complex: needs an admin SDK or a Cloud Function to delete Firebase Auth user.
+  //     // Deleting Firestore doc is easy:
+  //     // await deleteDoc(doc(db, "users", userId));
+  //     // For now, this is a placeholder.
+  //     console.warn("User deletion from Firebase Auth requires Admin SDK or Cloud Function.");
+  //     await deleteDoc(doc(db, "users", userId)); // Example: delete from Firestore only
+  //     setLoading(false);
+  //   } catch (err: any) {
+  //     setError(err);
+  //     setLoading(false);
+  //     throw err;
+  //   }
+  // };
+
   const value = {
     currentUser,
     firebaseUser,
@@ -149,6 +185,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     signup,
     logout,
+    getAllUsers,
+    // deleteUser, 
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
