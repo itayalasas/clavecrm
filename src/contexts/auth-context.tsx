@@ -41,21 +41,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setFirebaseUser(user);
       if (user) {
         const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          setCurrentUser({ id: user.uid, ...userDocSnap.data() } as User);
-        } else {
-          console.warn("User document not found in Firestore for UID:", user.uid, "Creating a default one or logging out.");
-          // This situation should ideally be handled based on specific app logic.
-          // For now, if a user is auth'd but has no Firestore doc, we can log them out or create a default.
-          // Given the flow where admin creates users, this might be an edge case.
-          // Let's assume if they are authenticated, we try to give them a basic profile.
-           setCurrentUser({
-             id: user.uid,
-             email: user.email || "",
-             name: user.displayName || "Usuario",
-             role: DEFAULT_USER_ROLE, // Fallback role
-           });
+        try {
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            setCurrentUser({ id: user.uid, ...userDocSnap.data() } as User);
+          } else {
+            // User authenticated with Firebase Auth, but no corresponding Firestore document.
+            // This could happen if Firestore document creation failed or was deleted.
+            // For security and consistency, log out such users.
+            console.warn(`Firestore document for user UID ${user.uid} not found. Logging out user.`);
+            await signOut(auth); // This will trigger onAuthStateChanged again with user = null
+            // setCurrentUser(null) will be handled by the subsequent onAuthStateChanged call.
+          }
+        } catch (dbError) {
+            console.error("Error fetching user document from Firestore:", dbError);
+            // Potentially log out user if DB is critical and unreachable
+            // This can lead to a loop if signOut also fails or db remains unreachable.
+            // For now, we attempt signOut. Consider more robust error handling if this becomes an issue.
+            await signOut(auth);
         }
       } else {
         setCurrentUser(null);
@@ -82,23 +85,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      setLoading(false); // Ensure loading is false on error
+      setLoading(false); 
       throw error;
     }
-    // setLoading(false) is handled by onAuthStateChanged
   };
 
-  // Signup function used by an admin to create a new user.
-  // This function does NOT log in the newly created user.
   const signup = async (email: string, pass: string, name: string, role?: UserRole): Promise<FirebaseUser> => {
-    // Note: setLoading(true/false) is not managed here as this is an admin action,
-    // and the admin's loading state should not be affected.
-    // The component calling signup should manage its own UI loading state.
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      // At this point, `userCredential.user` (the new user) is the `auth.currentUser`.
       const newUser = userCredential.user;
 
-      // Save user details to Firestore
+      // Save new user's details to Firestore
       const userDocRef = doc(db, "users", newUser.uid);
       await setDoc(userDocRef, {
         uid: newUser.uid,
@@ -106,18 +104,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         name: name,
         role: role || DEFAULT_USER_ROLE,
         createdAt: new Date().toISOString(),
-        avatarUrl: `https://avatar.vercel.sh/${newUser.email}.png` // Default avatar
+        avatarUrl: `https://avatar.vercel.sh/${newUser.email}.png` 
       });
 
-      // Send verification email to the new user
+      // Send verification and password reset emails to the new user
       await sendEmailVerification(newUser);
-
-      // Send password reset email to the new user so they can set their password
       await sendPasswordResetEmail(auth, email);
+
+      // Sign out the newly created user.
+      // This ensures the new user is not the active session.
+      // Consequently, auth.currentUser will become null.
+      // The onAuthStateChanged listener will update the context, effectively logging out the admin too.
+      // The admin will need to log in again to perform further actions.
+      if (auth.currentUser && auth.currentUser.uid === newUser.uid) {
+        await signOut(auth);
+      }
       
-      // Do not call setCurrentUser or change global loading state here.
-      // The admin performing this action remains logged in.
-      return newUser; // Return the FirebaseUser object
+      toast({
+        title: "Usuario Creado Exitosamente",
+        description: `Se ha creado el usuario ${name}. El administrador deberá iniciar sesión de nuevo para continuar.`,
+      });
+
+      return newUser; // Return the FirebaseUser object of the *created* user.
     } catch (error: any) {
       console.error("Error en signup (admin):", error);
       let errorMessage = "Ocurrió un error al crear el usuario.";
@@ -139,8 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       await signOut(auth);
-      setCurrentUser(null);
-      setFirebaseUser(null);
+      // onAuthStateChanged will set currentUser to null and firebaseUser to null
     } catch (error: any) {
       console.error("Error en logout:", error);
        toast({
@@ -148,10 +155,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: "Ocurrió un error inesperado.",
         variant: "destructive",
       });
+      setLoading(false); // Ensure loading is set to false on error
       throw error;
-    } finally {
-      setLoading(false); // onAuthStateChanged might also set this, but ensure it's false.
     }
+    // setLoading(false) will be called by onAuthStateChanged
   };
 
   const getAllUsers = async (): Promise<User[]> => {
