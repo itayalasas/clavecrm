@@ -28,3 +28,26 @@ export interface Task {
   createdAt: string; // Store as ISO string
   priority?: 'low' | 'medium' | 'high';
 }
+
+export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';
+export type TicketPriority = 'Baja' | 'Media' | 'Alta';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
+
+export interface Ticket {
+  id: string;
+  title: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  reporterUserId: string; // ID of the user who created the ticket
+  assigneeUserId?: string; // ID of the user assigned to the ticket
+  relatedLeadId?: string; // Optional: link ticket to a lead
+}

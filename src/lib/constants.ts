@@ -1,5 +1,5 @@
-import type { Lead, PipelineStage, Task } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase } from 'lucide-react';
+import type { Lead, PipelineStage, Task, Ticket, User, TicketStatus, TicketPriority } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -8,6 +8,7 @@ export const NAV_ITEMS = [
   { href: '/dashboard', label: 'Panel de Control', icon: LayoutDashboard },
   { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig },
   { href: '/tasks', label: 'Tareas', icon: ListChecks },
+  { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
   { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
 ];
 
@@ -33,4 +34,77 @@ export const INITIAL_TASKS: Task[] = [
   { id: 'task-2', title: 'Preparar demo para Beta Solutions', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-2', createdAt: new Date().toISOString(), priority: 'medium' },
   { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'low', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
   { id: 'task-4', title: 'Investigar competidores de Delta Services', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-4', createdAt: new Date().toISOString(), priority: 'medium' },
+];
+
+export const INITIAL_USERS: User[] = [
+  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100' },
+  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100' },
+  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100' },
+  { id: 'user-4', name: 'Usuario Demo', email: 'usuario@ejemplo.com', avatarUrl: 'https://picsum.photos/id/237/200/200' }, // Current user
+];
+
+// Assuming current logged-in user
+export const CURRENT_USER_ID = 'user-4';
+
+export const TICKET_STATUSES: TicketStatus[] = ['Abierto', 'En Progreso', 'Resuelto', 'Cerrado'];
+export const TICKET_PRIORITIES: TicketPriority[] = ['Baja', 'Media', 'Alta'];
+
+export const INITIAL_TICKETS: Ticket[] = [
+  {
+    id: 'ticket-1',
+    title: 'Problema de acceso al portal de clientes',
+    description: 'Varios clientes informan que no pueden acceder al portal de clientes desde ayer por la tarde. Parece ser un problema intermitente.',
+    status: 'Abierto',
+    priority: 'Alta',
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    reporterUserId: 'user-1',
+    assigneeUserId: 'user-2',
+    relatedLeadId: 'lead-1',
+  },
+  {
+    id: 'ticket-2',
+    title: 'Error en la generación de facturas',
+    description: 'El sistema muestra un error 500 al intentar generar facturas para clientes con suscripciones anuales.',
+    status: 'En Progreso',
+    priority: 'Alta',
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    reporterUserId: 'user-2',
+    assigneeUserId: 'user-2',
+  },
+  {
+    id: 'ticket-3',
+    title: 'Solicitud de nueva función: exportación a CSV',
+    description: 'Un cliente (Beta Solutions) ha solicitado la posibilidad de exportar la lista de contactos a formato CSV.',
+    status: 'Abierto',
+    priority: 'Media',
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    reporterUserId: CURRENT_USER_ID, // Reported by current demo user
+    assigneeUserId: 'user-1',
+    relatedLeadId: 'lead-2',
+  },
+  {
+    id: 'ticket-4',
+    title: 'Consulta sobre integración con API externa',
+    description: 'Gamma Innovations LLC pregunta sobre las capacidades de nuestra API para integrarse con su sistema de inventario.',
+    status: 'Resuelto',
+    priority: 'Media',
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    reporterUserId: 'user-3',
+    assigneeUserId: 'user-3',
+    relatedLeadId: 'lead-3',
+  },
+  {
+    id: 'ticket-5',
+    title: 'Contraseña olvidada - Epsilon Retail',
+    description: 'El contacto principal de Epsilon Retail no puede acceder a su cuenta.',
+    status: 'Cerrado',
+    priority: 'Baja',
+    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    reporterUserId: 'user-1',
+    assigneeUserId: CURRENT_USER_ID,
+    relatedLeadId: 'lead-5',
+  }
 ];
