@@ -27,6 +27,8 @@ export interface Task {
   relatedLeadId?: string;
   createdAt: string; // Store as ISO string
   priority?: 'low' | 'medium' | 'high';
+  assigneeUserId?: string; // ID of the user assigned to the task
+  reporterUserId: string; // ID of the user who reported or created the task
 }
 
 export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';

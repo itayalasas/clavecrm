@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import type { Task, Lead } from "@/lib/types";
-import { INITIAL_TASKS, INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants";
+import type { Task, Lead, User } from "@/lib/types"; // Added User
+import { INITIAL_TASKS, INITIAL_LEADS, NAV_ITEMS, INITIAL_USERS } from "@/lib/constants"; // Added INITIAL_USERS
 import { TaskItem } from "@/components/tasks/task-item";
 import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [users, setUsers] = useState<User[]>([]); // Added users state
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
@@ -25,6 +27,7 @@ export default function TasksPage() {
     // Simulate fetching data
     setTasks(INITIAL_TASKS);
     setLeads(INITIAL_LEADS);
+    setUsers(INITIAL_USERS); // Initialize users
   }, []);
 
   const handleSaveTask = (task: Task) => {
@@ -88,6 +91,7 @@ export default function TasksPage() {
             }
             taskToEdit={editingTask} 
             leads={leads}
+            users={users} // Pass users
             onSave={handleSaveTask}
           />
         {editingTask && ( 
@@ -95,6 +99,7 @@ export default function TasksPage() {
             trigger={<span className="hidden" />} 
             taskToEdit={editingTask}
             leads={leads}
+            users={users} // Pass users
             onSave={handleSaveTask}
           />
         )}
@@ -142,6 +147,7 @@ export default function TasksPage() {
               key={task.id}
               task={task}
               leads={leads}
+              users={users} // Pass users
               onToggleComplete={handleToggleComplete}
               onEdit={() => setEditingTask(task)}
               onDelete={handleDeleteTask}

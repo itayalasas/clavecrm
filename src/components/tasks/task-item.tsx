@@ -1,29 +1,63 @@
+
 "use client";
 
-import type { Task, Lead } from "@/lib/types";
+import type { Task, Lead, User } from "@/lib/types"; // Added User
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, CalendarDays, User, LinkIcon } from "lucide-react";
+import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon } from "lucide-react"; // Renamed User to UserIcon
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale'; // Spanish locale for date-fns
+import { CURRENT_USER_ID } from "@/lib/constants";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 
 interface TaskItemProps {
   task: Task;
   leads: Lead[];
+  users: User[]; // Added users prop
   onToggleComplete: (taskId: string) => void;
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
-export function TaskItem({ task, leads, onToggleComplete, onEdit, onDelete }: TaskItemProps) {
+const UserAvatarTooltip = ({ user, labelPrefix }: { user?: User, labelPrefix?: string }) => {
+  if (!user) return <span className="text-xs text-muted-foreground">N/A</span>;
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-1">
+            {labelPrefix && <span className="text-xs">{labelPrefix}</span>}
+            <Avatar className="h-5 w-5">
+              <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint="user avatar" />
+              <AvatarFallback>{user.name.substring(0, 1).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <span className="text-xs hidden sm:inline">{user.name} {user.id === CURRENT_USER_ID ? "(Yo)" : ""}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{user.name}</p>
+          <p className="text-xs text-muted-foreground">{user.email}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+
+export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelete }: TaskItemProps) {
   const relatedLead = task.relatedLeadId ? leads.find(l => l.id === task.relatedLeadId) : null;
+  const assignee = task.assigneeUserId ? users.find(u => u.id === task.assigneeUserId) : null;
+  // const reporter = users.find(u => u.id === task.reporterUserId); // Reporter not actively displayed but could be useful
   
   const getDueDateBadge = () => {
     if (!task.dueDate) return null;
     const dueDate = parseISO(task.dueDate);
     const today = new Date();
+    today.setHours(0,0,0,0); // Normalize today to start of day for accurate diff
     const daysDiff = differenceInDays(dueDate, today);
 
     if (task.completed) return <Badge variant="outline">Completada</Badge>;
@@ -35,9 +69,6 @@ export function TaskItem({ task, leads, onToggleComplete, onEdit, onDelete }: Ta
 
   const getPriorityBadge = () => {
     if (!task.priority) return null;
-    // Assuming task.priority values are already 'alta', 'media', 'baja' from the form
-    // If they are still English, a mapping would be needed here.
-    // For now, we'll rely on `capitalize` and potentially translated values.
     let priorityText = task.priority;
     if (task.priority === 'high') priorityText = 'Alta';
     if (task.priority === 'medium') priorityText = 'Media';
@@ -82,8 +113,24 @@ export function TaskItem({ task, leads, onToggleComplete, onEdit, onDelete }: Ta
             {getDueDateBadge()}
             {getPriorityBadge()}
             {relatedLead && (
-              <span className="flex items-center gap-1 p-1 px-1.5 bg-secondary rounded-md">
-                <LinkIcon className="h-3 w-3 text-primary" /> Enlazado a: {relatedLead.name}
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 p-1 px-1.5 bg-secondary rounded-md hover:bg-secondary/80 cursor-default">
+                      <LinkIcon className="h-3 w-3 text-primary" /> {relatedLead.name}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Enlazado a Lead: {relatedLead.name}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+             {assignee ? (
+                <UserAvatarTooltip user={assignee} labelPrefix="Para:"/>
+            ) : (
+              <span className="flex items-center gap-1 p-1 px-1.5 bg-muted rounded-md text-xs">
+                <UserIcon className="h-3 w-3" /> Sin asignar
               </span>
             )}
           </div>
