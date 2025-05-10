@@ -48,38 +48,48 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
-      if (user) {
-        const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          // Ensure role is correctly typed, default if necessary
-          const userData = userDocSnap.data();
-          setCurrentUser({ 
-            id: user.uid, 
-            ...userData,
-            role: userData.role || DEFAULT_USER_ROLE // Default role if not set
-          } as User);
+      try {
+        setFirebaseUser(user);
+        if (user) {
+          const userDocRef = doc(db, "users", user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            setCurrentUser({ 
+              id: user.uid, 
+              ...userData,
+              role: userData.role || DEFAULT_USER_ROLE
+            } as User);
+          } else {
+            // This case implies a new user or a user whose Firestore doc is missing.
+            // It's typically handled during signup, but this provides a fallback.
+            const newUser: User = {
+              id: user.uid,
+              email: user.email || "",
+              name: user.displayName || user.email?.split('@')[0] || "Usuario Anónimo",
+              role: DEFAULT_USER_ROLE, 
+            };
+            await setDoc(userDocRef, { 
+              email: newUser.email, 
+              name: newUser.name,
+              role: newUser.role 
+            });
+            setCurrentUser(newUser);
+          }
         } else {
-           const newUser: User = {
-            id: user.uid,
-            email: user.email || "",
-            name: user.displayName || user.email?.split('@')[0] || "Usuario Anónimo",
-            role: DEFAULT_USER_ROLE, 
-          };
-          await setDoc(userDocRef, { 
-            email: newUser.email, 
-            name: newUser.name,
-            role: newUser.role 
-          });
-          setCurrentUser(newUser);
+          setCurrentUser(null);
         }
-      } else {
-        setCurrentUser(null);
+      } catch (e: any) {
+        console.error("Error processing auth state change:", e);
+        setError(e);
+        setCurrentUser(null); // Ensure user is cleared on error
+      } finally {
+        setLoading(false); // Ensure loading is always set to false
       }
-      setLoading(false);
-    }, (err) => {
-      setError(err);
+    }, (authError) => { // Error callback for onAuthStateChanged listener itself
+      console.error("Firebase onAuthStateChanged error:", authError);
+      setError(authError);
+      setCurrentUser(null);
       setLoading(false);
     });
 
@@ -88,42 +98,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const login = (email: string, pass: string) => {
     setLoading(true);
-    setError(null); // Clear previous errors
+    setError(null); 
     return signInWithEmailAndPassword(auth, email, pass)
       .catch(err => { setError(err); setLoading(false); throw err; });
   };
 
   const signup = async (email: string, pass: string, name?: string, role?: UserRole) => {
     setLoading(true);
-    setError(null); // Clear previous errors
+    setError(null); 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      const user = userCredential.user;
+      const firebaseAuthUser = userCredential.user;
       
       const userRole = role || DEFAULT_USER_ROLE;
-      const newUserProfile: Omit<User, 'id' | 'avatarUrl'> = { 
-        email: user.email || "",
-        name: name || user.displayName || user.email?.split('@')[0] || "Nuevo Usuario",
+      const newUserProfileData = { 
+        email: firebaseAuthUser.email || "",
+        name: name || firebaseAuthUser.displayName || firebaseAuthUser.email?.split('@')[0] || "Nuevo Usuario",
         role: userRole,
       };
 
-      const userDocRef = doc(db, "users", user.uid);
-      await setDoc(userDocRef, newUserProfile);
+      const userDocRef = doc(db, "users", firebaseAuthUser.uid);
+      await setDoc(userDocRef, newUserProfileData);
       
-      // Send verification and password reset emails
-      // It's important that the user object from createUserWithEmailAndPassword is used for sendEmailVerification
-      if (user) {
-        await sendEmailVerification(user);
-        // sendPasswordResetEmail can be called with the auth instance and email
-        await sendPasswordResetEmail(auth, email);
+      if (firebaseAuthUser) {
+        await sendEmailVerification(firebaseAuthUser);
+        // No need to send password reset email immediately on signup,
+        // user has just set their password. This can be a separate flow if needed.
+        // await sendPasswordResetEmail(auth, email); 
       }
       
-      // The new user is now signed in. currentUser will be updated by onAuthStateChanged.
-      // For immediate reflection if needed, you could call:
-      // setCurrentUser({id: user.uid, ...newUserProfile});
-      // However, onAuthStateChanged should handle this robustly.
-
-      setLoading(false);
+      // onAuthStateChanged will handle setting currentUser and loading to false.
+      // setLoading(false); // Not strictly needed here as onAuthStateChanged will fire
       return userCredential;
     } catch (err: any) {
       setError(err);
