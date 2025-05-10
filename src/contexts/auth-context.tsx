@@ -50,6 +50,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setLoading(true); // Set loading true at the start of auth state change processing
+      setError(null); // Clear previous errors
       try {
         setFirebaseUser(user);
         if (user) {
@@ -59,24 +61,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const userData = userDocSnap.data();
             setCurrentUser({ 
               id: user.uid, 
-              ...userData,
-              role: userData.role || DEFAULT_USER_ROLE
+              email: user.email || "", // Ensure email is always present
+              name: userData.name || user.displayName || user.email?.split('@')[0] || "Usuario Anónimo", // Ensure name is present
+              role: userData.role || DEFAULT_USER_ROLE, // Ensure role is present
+              avatarUrl: userData.avatarUrl, // Include avatarUrl if present
+              ...userData, // Spread other potential fields from Firestore
             } as User);
           } else {
-            // This case implies a new user or a user whose Firestore doc is missing.
-            // It's typically handled during signup, but this provides a fallback.
-            const newUser: User = {
+            // User exists in Auth but not Firestore. Create Firestore doc.
+            // This scenario typically occurs if signup process was interrupted or for externally created users.
+            const newUserProfile: User = {
               id: user.uid,
               email: user.email || "",
               name: user.displayName || user.email?.split('@')[0] || "Usuario Anónimo",
-              role: DEFAULT_USER_ROLE, 
+              role: DEFAULT_USER_ROLE, // Assign default role
+              // avatarUrl can be added later if needed
             };
             await setDoc(userDocRef, { 
-              email: newUser.email, 
-              name: newUser.name,
-              role: newUser.role 
+              email: newUserProfile.email, 
+              name: newUserProfile.name,
+              role: newUserProfile.role 
             });
-            setCurrentUser(newUser);
+            setCurrentUser(newUserProfile);
           }
         } else {
           setCurrentUser(null);
@@ -86,12 +92,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setError(e);
         setCurrentUser(null); // Ensure user is cleared on error
       } finally {
-        setLoading(false); // Ensure loading is always set to false
+        setLoading(false); // Ensure loading is set to false after processing
       }
     }, (authError) => { // Error callback for onAuthStateChanged listener itself
       console.error("Firebase onAuthStateChanged error:", authError);
       setError(authError);
       setCurrentUser(null);
+      setFirebaseUser(null);
       setLoading(false);
     });
 
@@ -106,8 +113,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const signup = async (email: string, pass: string, name: string, role: UserRole) => {
-    setLoading(true);
-    setError(null); 
+    // This signup is for creating new users by an admin, not for self-registration by the current user.
+    // Global loading state should not be affected by this admin action.
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const firebaseAuthUser = userCredential.user;
@@ -124,44 +131,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Send verification and password reset emails
       if (firebaseAuthUser) {
         await sendEmailVerification(firebaseAuthUser);
+        // Consider if sending password reset immediately is desired for admin-created users.
+        // It might be better to let them use the initial password or have a separate "force password reset" flow.
+        // For now, we'll send it as per previous implementation.
         await sendPasswordResetEmail(auth, email); 
       }
       
-      // onAuthStateChanged will handle setting currentUser if this signup logs the user in.
-      // For admin creation, this user won't become the currentUser for the admin.
-      // setLoading(false); // Not strictly needed here as onAuthStateChanged might fire
       return userCredential;
     } catch (err: any) {
-      setError(err);
-      setLoading(false);
+      // Log error, but don't set global error/loading for this admin action
+      console.error("Error during admin signup:", err);
       throw err;
     }
   };
 
   const logout = () => {
+    // setLoading(true) will be handled by onAuthStateChanged when user becomes null
     return firebaseSignOut(auth);
   };
 
   const getAllUsers = async (): Promise<User[]> => {
-    setLoading(true);
-    setError(null);
+    // This function fetches data for a specific page,
+    // it should not manage the global loading/error state of AuthContext.
+    // The calling component (UserManagementPage) will handle its own loading/error states.
     try {
       const usersCol = collection(db, "users");
       const userSnapshot = await getDocs(usersCol);
-      const userList = userSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as User));
-      setLoading(false);
+      const userList = userSnapshot.docs.map(docSnap => ({ 
+          id: docSnap.id, 
+          email: docSnap.data().email || "",
+          name: docSnap.data().name || "Usuario Anónimo",
+          role: docSnap.data().role || DEFAULT_USER_ROLE,
+          avatarUrl: docSnap.data().avatarUrl,
+          ...docSnap.data() 
+        } as User));
       return userList;
     } catch (err: any) {
-      setError(err);
-      setLoading(false);
-      throw err;
+      console.error("Error fetching all users:", err);
+      throw err; // Rethrow for the calling component to handle
     }
   };
 
   // Placeholder for delete user function
   // const deleteUser = async (userId: string): Promise<void> => {
-  //   setLoading(true);
-  //   setError(null);
   //   try {
   //     // This is complex: needs an admin SDK or a Cloud Function to delete Firebase Auth user.
   //     // Deleting Firestore doc is easy:
@@ -169,10 +181,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   //     // For now, this is a placeholder.
   //     console.warn("User deletion from Firebase Auth requires Admin SDK or Cloud Function.");
   //     await deleteDoc(doc(db, "users", userId)); // Example: delete from Firestore only
-  //     setLoading(false);
   //   } catch (err: any) {
-  //     setError(err);
-  //     setLoading(false);
+  //     console.error("Error deleting user:", err);
   //     throw err;
   //   }
   // };
@@ -191,3 +201,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
