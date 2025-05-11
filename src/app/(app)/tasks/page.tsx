@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -52,13 +53,16 @@ export default function TasksPage() {
           id: docSnap.id,
           title: data.title as string,
           description: data.description as string | undefined,
-          createdAt: data.createdAt as string || new Date().toISOString(), 
-          dueDate: data.dueDate as string | undefined, 
+          // Ensure createdAt and dueDate are handled correctly if they are strings or Timestamps
+          createdAt: typeof data.createdAt === 'string' ? data.createdAt : (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          dueDate: typeof data.dueDate === 'string' ? data.dueDate : (data.dueDate as Timestamp)?.toDate().toISOString() || undefined,
           completed: data.completed as boolean,
           relatedLeadId: data.relatedLeadId as string | undefined,
           priority: data.priority as Task['priority'] | undefined,
           assigneeUserId: data.assigneeUserId as string | undefined,
           reporterUserId: data.reporterUserId as string,
+          solutionDescription: data.solutionDescription as string | undefined,
+          attachments: data.attachments as string[] | undefined,
         } as Task;
       });
       setTasks(fetchedTasks);
@@ -116,18 +120,33 @@ export default function TasksPage() {
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
     const taskId = isEditing ? taskData.id : doc(collection(db, "tasks")).id;
 
+    // Ensure dates are ISO strings or undefined
+    const dueDateString = taskData.dueDate ? (typeof taskData.dueDate === 'string' ? taskData.dueDate : new Date(taskData.dueDate).toISOString()) : undefined;
+    const createdAtString = isEditing ? (typeof taskData.createdAt === 'string' ? taskData.createdAt : new Date(taskData.createdAt).toISOString()) : new Date().toISOString();
+
     const taskToSave: Task = {
       ...taskData, 
       id: taskId,
       reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id, 
-      createdAt: isEditing ? taskData.createdAt : new Date().toISOString(),
-      dueDate: taskData.dueDate ? (typeof taskData.dueDate === 'string' ? taskData.dueDate : new Date(taskData.dueDate).toISOString()) : undefined,
+      createdAt: createdAtString,
+      dueDate: dueDateString,
+      solutionDescription: taskData.solutionDescription || "",
+      attachments: taskData.attachments || [],
     };
     
     try {
       const taskDocRef = doc(db, "tasks", taskId);
-      await setDoc(taskDocRef, taskToSave, { merge: isEditing }); 
+      // Firestore expects plain objects, so ensure all fields are serializable
+      const firestoreSafeTask = {
+        ...taskToSave,
+        // Convert Date objects to Timestamps or ISO strings if not already
+        createdAt: Timestamp.fromDate(new Date(taskToSave.createdAt)),
+        dueDate: taskToSave.dueDate ? Timestamp.fromDate(new Date(taskToSave.dueDate)) : null, // Firestore likes null for absent dates
+      };
+      
+      await setDoc(taskDocRef, firestoreSafeTask, { merge: isEditing }); 
 
+      // After saving to Firestore, update local state with the original Task object (with ISO strings for dates)
       if (isEditing) {
         setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t));
       } else {
@@ -321,3 +340,4 @@ export default function TasksPage() {
     </div>
   );
 }
+

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useId, useCallback } from "react";
@@ -25,7 +26,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, Paperclip } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from 'date-fns/locale'; 
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ const defaultTaskBase: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
   relatedLeadId: undefined,
   priority: 'medium',
   assigneeUserId: undefined,
+  solutionDescription: "",
+  attachments: [],
 };
 
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
@@ -83,7 +86,9 @@ export function AddEditTaskDialog({
         relatedLeadId: taskToEdit.relatedLeadId || undefined,
         priority: taskToEdit.priority || 'medium',
         assigneeUserId: taskToEdit.assigneeUserId || undefined,
-        reporterUserId: taskToEdit.reporterUserId, 
+        reporterUserId: taskToEdit.reporterUserId,
+        solutionDescription: taskToEdit.solutionDescription || "",
+        attachments: taskToEdit.attachments || [],
       };
     }
     return {
@@ -149,6 +154,9 @@ export function AddEditTaskDialog({
       priority: formData.priority || 'medium',
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
       reporterUserId: taskToEdit ? formData.reporterUserId! : currentUser!.id,
+      solutionDescription: formData.solutionDescription || "",
+      // For now, attachments are not fully implemented with file upload
+      attachments: formData.attachments || [], 
     };
 
     onSave(taskToSave);
@@ -173,7 +181,7 @@ export function AddEditTaskDialog({
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild onClick={() => !isDialogOpen && setIsDialogOpen(true)}>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{taskToEdit ? "Editar Tarea" : "Añadir Nueva Tarea"}</DialogTitle>
           <DialogDescription>
@@ -313,6 +321,41 @@ export function AddEditTaskDialog({
               </SelectContent>
             </Select>
           </div>
+          
+          {taskToEdit && (
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor={`${dialogId}-solutionDescription`} className="text-right pt-2">Descripción de la Solución</Label>
+              <Textarea id={`${dialogId}-solutionDescription`} name="solutionDescription" value={formData.solutionDescription || ""} onChange={handleChange} className="col-span-3" rows={3} placeholder="Detalla la solución aplicada a esta tarea..."/>
+            </div>
+          )}
+
+          <div className="grid grid-cols-4 items-start gap-4">
+            <Label htmlFor={`${dialogId}-attachments`} className="text-right pt-2">Adjuntos</Label>
+            <div className="col-span-3">
+              <Input 
+                id={`${dialogId}-attachments`} 
+                name="attachments" 
+                type="file" 
+                className="mb-2"
+                disabled // Full file upload not implemented yet
+                onChange={(e) => {
+                  // Placeholder for future file handling
+                  // if (e.target.files && e.target.files.length > 0) {
+                  //   // For now, storing the file name as a simple string.
+                  //   // In a real app, this would involve uploading to Firebase Storage and storing URLs.
+                  //   setFormData(prev => ({...prev, attachments: [...(prev.attachments || []), e.target.files![0].name]}));
+                  // }
+                }}
+                />
+              <p className="text-xs text-muted-foreground">
+                La subida de archivos no está implementada completamente. Este campo es un marcador de posición.
+                {formData.attachments && formData.attachments.length > 0 && (
+                  <span className="block mt-1">Archivos actuales (simulado): {formData.attachments.join(", ")}</span>
+                )}
+              </p>
+            </div>
+          </div>
+
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
@@ -322,3 +365,4 @@ export function AddEditTaskDialog({
     </Dialog>
   );
 }
+

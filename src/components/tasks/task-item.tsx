@@ -2,16 +2,22 @@
 "use client";
 
 import type { Task, Lead, User } from "@/lib/types"; 
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon } from "lucide-react"; 
+import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon, Paperclip, MessageSquareText } from "lucide-react"; 
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/auth-context";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 
 interface TaskItemProps {
@@ -84,66 +90,103 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
 
   return (
     <Card className={`transition-all duration-200 ${task.completed ? 'bg-muted/50 opacity-70' : 'bg-card'}`}>
-      <CardContent className="p-4 flex items-start gap-4">
-        <Checkbox
-          id={`task-${task.id}`}
-          checked={task.completed}
-          onCheckedChange={() => onToggleComplete(task.id)}
-          className="mt-1 shrink-0"
-          aria-label={task.completed ? "Marcar tarea como incompleta" : "Marcar tarea como completa"}
-        />
-        <div className="flex-grow">
-          <label
-            htmlFor={`task-${task.id}`}
-            className={`font-medium cursor-pointer ${task.completed ? "line-through text-muted-foreground" : "text-card-foreground"}`}
-          >
-            {task.title}
-          </label>
-          {task.description && (
-            <p className={`text-sm mt-1 ${task.completed ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
-              {task.description}
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
-            {task.dueDate && (
-              <span className="flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" /> {format(parseISO(task.dueDate), "PP", { locale: es })}
-              </span>
-            )}
-            {getDueDateBadge()}
-            {getPriorityBadge()}
-            {relatedLead && (
-              <TooltipProvider delayDuration={100}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 p-1 px-1.5 bg-secondary rounded-md hover:bg-secondary/80 cursor-default">
-                      <LinkIcon className="h-3 w-3 text-primary" /> {relatedLead.name}
+      <CardContent className="p-0"> {/* Remove padding from CardContent to allow Accordion to manage it */}
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value={`task-${task.id}-details`} className="border-b-0">
+             <div className="flex items-start gap-4 p-4">
+                <Checkbox
+                id={`task-${task.id}`}
+                checked={task.completed}
+                onCheckedChange={() => onToggleComplete(task.id)}
+                className="mt-1 shrink-0"
+                aria-label={task.completed ? "Marcar tarea como incompleta" : "Marcar tarea como completa"}
+                />
+                <div className="flex-grow">
+                  <AccordionTrigger className="p-0 hover:no-underline">
+                    <label
+                        htmlFor={`task-${task.id}`} // Keep for accessibility with checkbox
+                        className={`font-medium cursor-pointer text-left ${task.completed ? "line-through text-muted-foreground" : "text-card-foreground"}`}
+                    >
+                        {task.title}
+                    </label>
+                  </AccordionTrigger>
+                
+                {task.description && (
+                    <p className={`text-sm mt-1 ${task.completed ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
+                    {task.description.length > 100 ? `${task.description.substring(0, 97)}...` : task.description}
+                    </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
+                    {task.dueDate && (
+                    <span className="flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3" /> {format(parseISO(task.dueDate), "PP", { locale: es })}
                     </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Enlazado a Lead: {relatedLead.name}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-             {assignee ? (
-                <UserAvatarTooltip user={assignee} labelPrefix="Para:" currentAuthUser={currentUser} />
-            ) : (
-              <span className="flex items-center gap-1 p-1 px-1.5 bg-muted rounded-md text-xs">
-                <UserIcon className="h-3 w-3" /> Sin asignar
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-1 shrink-0">
-          <Button variant="ghost" size="icon" onClick={() => onEdit(task)} className="h-8 w-8" aria-label="Editar tarea">
-            <Edit3 className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(task.id)} className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Eliminar tarea">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+                    )}
+                    {getDueDateBadge()}
+                    {getPriorityBadge()}
+                    {relatedLead && (
+                    <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 p-1 px-1.5 bg-secondary rounded-md hover:bg-secondary/80 cursor-default">
+                            <LinkIcon className="h-3 w-3 text-primary" /> {relatedLead.name}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Enlazado a Lead: {relatedLead.name}</p>
+                        </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    )}
+                    {assignee ? (
+                        <UserAvatarTooltip user={assignee} labelPrefix="Para:" currentAuthUser={currentUser} />
+                    ) : (
+                    <span className="flex items-center gap-1 p-1 px-1.5 bg-muted rounded-md text-xs">
+                        <UserIcon className="h-3 w-3" /> Sin asignar
+                    </span>
+                    )}
+                </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" onClick={() => onEdit(task)} className="h-8 w-8" aria-label="Editar tarea">
+                    <Edit3 className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => onDelete(task.id)} className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Eliminar tarea">
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+                </div>
+            </div>
+            <AccordionContent className="px-4 pb-4">
+                {task.description && task.description.length > 100 && (
+                    <div className="mb-3">
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">Descripción Completa:</h4>
+                        <p className="text-sm text-card-foreground whitespace-pre-wrap">{task.description}</p>
+                    </div>
+                )}
+                {task.solutionDescription && (
+                <div className="mb-3 pt-2 border-t">
+                    <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-1"><MessageSquareText className="h-4 w-4"/>Descripción de la Solución:</h4>
+                    <p className="text-sm text-card-foreground whitespace-pre-wrap">{task.solutionDescription}</p>
+                </div>
+                )}
+                {task.attachments && task.attachments.length > 0 && (
+                <div className="pt-2 border-t">
+                    <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-1"><Paperclip className="h-4 w-4"/>Adjuntos:</h4>
+                    <ul className="list-disc list-inside text-sm text-card-foreground">
+                    {task.attachments.map((att, index) => (
+                        <li key={index}>{att} (Enlace simulado)</li> 
+                    ))}
+                    </ul>
+                </div>
+                )}
+                {!task.solutionDescription && (!task.attachments || task.attachments.length === 0) && (!task.description || task.description.length <=100) && (
+                     <p className="text-sm text-muted-foreground">No hay detalles adicionales para esta tarea.</p>
+                )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </CardContent>
     </Card>
   );
 }
+

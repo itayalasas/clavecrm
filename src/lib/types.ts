@@ -31,6 +31,8 @@ export interface Task {
   priority?: 'low' | 'medium' | 'high';
   assigneeUserId?: string; // ID of the user assigned to the task
   reporterUserId: string; // ID of the user who reported or created the task
+  solutionDescription?: string; // Description of the solution
+  attachments?: string[]; // Array of attachment URLs or identifiers
 }
 
 export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';
@@ -56,3 +58,4 @@ export interface Ticket {
   assigneeUserId?: string; // ID of the user assigned to the ticket
   relatedLeadId?: string; // Optional: link ticket to a lead
 }
+
