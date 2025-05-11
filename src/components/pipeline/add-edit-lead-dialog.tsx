@@ -22,6 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon } from "lucide-react";
+import { format, parseISO, isValid } from "date-fns";
+import { es } from 'date-fns/locale';
+import { cn } from "@/lib/utils";
 
 interface AddEditLeadDialogProps {
   trigger: React.ReactNode;
@@ -30,7 +36,7 @@ interface AddEditLeadDialogProps {
   onSave: (lead: Lead) => void;
 }
 
-const defaultLead: Omit<Lead, 'id' | 'createdAt'> = {
+const defaultLeadBase: Omit<Lead, 'id' | 'createdAt'> = {
   name: "",
   email: "",
   phone: "",
@@ -38,35 +44,55 @@ const defaultLead: Omit<Lead, 'id' | 'createdAt'> = {
   stageId: "",
   details: "",
   value: 0,
+  score: 0,
+  probability: 0,
+  expectedCloseDate: undefined,
 };
 
 export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEditLeadDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [formData, setFormData] = useState<Omit<Lead, 'id' | 'createdAt'>>(defaultLead);
+  const [formData, setFormData] = useState<Omit<Lead, 'id' | 'createdAt'>>(defaultLeadBase);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
-    if (leadToEdit) {
-      setFormData({
-        name: leadToEdit.name,
-        email: leadToEdit.email || "",
-        phone: leadToEdit.phone || "",
-        company: leadToEdit.company || "",
-        stageId: leadToEdit.stageId,
-        details: leadToEdit.details || "",
-        value: leadToEdit.value || 0,
-      });
-    } else {
-      setFormData(prev => ({...defaultLead, stageId: stages[0]?.id || ""}));
+    if (isOpen) {
+      if (leadToEdit) {
+        const initialData = {
+          name: leadToEdit.name,
+          email: leadToEdit.email || "",
+          phone: leadToEdit.phone || "",
+          company: leadToEdit.company || "",
+          stageId: leadToEdit.stageId,
+          details: leadToEdit.details || "",
+          value: leadToEdit.value || 0,
+          score: leadToEdit.score || 0,
+          probability: leadToEdit.probability || 0,
+          expectedCloseDate: leadToEdit.expectedCloseDate,
+        };
+        setFormData(initialData);
+        setSelectedDate(leadToEdit.expectedCloseDate && isValid(parseISO(leadToEdit.expectedCloseDate)) ? parseISO(leadToEdit.expectedCloseDate) : undefined);
+      } else {
+        setFormData(prev => ({...defaultLeadBase, stageId: stages[0]?.id || ""}));
+        setSelectedDate(undefined);
+      }
     }
   }, [leadToEdit, isOpen, stages]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: name === 'value' ? parseFloat(value) : value }));
+    setFormData((prev) => ({ 
+      ...prev, 
+      [name]: (name === 'value' || name === 'score' || name === 'probability') ? parseFloat(value) || 0 : value 
+    }));
   };
 
   const handleStageChange = (value: string) => {
     setFormData((prev) => ({ ...prev, stageId: value }));
+  };
+
+  const handleDateChange = (date: Date | undefined) => {
+    setSelectedDate(date);
+    setFormData((prev) => ({ ...prev, expectedCloseDate: date ? date.toISOString() : undefined }));
   };
 
   const handleSubmit = () => {
@@ -86,7 +112,7 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{leadToEdit ? "Editar Lead" : "Añadir Nuevo Lead"}</DialogTitle>
           <DialogDescription>
@@ -102,7 +128,7 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="email" className="text-right">
-              Correo Electrónico
+              Correo
             </Label>
             <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} className="col-span-3" />
           </div>
@@ -123,6 +149,44 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
               Valor ($)
             </Label>
             <Input id="value" name="value" type="number" value={formData.value} onChange={handleChange} className="col-span-3" />
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="score" className="text-right">
+              Puntuación
+            </Label>
+            <Input id="score" name="score" type="number" min="0" max="100" value={formData.score} onChange={handleChange} className="col-span-3" placeholder="0-100" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="probability" className="text-right">
+              Probabilidad (%)
+            </Label>
+            <Input id="probability" name="probability" type="number" min="0" max="100" value={formData.probability} onChange={handleChange} className="col-span-3" placeholder="0-100" />
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="expectedCloseDate" className="text-right">Fecha Cierre</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "col-span-3 justify-start text-left font-normal",
+                    !selectedDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Elige una fecha</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  locale={es}
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={handleDateChange}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="stageId" className="text-right">

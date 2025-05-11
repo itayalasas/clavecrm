@@ -1,4 +1,3 @@
-
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
 export interface Lead {
@@ -11,6 +10,9 @@ export interface Lead {
   createdAt: string; // Store as ISO string for easier serialization
   details?: string;
   value?: number; // Potential deal value
+  score?: number; // For lead scoring
+  probability?: number; // 0-100 for sales forecast
+  expectedCloseDate?: string; // ISO string for sales forecast
 }
 
 export interface PipelineStage {
@@ -69,8 +71,92 @@ export interface Ticket {
   assigneeUserId?: string; // ID of the user assigned to the ticket
   relatedLeadId?: string; // Optional: link ticket to a lead
   attachments?: { name: string, url: string }[]; // Attachments for the ticket itself
-  // comments?: Comment[]; // Removed: TicketItem will fetch comments from subcollection
   solutionDescription?: string; // Description of the solution provided by assignee
   solutionAttachments?: { name: string, url: string }[]; // Attachments for the solution
 }
 
+// Sales Management Types
+export type QuoteStatus = 'Borrador' | 'Enviada' | 'Aceptada' | 'Rechazada' | 'Expirada';
+export type OrderStatus = 'Pendiente' | 'Procesando' | 'Enviado' | 'Entregado' | 'Cancelado';
+export type InvoiceStatus = 'Borrador' | 'Enviada' | 'Pagada' | 'Vencida' | 'Cancelada';
+
+export interface QuoteItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Quote {
+  id: string;
+  leadId: string;
+  createdAt: string;
+  updatedAt?: string;
+  quoteNumber: string;
+  items: QuoteItem[];
+  subtotal: number;
+  discount?: number; // Percentage or fixed amount
+  taxRate?: number; // e.g., 0.21 for 21%
+  taxAmount: number;
+  total: number;
+  status: QuoteStatus;
+  notes?: string;
+  validUntil?: string; // ISO string
+  preparedByUserId: string;
+}
+
+export interface OrderItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Order {
+  id: string;
+  leadId: string;
+  quoteId?: string;
+  orderNumber: string;
+  createdAt: string;
+  updatedAt?: string;
+  items: OrderItem[];
+  subtotal: number;
+  discount?: number;
+  taxAmount: number;
+  total: number;
+  status: OrderStatus;
+  shippingAddress?: string;
+  billingAddress?: string;
+  placedByUserId: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Invoice {
+  id: string;
+  orderId: string;
+  leadId: string;
+  invoiceNumber: string;
+  createdAt: string; // Issue date
+  updatedAt?: string;
+  dueDate: string;
+  items: InvoiceItem[];
+  subtotal: number;
+  discount?: number;
+  taxRate?: number;
+  taxAmount: number;
+  total: number;
+  status: InvoiceStatus;
+  paymentMethod?: string;
+  paymentDate?: string; // ISO string
+  notes?: string;
+  issuedByUserId: string;
+}

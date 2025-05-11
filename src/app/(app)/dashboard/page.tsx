@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { INITIAL_LEADS, INITIAL_PIPELINE_STAGES, INITIAL_TASKS } from "@/lib/constants";
 import type { Lead, PipelineStage, Task } from "@/lib/types";
-import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target } from 'lucide-react';
-import { es } from 'date-fns/locale'; // For Spanish date formatting if needed with date-fns format
-import { format } from 'date-fns';
-
+import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target, Activity, CalendarClock } from 'lucide-react';
+import { es } from 'date-fns/locale';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getMonth } from 'date-fns';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D'];
+const MONTH_NAMES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -18,7 +18,6 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
-    // Simulate data fetching
     setLeads(INITIAL_LEADS);
     setStages(INITIAL_PIPELINE_STAGES);
     setTasks(INITIAL_TASKS);
@@ -36,22 +35,32 @@ export default function DashboardPage() {
     name: stage.name,
     leads: leads.filter(lead => lead.stageId === stage.id).length,
   }));
-
-  // Mock data, translating month names for consistency in Spanish UI
-  const salesPerformanceData = [
-    { month: 'Ene', sales: Math.floor(Math.random() * 5000) + 1000 },
-    { month: 'Feb', sales: Math.floor(Math.random() * 5000) + 1000 },
-    { month: 'Mar', sales: Math.floor(Math.random() * 5000) + 1000 },
-    { month: 'Abr', sales: Math.floor(Math.random() * 5000) + 1000 },
-    { month: 'May', sales: Math.floor(Math.random() * 5000) + 1000 },
-    { month: 'Jun', sales: Math.floor(Math.random() * 5000) + 1000 },
-  ];
   
   const taskStatusData = [
     { name: 'Tareas Abiertas', value: openTasks },
     { name: 'Tareas Completadas', value: completedTasks },
   ];
 
+  // Sales Forecast Data (weighted value by probability)
+  const salesForecastData = MONTH_NAMES_ES.map((monthName, index) => {
+    const forecastValue = leads.reduce((sum, lead) => {
+      if (lead.expectedCloseDate && parseISO(lead.expectedCloseDate).getMonth() === index) {
+        return sum + ((lead.value || 0) * (lead.probability || 0) / 100);
+      }
+      return sum;
+    }, 0);
+    return { month: monthName, forecast: Math.round(forecastValue) };
+  });
+
+  // Funnel Value by Expected Close Date
+  const funnelValueByCloseDateData = leads
+    .filter(lead => lead.expectedCloseDate && lead.value && lead.stageId !== 'stage-5' && lead.stageId !== 'stage-6')
+    .sort((a, b) => new Date(a.expectedCloseDate!).getTime() - new Date(b.expectedCloseDate!).getTime())
+    .map(lead => ({
+      date: format(parseISO(lead.expectedCloseDate!), 'dd MMM', { locale: es }),
+      value: lead.value,
+      name: lead.name,
+    })).slice(0, 10); // Show top 10 earliest for brevity
 
   return (
     <div className="flex flex-col gap-6">
@@ -101,8 +110,30 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
+            <CardTitle>Pronóstico de Ventas (Ponderado)</CardTitle>
+            <CardDescription>Valor estimado de cierre por mes basado en probabilidad.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={salesForecastData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
+                <Tooltip
+                  formatter={(value: number) => [`$${value.toLocaleString('es-ES')}`, "Pronóstico"]}
+                  contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                  itemStyle={{ color: 'hsl(var(--foreground))' }}
+                />
+                <Line type="monotone" dataKey="forecast" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Leads por Etapa</CardTitle>
-            <CardDescription>Distribución de leads en las etapas del embudo de ventas.</CardDescription>
+            <CardDescription>Distribución de leads en el embudo de ventas.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -115,6 +146,30 @@ export default function DashboardPage() {
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
                 />
                 <Bar dataKey="leads" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+      
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Valor del Embudo por Fecha de Cierre</CardTitle>
+            <CardDescription>Próximos cierres esperados (primeros 10).</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={funnelValueByCloseDateData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
+                <YAxis type="category" dataKey="date" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                <Tooltip
+                  formatter={(value: number, name: string, props: any) => [`$${value.toLocaleString('es-ES')} (${props.payload.name})`, "Valor"]}
+                  contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                  itemStyle={{ color: 'hsl(var(--foreground))' }}
+                />
+                <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -167,7 +222,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium">{task.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {task.relatedLeadId ? `Relacionado con ${leads.find(l => l.id === task.relatedLeadId)?.name || 'Cliente Potencial'}` : 'Tarea General'}
-                    {task.dueDate ? ` - Vence: ${new Date(task.dueDate).toLocaleDateString('es-ES')}` : ''}
+                    {task.dueDate && isValid(parseISO(task.dueDate)) ? ` - Vence: ${format(parseISO(task.dueDate), 'P', { locale: es})}` : ''}
                   </p>
                 </div>
               </li>
@@ -178,7 +233,7 @@ export default function DashboardPage() {
                  <div>
                   <p className="text-sm font-medium">Nuevo Lead: {lead.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Agregado el {new Date(lead.createdAt).toLocaleDateString('es-ES')}
+                    Agregado el {format(parseISO(lead.createdAt), 'P', { locale: es})}
                   </p>
                 </div>
               </li>

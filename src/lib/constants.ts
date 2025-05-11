@@ -1,6 +1,5 @@
-
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users } from 'lucide-react';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt } from 'lucide-react'; // Added new icons
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -10,7 +9,10 @@ export const NAV_ITEMS = [
   { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig },
   { href: '/tasks', label: 'Tareas', icon: ListChecks },
   { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
-  { href: '/user-management', label: 'Gestión de Usuarios', icon: Users },
+  { href: '/quotes', label: 'Cotizaciones', icon: FileText },
+  { href: '/orders', label: 'Pedidos', icon: ShoppingCart },
+  { href: '/invoices', label: 'Facturas', icon: Receipt },
+  { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
   { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
 ];
 
@@ -27,12 +29,44 @@ export const INITIAL_PIPELINE_STAGES: PipelineStage[] = [
   { id: 'stage-6', name: 'Cerrado Perdido', order: 6, color: 'bg-red-500' },
 ];
 
+const today = new Date();
+const addDays = (date: Date, days: number) => {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result.toISOString();
+};
+
 export const INITIAL_LEADS: Lead[] = [
-  { id: 'lead-1', name: 'Acme Corp', email: 'contact@acme.com', stageId: 'stage-1', createdAt: new Date().toISOString(), details: 'Interesado en las funciones de automatización de marketing del Producto X.', value: 5000 },
-  { id: 'lead-2', name: 'Beta Solutions', email: 'info@beta.inc', stageId: 'stage-2', createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), details: 'Seguimiento del presupuesto Q2. Necesita integración personalizada.', value: 12000 },
-  { id: 'lead-3', name: 'Gamma Innovations LLC', email: 'sales@gamma.llc', stageId: 'stage-3', createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), details: 'Propuesta enviada, esperando comentarios. Contacto clave: Jane Doe.', value: 7500 },
-  { id: 'lead-4', name: 'Delta Services', email: 'support@delta.com', stageId: 'stage-1', createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), details: 'Buscando CRM para 10 usuarios.', value: 3000 },
-  { id: 'lead-5', name: 'Epsilon Retail', email: 'shop@epsilon.store', stageId: 'stage-4', createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), details: 'Negociando términos para el plan empresarial.', value: 25000 },
+  { 
+    id: 'lead-1', name: 'Acme Corp', email: 'contact@acme.com', stageId: 'stage-1', 
+    createdAt: new Date().toISOString(), 
+    details: 'Interesado en las funciones de automatización de marketing del Producto X.', value: 5000,
+    score: 75, probability: 60, expectedCloseDate: addDays(today, 30)
+  },
+  { 
+    id: 'lead-2', name: 'Beta Solutions', email: 'info@beta.inc', stageId: 'stage-2', 
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), 
+    details: 'Seguimiento del presupuesto Q2. Necesita integración personalizada.', value: 12000,
+    score: 90, probability: 75, expectedCloseDate: addDays(today, 45)
+  },
+  { 
+    id: 'lead-3', name: 'Gamma Innovations LLC', email: 'sales@gamma.llc', stageId: 'stage-3', 
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), 
+    details: 'Propuesta enviada, esperando comentarios. Contacto clave: Jane Doe.', value: 7500,
+    score: 60, probability: 50, expectedCloseDate: addDays(today, 60)
+  },
+  { 
+    id: 'lead-4', name: 'Delta Services', email: 'support@delta.com', stageId: 'stage-1', 
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), 
+    details: 'Buscando CRM para 10 usuarios.', value: 3000,
+    score: 50, probability: 30, expectedCloseDate: addDays(today, 15)
+  },
+  { 
+    id: 'lead-5', name: 'Epsilon Retail', email: 'shop@epsilon.store', stageId: 'stage-4', 
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), 
+    details: 'Negociando términos para el plan empresarial.', value: 25000,
+    score: 85, probability: 80, expectedCloseDate: addDays(today, 10)
+  },
 ];
 
 export const INITIAL_USERS: User[] = [
@@ -52,4 +86,6 @@ export const INITIAL_TASKS: Task[] = [
 export const TICKET_STATUSES: TicketStatus[] = ['Abierto', 'En Progreso', 'Resuelto', 'Cerrado'];
 export const TICKET_PRIORITIES: TicketPriority[] = ['Baja', 'Media', 'Alta'];
 
-// INITIAL_TICKETS is removed as tickets will be fetched from Firestore.
+export const QUOTE_STATUSES: QuoteStatus[] = ['Borrador', 'Enviada', 'Aceptada', 'Rechazada', 'Expirada'];
+export const ORDER_STATUSES: OrderStatus[] = ['Pendiente', 'Procesando', 'Enviado', 'Entregado', 'Cancelado'];
+export const INVOICE_STATUSES: InvoiceStatus[] = ['Borrador', 'Enviada', 'Pagada', 'Vencida', 'Cancelada'];
