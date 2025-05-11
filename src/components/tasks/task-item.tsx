@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon, Paperclip, MessageSquareText } from "lucide-react"; 
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, parseISO, differenceInDays, isValid } from 'date-fns';
 import { es } from 'date-fns/locale'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -202,3 +202,4 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
     </Card>
   );
 }
+
