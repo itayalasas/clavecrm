@@ -41,7 +41,7 @@ type UserFormValues = z.infer<typeof formSchema>;
 
 interface AddEditUserDialogProps {
   trigger: React.ReactNode;
-  userToEdit?: User | null; // For future edit functionality
+  userToEdit?: User | null; 
   onUserAdded?: (user: User) => void;
 }
 
@@ -61,54 +61,49 @@ export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditU
   });
 
   useEffect(() => {
-    if (userToEdit) {
-      // Pre-fill form for editing (password field would be handled differently for edits)
-      form.reset({
-        name: userToEdit.name,
-        email: userToEdit.email,
-        password: "", // Password should not be pre-filled for edit
-        role: userToEdit.role,
-      });
-    } else {
-      form.reset({ // Reset to defaults when opening for new user
-        name: "",
-        email: "",
-        password: "",
-        role: DEFAULT_USER_ROLE,
-      });
+    if (isOpen) { // Reset form when dialog opens or userToEdit changes
+      if (userToEdit) {
+        form.reset({
+          name: userToEdit.name,
+          email: userToEdit.email,
+          password: "", 
+          role: userToEdit.role,
+        });
+      } else {
+        form.reset({ 
+          name: "",
+          email: "",
+          password: "",
+          role: DEFAULT_USER_ROLE,
+        });
+      }
     }
   }, [userToEdit, isOpen, form]);
 
   const onSubmitHandler: SubmitHandler<UserFormValues> = async (data) => {
     if (userToEdit) {
-      // Handle update logic (requires different auth context function)
       toast({ title: "Funcionalidad no implementada", description: "La edición de usuarios aún no está disponible.", variant: "destructive" });
       return;
     }
 
     try {
       const userCredential = await signup(data.email, data.password, data.name, data.role);
-      toast({
-        title: "Usuario Creado Exitosamente",
-        description: `Se ha creado el usuario ${data.name}. Se han enviado correos de verificación y reseteo de contraseña.`,
-      });
-      if (onUserAdded && userCredential.user) {
+      // Toast for user creation success is handled within the signup function in AuthContext.
+      if (onUserAdded && userCredential?.uid) { // Check uid on userCredential which is FirebaseUser
         onUserAdded({
-            id: userCredential.user.uid,
+            id: userCredential.uid,
             name: data.name,
             email: data.email,
             role: data.role,
         });
       }
-      setIsOpen(false);
-      form.reset();
+      setIsOpen(false); // Close the modal
+      // form.reset(); // Form is reset by useEffect when isOpen changes or on next open
     } catch (error: any) {
-      console.error("Error creating user:", error);
-      toast({
-        title: "Error al Crear Usuario",
-        description: error.message || "Ocurrió un error inesperado.",
-        variant: "destructive",
-      });
+      console.error("Error creating user (dialog):", error);
+      // Error toast is handled within the signup function in AuthContext.
+      // If signup throws, this catch block will execute. Ensure no double-toasting.
+      // The toast from AuthContext is usually more specific.
     }
   };
 
@@ -150,7 +145,7 @@ export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditU
                 </FormItem>
               )}
             />
-            {!userToEdit && ( // Only show password for new user creation
+            {!userToEdit && ( 
               <FormField
                 control={form.control}
                 name="password"
