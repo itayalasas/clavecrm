@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useId } from "react";
@@ -60,6 +59,16 @@ const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'c
 
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
 const NO_USER_SELECTED_VALUE = "__no_user_selected__";
+
+function generateTicketId(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let randomLetters = '';
+  for (let i = 0; i < 3; i++) {
+    randomLetters += letters.charAt(Math.floor(Math.random() * letters.length));
+  }
+  const randomNumber = Math.floor(10000 + Math.random() * 90000); // 5-digit number
+  return `${randomLetters}-${randomNumber}`;
+}
 
 export function AddEditTicketDialog({
   trigger,
@@ -179,7 +188,7 @@ export function AddEditTicketDialog({
     setIsUploading(true); 
 
     let finalAttachments = [...currentAttachments];
-    const ticketId = ticketToEdit ? ticketToEdit.id : doc(collection(db, "tickets")).id;
+    const ticketId = ticketToEdit ? ticketToEdit.id : generateTicketId();
 
     if (selectedFile) {
       setUploadProgress(0);
@@ -477,4 +486,3 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
-
