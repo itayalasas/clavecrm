@@ -362,7 +362,6 @@ export function TicketItem({
               </div>
             )}
 
-            {/* Solution Section */}
             {(ticket.solutionDescription || (ticket.solutionAttachments && ticket.solutionAttachments.length > 0) || canManageSolution) && (
               <div className="pt-3 border-t">
                 <h4 className="text-sm font-semibold text-green-600 flex items-center gap-1 mb-2">
@@ -464,8 +463,6 @@ export function TicketItem({
               </div>
             )}
 
-
-            {/* Comments Section */}
             <div className="pt-3 border-t">
               <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-2"><MessageCircle className="h-4 w-4"/>Comentarios ({internalComments.length || 0})</h4>
               {internalComments && internalComments.length > 0 ? (
@@ -503,7 +500,6 @@ export function TicketItem({
               ) : (
                 <p className="text-xs text-muted-foreground">No hay comentarios aún.</p>
               )}
-              {/* Add Comment Form */}
               <form onSubmit={handleNewCommentSubmit} className="mt-4 space-y-2">
                 <Textarea 
                   value={newCommentText} 

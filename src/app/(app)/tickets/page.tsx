@@ -17,8 +17,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion, onSnapshot } from "firebase/firestore";
 import { ref as storageRef, deleteObject } from "firebase/storage";
-import { format, parseISO, startOfMonth } from "date-fns"; // format, parseISO used in TicketItem and AddEdit...Dialog
+import { format, parseISO, startOfMonth } from "date-fns"; 
 import { es } from 'date-fns/locale';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -32,6 +33,9 @@ export default function TicketsPage() {
 
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false);
+  const [ticketToDelete, setTicketToDelete] = useState<Ticket | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"Todos" | TicketStatus>("Todos");
@@ -50,7 +54,6 @@ export default function TicketsPage() {
     setIsLoadingTickets(true);
     try {
       const ticketsCollectionRef = collection(db, "tickets");
-      // Real-time listener for tickets
       const q = query(ticketsCollectionRef, orderBy("createdAt", "desc"));
       
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -68,7 +71,6 @@ export default function TicketsPage() {
             assigneeUserId: data.assigneeUserId || undefined,
             relatedLeadId: data.relatedLeadId || undefined,
             attachments: data.attachments || [],
-            // Comments are now handled by TicketItem in real-time
             solutionDescription: data.solutionDescription || undefined,
             solutionAttachments: data.solutionAttachments || [],
           } as Ticket;
@@ -85,9 +87,9 @@ export default function TicketsPage() {
         setIsLoadingTickets(false);
       });
       
-      return () => unsubscribe(); // Return unsubscribe function for cleanup
+      return () => unsubscribe(); 
 
-    } catch (error) { // Catch for initial query setup errors, though onSnapshot handles stream errors
+    } catch (error) { 
       console.error("Error al configurar la escucha de tickets:", error);
       toast({
         title: "Error al Configurar Tickets",
@@ -143,14 +145,13 @@ export default function TicketsPage() {
         fetchUsers();
         fetchLeads(); 
         if (currentUser) {
-          // fetchTickets now returns an unsubscribe function
           fetchTickets().then(unsub => { unsubscribeTickets = unsub });
         } else {
           setTickets([]);
           setIsLoadingTickets(false);
         }
     }
-    return () => { // Cleanup function for useEffect
+    return () => { 
       if (unsubscribeTickets) {
         unsubscribeTickets();
       }
@@ -168,15 +169,14 @@ export default function TicketsPage() {
     
     const ticketToSave: Ticket = {
       ...ticketData,
-      // comments are managed by TicketItem's subcollection listener
       solutionDescription: ticketData.solutionDescription || "",
       solutionAttachments: ticketData.solutionAttachments || [],
-      updatedAt: new Date().toISOString(), // Always update this on save
+      updatedAt: new Date().toISOString(), 
     };
     
     try {
       const ticketDocRef = doc(db, "tickets", ticketToSave.id);
-      const { ...ticketDataForFirestore } = ticketToSave; // Destructure to remove any client-side only fields if necessary
+      const { ...ticketDataForFirestore } = ticketToSave; 
       
       const firestoreSafeTicket = {
         ...ticketDataForFirestore,
@@ -184,12 +184,10 @@ export default function TicketsPage() {
         updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
         assigneeUserId: ticketToSave.assigneeUserId || null, 
         relatedLeadId: ticketToSave.relatedLeadId || null, 
-        // comments are NOT stored in the main ticket document anymore.
       };
       
       await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true }); 
 
-      // No local state update for tickets needed here, onSnapshot will handle it.
       toast({
         title: isEditing ? "Ticket Actualizado" : "Ticket Creado",
         description: `El ticket "${ticketToSave.title}" ha sido ${isEditing ? 'actualizado' : 'creado'} exitosamente.`,
@@ -208,72 +206,71 @@ export default function TicketsPage() {
     }
   };
 
-  const handleDeleteTicket = async (ticketId: string) => {
-    const ticketToDelete = tickets.find(t => t.id === ticketId);
+  const confirmDeleteTicket = (ticket: Ticket) => {
+    setTicketToDelete(ticket);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteTicket = async () => {
     if (!ticketToDelete) return;
+    const ticketId = ticketToDelete.id;
+    const ticketTitle = ticketToDelete.title;
+    
+    setIsDeleteDialogOpen(false); // Close dialog first
 
-    if (window.confirm(`¿Estás seguro de que quieres eliminar el ticket "${ticketToDelete.title}"? Esta acción también eliminará los adjuntos asociados y comentarios.`)) {
-      try {
-        // Delete ticket attachments
-        if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
-          for (const attachment of ticketToDelete.attachments) {
-            try {
-              const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
-            } catch (e) { console.warn("Falló al eliminar adjunto del ticket", attachment.url, e); }
-          }
+    try {
+      // Delete ticket attachments
+      if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
+        for (const attachment of ticketToDelete.attachments) {
+          try {
+            const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
+          } catch (e) { console.warn("Falló al eliminar adjunto del ticket", attachment.url, e); }
         }
-         // Delete solution attachments
-        if (ticketToDelete.solutionAttachments && ticketToDelete.solutionAttachments.length > 0) {
-          for (const attachment of ticketToDelete.solutionAttachments) {
-             try {
-              const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
-            } catch (e) { console.warn("Falló al eliminar adjunto de la solución", attachment.url, e); }
-          }
-        }
-        
-        // Delete comment attachments (if any are stored - good practice to check)
-        // This requires fetching comments first, or a more robust backend cleanup.
-        // For now, we assume attachments are deleted with the ticket storage path if structured well.
-        // Or, iterate through comments from TicketItem if it had them.
-        // Simplified: Deleting main ticket doc + its subcollection via a batched write or Cloud Function is more robust.
-
-        // Delete comments subcollection (client-side deletion is complex for subcollections)
-        // A common pattern is a Cloud Function triggered on ticket deletion.
-        // For client-side, you'd fetch all comment docs and delete them one by one or in a batch.
-        // This is a simplified deletion from client for now.
-        const commentsColRef = collection(db, "tickets", ticketId, "comments");
-        const commentsSnapshot = await getDocs(commentsColRef);
-        const batch = writeBatch(db);
-        commentsSnapshot.docs.forEach(commentDoc => {
-            // Also delete comment attachments here if they exist and paths are known
-            const commentData = commentDoc.data() as Comment;
-            if (commentData.attachments) {
-                for (const att of commentData.attachments) {
-                    try { storageRef(storage, att.url); deleteObject(storageRef(storage, att.url)); } catch (e) {console.warn("Error deleting comment attachment", e)}
-                }
-            }
-            batch.delete(commentDoc.ref);
-        });
-        await batch.commit();
-
-
-        const ticketDocRef = doc(db, "tickets", ticketId);
-        await deleteDoc(ticketDocRef);
-        
-        // Local state update will be handled by onSnapshot
-        toast({
-          title: "Ticket Eliminado",
-          description: `El ticket "${ticketToDelete.title}" ha sido eliminado.`,
-          variant: "destructive",
-        });
-      } catch (error) {
-        console.error("Error al eliminar ticket:", error);
-        toast({
-          title: "Error al Eliminar Ticket",
-          description: "Ocurrió un error al eliminar el ticket.",
-          variant: "destructive",
-        });
       }
+      // Delete solution attachments
+      if (ticketToDelete.solutionAttachments && ticketToDelete.solutionAttachments.length > 0) {
+        for (const attachment of ticketToDelete.solutionAttachments) {
+           try {
+            const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
+          } catch (e) { console.warn("Falló al eliminar adjunto de la solución", attachment.url, e); }
+        }
+      }
+      
+      const commentsColRef = collection(db, "tickets", ticketId, "comments");
+      const commentsSnapshot = await getDocs(commentsColRef);
+      const batch = writeBatch(db);
+      
+      for (const commentDoc of commentsSnapshot.docs) {
+          const commentData = commentDoc.data() as Comment;
+          if (commentData.attachments) {
+              for (const att of commentData.attachments) {
+                  try { 
+                    const commentAttRef = storageRef(storage, att.url);
+                    await deleteObject(commentAttRef);
+                  } catch (e) {console.warn("Error al eliminar adjunto del comentario", att.url, e)}
+              }
+          }
+          batch.delete(commentDoc.ref);
+      }
+      await batch.commit();
+
+      const ticketDocRef = doc(db, "tickets", ticketId);
+      await deleteDoc(ticketDocRef);
+      
+      toast({
+        title: "Ticket Eliminado",
+        description: `El ticket "${ticketTitle}" ha sido eliminado exitosamente.`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error al eliminar ticket:", error);
+      toast({
+        title: "Error al Eliminar Ticket",
+        description: "Ocurrió un error al eliminar el ticket.",
+        variant: "destructive",
+      });
+    } finally {
+        setTicketToDelete(null);
     }
   };
 
@@ -283,26 +280,24 @@ export default function TicketsPage() {
       return;
     }
     
-    const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = { // Prepare for Firestore
+    const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = { 
       userId: currentUser.id,
       userName: currentUser.name || "Usuario Anónimo",
       userAvatarUrl: currentUser.avatarUrl || null,
       text: commentText,
-      createdAt: Timestamp.now(), // Use Firestore Timestamp directly
+      createdAt: Timestamp.now(), 
       attachments: commentAttachments,
     };
 
     try {
-      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments")); // Auto-generate ID
+      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments")); 
       await setDoc(commentDocRef, newComment);
       
-      // Update the main ticket's 'updatedAt'
       const ticketDocRef = doc(db, "tickets", ticketId);
       await updateDoc(ticketDocRef, {
         updatedAt: Timestamp.now(),
       });
 
-      // No local state update for comments in TicketsPage. TicketItem's onSnapshot handles this.
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
     } catch (error) {
       console.error("Error al añadir comentario:", error);
@@ -341,7 +336,6 @@ export default function TicketsPage() {
     try {
         const ticketDocRef = doc(db, "tickets", ticketId);
         await updateDoc(ticketDocRef, updatedTicketData);
-        // Local state update handled by onSnapshot
         toast({title: "Solución Actualizada", description: `La solución para el ticket "${ticketToUpdate.title}" ha sido guardada.`});
     } catch (error) {
         console.error("Error al actualizar la solución del ticket:", error);
@@ -363,7 +357,7 @@ export default function TicketsPage() {
   const filteredTickets = useMemo(() => {
     if (!currentUser) return [];
 
-    return tickets // tickets state is now updated by onSnapshot
+    return tickets 
       .filter(ticket => {
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
           return true; 
@@ -458,7 +452,7 @@ export default function TicketsPage() {
         </TabsList>
       </Tabs>
 
-      {isLoading && tickets.length === 0 ? ( // Show skeleton only if truly loading initial data
+      {isLoading && tickets.length === 0 ? ( 
          <div className="space-y-4">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
@@ -474,7 +468,7 @@ export default function TicketsPage() {
               users={users}
               currentUser={currentUser}
               onEdit={openEditTicketDialog}
-              onDelete={handleDeleteTicket}
+              onDelete={() => confirmDeleteTicket(ticket)}
               onAddComment={handleAddComment}
               onUpdateTicketSolution={handleUpdateTicketSolution}
             />
@@ -485,6 +479,26 @@ export default function TicketsPage() {
           <p className="text-lg">No se encontraron tickets.</p>
           <p>Intenta ajustar tus filtros o abre un nuevo ticket.</p>
         </div>
+      )}
+
+      {ticketToDelete && (
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción no se puede deshacer. Esto eliminará permanentemente el ticket &quot;{ticketToDelete.title}&quot; 
+                y todos sus datos asociados (comentarios, adjuntos).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setTicketToDelete(null)}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteTicket} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Sí, eliminar ticket
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );
