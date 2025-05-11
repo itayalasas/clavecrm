@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Task, Lead, User } from "@/lib/types";
-import { INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants"; 
+import { NAV_ITEMS } from "@/lib/constants"; 
 import { TaskItem } from "@/components/tasks/task-item";
 import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
@@ -16,15 +15,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch } from "firebase/firestore";
-import { addMonths, setDate, startOfMonth } from "date-fns";
+import { addMonths, setDate, startOfMonth, format, parseISO } from "date-fns";
+import { es } from 'date-fns/locale';
 
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS); // Keep using initial leads, or fetch if needed
+  const [leads, setLeads] = useState<Lead[]>([]); 
   const [users, setUsers] = useState<User[]>([]);
   
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
 
@@ -62,7 +63,7 @@ export default function TasksPage() {
           assigneeUserId: data.assigneeUserId as string | undefined,
           reporterUserId: data.reporterUserId as string,
           solutionDescription: data.solutionDescription as string | undefined,
-          attachments: data.attachments as string[] | undefined,
+          attachments: data.attachments as { name: string, url: string }[] | undefined,
           isMonthlyRecurring: data.isMonthlyRecurring as boolean | undefined,
         } as Task;
       });
@@ -78,6 +79,28 @@ export default function TasksPage() {
       setIsLoadingTasks(false);
     }
   }, [currentUser, toast]);
+
+  const fetchLeads = useCallback(async () => {
+    setIsLoadingLeads(true);
+    try {
+      const leadsCollectionRef = collection(db, "leads");
+      const querySnapshot = await getDocs(leadsCollectionRef);
+      const fetchedLeads = querySnapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as Lead));
+      setLeads(fetchedLeads);
+    } catch (error) {
+      console.error("Error al obtener leads:", error);
+      toast({
+        title: "Error al Cargar Leads",
+        description: "No se pudieron cargar los datos de los leads.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingLeads(false);
+    }
+  }, [toast]);
 
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
@@ -99,17 +122,15 @@ export default function TasksPage() {
   useEffect(() => {
     if (!authLoading) { 
         fetchUsers();
+        fetchLeads();
+        if (currentUser) { 
+          fetchTasks();
+        } else { 
+          setTasks([]);
+          setIsLoadingTasks(false);
+        }
     }
-  }, [authLoading, fetchUsers]);
-
-  useEffect(() => {
-    if (!authLoading && currentUser) { 
-      fetchTasks();
-    } else if (!authLoading && !currentUser) { 
-      setTasks([]);
-      setIsLoadingTasks(false);
-    }
-  }, [authLoading, currentUser, fetchTasks]);
+  }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTasks]);
 
 
   const handleSaveTask = async (taskData: Task) => {
@@ -120,13 +141,16 @@ export default function TasksPage() {
     setIsSubmittingTask(true);
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
     
-    const taskId = taskData.id; 
+    const taskId = taskData.id || doc(collection(db, "tasks")).id; 
 
     const taskToSave: Task = {
       ...taskData, 
+      id: taskId,
       solutionDescription: taskData.solutionDescription || "",
       attachments: taskData.attachments || [],
       isMonthlyRecurring: taskData.isMonthlyRecurring || false,
+      reporterUserId: taskData.reporterUserId || currentUser.id,
+      createdAt: taskData.createdAt || new Date().toISOString(),
     };
     
     try {
@@ -139,15 +163,8 @@ export default function TasksPage() {
       
       await setDoc(taskDocRef, firestoreSafeTask, { merge: true }); 
 
-      if (isEditing) {
-        setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t)
-          .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        );
-      } else {
-        setTasks(prevTasks => [taskToSave, ...prevTasks]
-          .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        );
-      }
+      fetchTasks(); // Re-fetch tasks
+      
       toast({
         title: isEditing ? "Tarea Actualizada" : "Tarea Creada",
         description: `La tarea "${taskToSave.title}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
@@ -179,51 +196,44 @@ export default function TasksPage() {
 
       let newRecurringTaskInstance: Task | null = null;
 
-      if (updatedTask.completed && task.isMonthlyRecurring) {
-        const originalDueDate = task.dueDate ? new Date(task.dueDate) : new Date();
-        
-        let nextMonthDate = addMonths(originalDueDate, 1);
-        const nextDueDate = startOfMonth(nextMonthDate);
+      if (updatedTask.completed && task.isMonthlyRecurring && task.dueDate) {
+          const originalDueDate = parseISO(task.dueDate);
+          
+          let nextMonthDate = addMonths(originalDueDate, 1);
+          const nextDueDate = startOfMonth(nextMonthDate);
 
-        const newTaskId = doc(collection(db, "tasks")).id;
-        newRecurringTaskInstance = {
-          ...task, // Copy most fields from the original task
-          id: newTaskId,
-          createdAt: new Date().toISOString(),
-          dueDate: nextDueDate.toISOString(),
-          completed: false,
-          solutionDescription: "", // Reset solution for new instance
-          attachments: [], // Reset attachments for new instance
-          // isMonthlyRecurring is already true from '...task'
-        };
-        
-        const newRecurringTaskDocRef = doc(db, "tasks", newRecurringTaskInstance.id);
-        const firestoreSafeNewRecurringTask = {
-            ...newRecurringTaskInstance,
-            createdAt: Timestamp.fromDate(new Date(newRecurringTaskInstance.createdAt)),
-            dueDate: newRecurringTaskInstance.dueDate ? Timestamp.fromDate(new Date(newRecurringTaskInstance.dueDate)) : null,
-        }
-        batch.set(newRecurringTaskDocRef, firestoreSafeNewRecurringTask);
+          const newTaskId = doc(collection(db, "tasks")).id;
+          newRecurringTaskInstance = {
+            ...task,
+            id: newTaskId,
+            createdAt: new Date().toISOString(),
+            dueDate: nextDueDate.toISOString(),
+            completed: false,
+            solutionDescription: "", 
+            attachments: [], 
+          };
+          
+          const newRecurringTaskDocRef = doc(db, "tasks", newRecurringTaskInstance.id);
+          const firestoreSafeNewRecurringTask = {
+              ...newRecurringTaskInstance,
+              createdAt: Timestamp.fromDate(new Date(newRecurringTaskInstance.createdAt)),
+              dueDate: newRecurringTaskInstance.dueDate ? Timestamp.fromDate(new Date(newRecurringTaskInstance.dueDate)) : null,
+          }
+          batch.set(newRecurringTaskDocRef, firestoreSafeNewRecurringTask);
       }
 
-      await batch.commit();
 
-      setTasks(prevTasks => {
-        let newTasksList = prevTasks.map(t => t.id === taskId ? updatedTask : t);
-        if (newRecurringTaskInstance) {
-          newTasksList = [newRecurringTaskInstance, ...newTasksList];
-        }
-        return newTasksList.sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      });
+      await batch.commit();
+      fetchTasks(); // Re-fetch tasks
 
       toast({
         title: "Tarea Actualizada",
         description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
       });
-      if (newRecurringTaskInstance) {
+      if (newRecurringTaskInstance && newRecurringTaskInstance.dueDate) {
         toast({
           title: "Tarea Recurrente Creada",
-          description: `Nueva instancia de "${newRecurringTaskInstance.title}" creada para el ${format(new Date(newRecurringTaskInstance.dueDate!), "PP", {locale: es})}.`
+          description: `Nueva instancia de "${newRecurringTaskInstance.title}" creada para el ${format(parseISO(newRecurringTaskInstance.dueDate), "PP", {locale: es})}.`
         });
       }
 
@@ -246,11 +256,10 @@ export default function TasksPage() {
         // TODO: Delete attachments from Firebase Storage if any
         const taskDocRef = doc(db, "tasks", taskId);
         await deleteDoc(taskDocRef);
-        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+        fetchTasks(); // Re-fetch tasks
         toast({
           title: "Tarea Eliminada",
           description: `La tarea "${taskToDelete.title}" ha sido eliminada.`,
-          variant: "destructive",
         });
       } catch (error) {
         console.error("Error al eliminar tarea:", error);
@@ -299,7 +308,7 @@ export default function TasksPage() {
     setIsTaskDialogOpen(true);
   };
 
-  const isLoading = authLoading || isLoadingTasks || isLoadingUsers;
+  const isLoading = authLoading || isLoadingTasks || isLoadingUsers || isLoadingLeads;
 
   return (
     <div className="flex flex-col gap-6">
@@ -307,7 +316,7 @@ export default function TasksPage() {
         <h2 className="text-2xl font-semibold">{tasksNavItem ? tasksNavItem.label : "Gestión de Tareas"}</h2>
          <AddEditTaskDialog
             trigger={
-              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers || isSubmittingTask}>
+              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers || isSubmittingTask || isLoadingLeads}>
                 <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
@@ -317,6 +326,7 @@ export default function TasksPage() {
             leads={leads} 
             users={users} 
             onSave={handleSaveTask}
+            isSubmitting={isSubmittingTask}
             key={editingTask ? `edit-${editingTask.id}` : 'new-task-dialog'}
           />
       </div>
@@ -330,10 +340,11 @@ export default function TasksPage() {
             className="pl-8 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={isLoading}
           />
         </div>
         <div className="flex gap-2">
-          <Select value={filterPriority} onValueChange={(value: Task['priority'] | "all") => setFilterPriority(value)}>
+          <Select value={filterPriority} onValueChange={(value: Task['priority'] | "all") => setFilterPriority(value)} disabled={isLoading}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <Filter className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Filtrar por prioridad" />
@@ -350,9 +361,9 @@ export default function TasksPage() {
 
       <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as "all" | "pending" | "completed")}>
         <TabsList className="grid w-full grid-cols-3 sm:w-auto sm:inline-flex">
-          <TabsTrigger value="all">Todas las Tareas</TabsTrigger>
-          <TabsTrigger value="pending">Pendientes</TabsTrigger>
-          <TabsTrigger value="completed">Completadas</TabsTrigger>
+          <TabsTrigger value="all" disabled={isLoading}>Todas las Tareas</TabsTrigger>
+          <TabsTrigger value="pending" disabled={isLoading}>Pendientes</TabsTrigger>
+          <TabsTrigger value="completed" disabled={isLoading}>Completadas</TabsTrigger>
         </TabsList>
       </Tabs>
 

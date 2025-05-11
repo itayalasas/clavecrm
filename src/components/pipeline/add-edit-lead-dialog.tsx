@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import type { Lead, PipelineStage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,16 +24,19 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { doc, collection } from "firebase/firestore"; // For generating ID
 
 interface AddEditLeadDialogProps {
   trigger: React.ReactNode;
   stages: PipelineStage[];
   leadToEdit?: Lead | null;
-  onSave: (lead: Lead) => void;
+  onSave: (lead: Lead) => Promise<void>; // Changed to Promise
+  isSubmitting?: boolean;
 }
 
 const defaultLeadBase: Omit<Lead, 'id' | 'createdAt'> = {
@@ -49,10 +52,12 @@ const defaultLeadBase: Omit<Lead, 'id' | 'createdAt'> = {
   expectedCloseDate: undefined,
 };
 
-export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEditLeadDialogProps) {
+export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave, isSubmitting = false }: AddEditLeadDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState<Omit<Lead, 'id' | 'createdAt'>>(defaultLeadBase);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const { toast } = useToast();
+  const dialogIdPrefix = useId();
 
   useEffect(() => {
     if (isOpen) {
@@ -95,23 +100,23 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
     setFormData((prev) => ({ ...prev, expectedCloseDate: date ? date.toISOString() : undefined }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.name || !formData.stageId) {
-      alert("El nombre y la etapa son obligatorios.");
+      toast({ title: "Error de Validación", description: "El nombre y la etapa son obligatorios.", variant: "destructive"});
       return;
     }
     const newLead: Lead = {
       ...formData,
-      id: leadToEdit ? leadToEdit.id : `lead-${Date.now()}`, 
+      id: leadToEdit ? leadToEdit.id : doc(collection(db, "leads")).id, // Generate new ID if not editing
       createdAt: leadToEdit ? leadToEdit.createdAt : new Date().toISOString(),
     };
-    onSave(newLead);
-    setIsOpen(false);
+    await onSave(newLead); // onSave is now async and handles closing the dialog
+    // setIsOpen(false); // Dialog closing is handled by parent or onSave success
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!isSubmitting) setIsOpen(open)}}>
+      <DialogTrigger asChild onClick={() => setIsOpen(true)}>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{leadToEdit ? "Editar Lead" : "Añadir Nuevo Lead"}</DialogTitle>
@@ -121,49 +126,49 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-name`} className="text-right">
               Nombre
             </Label>
-            <Input id="name" name="name" value={formData.name} onChange={handleChange} className="col-span-3" />
+            <Input id={`${dialogIdPrefix}-name`} name="name" value={formData.name} onChange={handleChange} className="col-span-3" disabled={isSubmitting}/>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="email" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-email`} className="text-right">
               Correo
             </Label>
-            <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} className="col-span-3" />
+            <Input id={`${dialogIdPrefix}-email`} name="email" type="email" value={formData.email} onChange={handleChange} className="col-span-3" disabled={isSubmitting}/>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="phone" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-phone`} className="text-right">
               Teléfono
             </Label>
-            <Input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="col-span-3" />
+            <Input id={`${dialogIdPrefix}-phone`} name="phone" value={formData.phone} onChange={handleChange} className="col-span-3" disabled={isSubmitting}/>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="company" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-company`} className="text-right">
               Empresa
             </Label>
-            <Input id="company" name="company" value={formData.company} onChange={handleChange} className="col-span-3" />
+            <Input id={`${dialogIdPrefix}-company`} name="company" value={formData.company} onChange={handleChange} className="col-span-3" disabled={isSubmitting}/>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="value" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-value`} className="text-right">
               Valor ($)
             </Label>
-            <Input id="value" name="value" type="number" value={formData.value} onChange={handleChange} className="col-span-3" />
+            <Input id={`${dialogIdPrefix}-value`} name="value" type="number" value={formData.value} onChange={handleChange} className="col-span-3" disabled={isSubmitting}/>
           </div>
            <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="score" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-score`} className="text-right">
               Puntuación
             </Label>
-            <Input id="score" name="score" type="number" min="0" max="100" value={formData.score} onChange={handleChange} className="col-span-3" placeholder="0-100" />
+            <Input id={`${dialogIdPrefix}-score`} name="score" type="number" min="0" max="100" value={formData.score} onChange={handleChange} className="col-span-3" placeholder="0-100" disabled={isSubmitting}/>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="probability" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-probability`} className="text-right">
               Probabilidad (%)
             </Label>
-            <Input id="probability" name="probability" type="number" min="0" max="100" value={formData.probability} onChange={handleChange} className="col-span-3" placeholder="0-100" />
+            <Input id={`${dialogIdPrefix}-probability`} name="probability" type="number" min="0" max="100" value={formData.probability} onChange={handleChange} className="col-span-3" placeholder="0-100" disabled={isSubmitting}/>
           </div>
            <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="expectedCloseDate" className="text-right">Fecha Cierre</Label>
+            <Label htmlFor={`${dialogIdPrefix}-expectedCloseDate`} className="text-right">Fecha Cierre</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -172,6 +177,7 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
                     "col-span-3 justify-start text-left font-normal",
                     !selectedDate && "text-muted-foreground"
                   )}
+                  disabled={isSubmitting}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Elige una fecha</span>}
@@ -189,11 +195,11 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
             </Popover>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="stageId" className="text-right">
+            <Label htmlFor={`${dialogIdPrefix}-stageId`} className="text-right">
               Etapa
             </Label>
-            <Select name="stageId" value={formData.stageId} onValueChange={handleStageChange}>
-              <SelectTrigger className="col-span-3">
+            <Select name="stageId" value={formData.stageId} onValueChange={handleStageChange} disabled={isSubmitting}>
+              <SelectTrigger className="col-span-3" id={`${dialogIdPrefix}-stageId`}>
                 <SelectValue placeholder="Selecciona una etapa" />
               </SelectTrigger>
               <SelectContent>
@@ -206,15 +212,18 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave }: AddEd
             </Select>
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="details" className="text-right pt-2">
+            <Label htmlFor={`${dialogIdPrefix}-details`} className="text-right pt-2">
               Detalles
             </Label>
-            <Textarea id="details" name="details" value={formData.details} onChange={handleChange} className="col-span-3" rows={3} />
+            <Textarea id={`${dialogIdPrefix}-details`} name="details" value={formData.details} onChange={handleChange} className="col-span-3" rows={3} disabled={isSubmitting}/>
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button type="submit" onClick={handleSubmit}>Guardar Lead</Button>
+          <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isSubmitting}>Cancelar</Button>
+          <Button type="submit" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSubmitting ? "Guardando..." : "Guardar Lead"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
