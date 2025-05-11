@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useCallback } from "react";
 import type { Task, Lead, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,7 +104,7 @@ export function AddEditTaskDialog({
     if (isDialogOpen) {
       const initialData = getInitialFormData();
       setFormData(initialData);
-      setSelectedDate(initialData.dueDate && isValid(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined);
+      setSelectedDate(initialData.dueDate && initialData.dueDate && isValid(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined);
     }
   }, [isDialogOpen, taskToEdit, currentUser, getInitialFormData]);
 
