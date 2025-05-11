@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -70,6 +69,7 @@ export default function TicketsPage() {
             ...comment,
             createdAt: (comment.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
             attachments: comment.attachments || [],
+            userAvatarUrl: comment.userAvatarUrl || null, // Ensure null if undefined
           })),
           solutionDescription: data.solutionDescription || undefined,
           solutionAttachments: data.solutionAttachments || [],
@@ -168,6 +168,7 @@ export default function TicketsPage() {
         comments: (ticketToSave.comments || []).map(comment => ({
           ...comment,
           createdAt: Timestamp.fromDate(new Date(comment.createdAt)),
+          userAvatarUrl: comment.userAvatarUrl || null, // Ensure null if undefined
         })),
       };
       
@@ -211,7 +212,7 @@ export default function TicketsPage() {
           for (const attachment of ticketToDelete.attachments) {
             try {
               const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
-            } catch (e) { console.warn("Failed to delete ticket attachment", attachment.url, e); }
+            } catch (e) { console.warn("Falló al eliminar adjunto del ticket", attachment.url, e); }
           }
         }
          // Delete solution attachments
@@ -219,7 +220,7 @@ export default function TicketsPage() {
           for (const attachment of ticketToDelete.solutionAttachments) {
              try {
               const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
-            } catch (e) { console.warn("Failed to delete solution attachment", attachment.url, e); }
+            } catch (e) { console.warn("Falló al eliminar adjunto de la solución", attachment.url, e); }
           }
         }
         // Delete comment attachments
@@ -229,7 +230,7 @@ export default function TicketsPage() {
               for (const attachment of comment.attachments) {
                  try {
                     const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
-                  } catch (e) { console.warn("Failed to delete comment attachment", attachment.url, e); }
+                  } catch (e) { console.warn("Falló al eliminar adjunto del comentario", attachment.url, e); }
               }
             }
           }
@@ -273,7 +274,7 @@ export default function TicketsPage() {
       id: doc(collection(db, "tickets", ticketId, "comments")).id, 
       userId: currentUser.id,
       userName: currentUser.name || "Usuario Anónimo",
-      userAvatarUrl: currentUser.avatarUrl,
+      userAvatarUrl: currentUser.avatarUrl || null, // Ensure null instead of undefined
       text: commentText,
       createdAt: new Date().toISOString(),
       attachments: commentAttachments,
@@ -286,6 +287,7 @@ export default function TicketsPage() {
       await setDoc(commentDocRef, {
         ...newComment,
          createdAt: Timestamp.fromDate(new Date(newComment.createdAt)), // Store as Timestamp
+         userAvatarUrl: newComment.userAvatarUrl, // Already handled in newComment creation
       });
       
       // Update the main ticket's 'updatedAt' and its 'comments' array (optional, can be heavy)
@@ -297,7 +299,8 @@ export default function TicketsPage() {
         // For this example, we'll update the local state's comment array.
          comments: arrayUnion({ // This is okay for a few comments, but not for hundreds.
           ...newComment,
-          createdAt: Timestamp.fromDate(new Date(newComment.createdAt))
+          createdAt: Timestamp.fromDate(new Date(newComment.createdAt)),
+          userAvatarUrl: newComment.userAvatarUrl, // Already handled
         })
       });
 
@@ -335,10 +338,12 @@ export default function TicketsPage() {
     }
 
     const ticketToUpdate = tickets[ticketIndex];
-    if (currentUser.id !== ticketToUpdate.assigneeUserId) {
-        toast({title: "Acción no permitida", description: "Solo el usuario asignado puede registrar la solución.", variant: "destructive"});
+    // Allow admin/supervisor to update solution as well
+    if (currentUser.id !== ticketToUpdate.assigneeUserId && currentUser.role !== 'admin' && currentUser.role !== 'supervisor') {
+        toast({title: "Acción no permitida", description: "Solo el usuario asignado o un administrador/supervisor puede registrar la solución.", variant: "destructive"});
         return;
     }
+
 
     const updatedTicketData = {
         solutionDescription,
