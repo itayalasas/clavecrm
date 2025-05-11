@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Loader2, Construction } from "lucide-react";
 
 const formSchema = z.object({
@@ -163,3 +163,4 @@ export function AddEditEmailTemplateDialog({
     </Dialog>
   );
 }
+
