@@ -196,6 +196,26 @@ export interface EmailTemplate {
 
 export type EmailCampaignStatus = 'Borrador' | 'Programada' | 'Enviando' | 'Enviada' | 'Archivada' | 'Fallida';
 
+export interface EmailCampaignAnalytics {
+  totalRecipients?: number;
+  emailsSent?: number;
+  emailsDelivered?: number;
+  emailsOpened?: number; // Total opens
+  uniqueOpens?: number; // Unique opens
+  emailsClicked?: number; // Total clicks
+  uniqueClicks?: number; // Unique clicks
+  bounceCount?: number;
+  unsubscribeCount?: number;
+  spamReports?: number;
+  // Calculated rates
+  deliveryRate?: number; // (emailsDelivered / emailsSent) * 100
+  openRate?: number; // (uniqueOpens / emailsDelivered) * 100
+  clickThroughRate?: number; // (uniqueClicks / emailsDelivered) * 100
+  clickToOpenRate?: number; // (uniqueClicks / uniqueOpens) * 100
+  unsubscribeRate?: number; // (unsubscribeCount / emailsDelivered) * 100
+  bounceRate?: number; // (bounceCount / emailsSent) * 100
+}
+
 export interface EmailCampaign {
   id: string;
   name: string;
@@ -209,16 +229,7 @@ export interface EmailCampaign {
   sentAt?: string; // ISO string
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
-  // Basic analytics (mock for now)
-  analytics?: {
-    totalRecipients?: number;
-    sentCount?: number;
-    deliveredCount?: number;
-    openRate?: number; // Percentage
-    clickRate?: number; // Percentage
-    bounceCount?: number;
-    unsubscribeCount?: number;
-  };
+  analytics?: EmailCampaignAnalytics;
 }
 
 // Types for new email template features

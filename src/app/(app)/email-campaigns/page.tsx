@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { ContactList, EmailCampaign, EmailTemplate, Contact } from "@/lib/types";
+import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics } from "@/lib/types";
 import { NAV_ITEMS, EMAIL_CAMPAIGN_STATUSES } from "@/lib/constants";
 import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, setDoc, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, setDoc, where, updateDoc } from "firebase/firestore";
 import { AddEditContactListDialog } from "@/components/email-campaigns/add-edit-contact-list-dialog";
 import { ContactListItem } from "@/components/email-campaigns/contact-list-item";
 import { ManageContactsDialog } from "@/components/email-campaigns/manage-contacts-dialog";
@@ -20,6 +19,7 @@ import { EmailTemplateItem } from "@/components/email-campaigns/email-template-i
 import { AddEditEmailCampaignDialog } from "@/components/email-campaigns/add-edit-email-campaign-dialog";
 import { PreviewEmailTemplateDialog } from "@/components/email-campaigns/preview-email-template-dialog";
 import { EmailCampaignItem } from "@/components/email-campaigns/email-campaign-item";
+import { EmailCampaignAnalyticsDialog } from "@/components/email-campaigns/email-campaign-analytics-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function EmailCampaignsPage() {
@@ -54,6 +54,10 @@ export default function EmailCampaignsPage() {
   const [editingCampaign, setEditingCampaign] = useState<EmailCampaign | null>(null);
   const [campaignToDelete, setCampaignToDelete] = useState<EmailCampaign | null>(null);
   const [isDeleteCampaignDialogOpen, setIsDeleteCampaignDialogOpen] = useState(false);
+  
+  const [isAnalyticsDialogOpen, setIsAnalyticsDialogOpen] = useState(false);
+  const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<EmailCampaign | null>(null);
+
 
   const { toast } = useToast();
 
@@ -136,6 +140,7 @@ export default function EmailCampaignsPage() {
         updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
         scheduledAt: (data.scheduledAt as Timestamp)?.toDate().toISOString() || undefined,
         sentAt: (data.sentAt as Timestamp)?.toDate().toISOString() || undefined,
+        analytics: data.analytics || {}, // Ensure analytics object exists
       } as EmailCampaign});
       setCampaigns(fetchedCampaigns);
     } catch (error) {
@@ -178,6 +183,7 @@ export default function EmailCampaignsPage() {
   const handleDeleteContactList = async () => {
     if (!listToDelete) return;
     try {
+      // TODO: Remove listId from all contacts in this list (optional, or handle by filtering)
       await deleteDoc(doc(db, "contactLists", listToDelete.id));
       toast({ title: "Lista Eliminada", description: `La lista "${listToDelete.name}" ha sido eliminada.` });
       fetchContactLists();
@@ -242,21 +248,26 @@ export default function EmailCampaignsPage() {
       const docRefId = id || doc(collection(db, "emailCampaigns")).id;
       const existingCampaign = id ? campaigns.find(c => c.id === id) : null;
       
+      const initialAnalytics: EmailCampaignAnalytics = {
+        totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0,
+        emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0,
+        deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0,
+      };
+
       const dataToSave: any = {
         ...campaignData,
         status: existingCampaign?.status || EMAIL_CAMPAIGN_STATUSES[0], 
-        analytics: existingCampaign?.analytics || {},
+        analytics: existingCampaign?.analytics || initialAnalytics,
         [id ? 'updatedAt' : 'createdAt']: serverTimestamp(),
       };
 
-      // Ensure sentAt is either a Timestamp or null, not undefined
+      // Handle 'sentAt'
       if (campaignData.scheduledAt && (dataToSave.status === 'Enviada' || dataToSave.status === 'Enviando')) {
          dataToSave.sentAt = existingCampaign?.sentAt ? Timestamp.fromDate(new Date(existingCampaign.sentAt)) : Timestamp.fromDate(new Date(campaignData.scheduledAt));
       } else if (existingCampaign?.sentAt) {
          dataToSave.sentAt = Timestamp.fromDate(new Date(existingCampaign.sentAt));
-      }
-      else {
-        dataToSave.sentAt = null; // Explicitly set to null if not sending now/previously sent
+      } else {
+        dataToSave.sentAt = null;
       }
       
       if (campaignData.scheduledAt) {
@@ -265,8 +276,46 @@ export default function EmailCampaignsPage() {
         dataToSave.scheduledAt = null;
       }
 
-
       await setDoc(doc(db, "emailCampaigns", docRefId), dataToSave, { merge: true });
+      
+      // Simulate sending and analytics update for demo purposes
+      if (dataToSave.status === 'Enviada' || (dataToSave.status === 'Programada' && dataToSave.scheduledAt && (dataToSave.scheduledAt as Timestamp).toDate() <= new Date())) {
+        // This is where actual email sending logic would go.
+        // For demo, we'll just update analytics after a short delay.
+        setTimeout(async () => {
+          const list = contactLists.find(l => l.id === dataToSave.contactListId);
+          const recipientCount = list?.contactCount || 0;
+          const mockSent = Math.floor(recipientCount * 0.98); // 98% sent
+          const mockDelivered = Math.floor(mockSent * 0.95); // 95% delivered of sent
+          const mockUniqueOpens = Math.floor(mockDelivered * 0.25); // 25% open rate
+          const mockUniqueClicks = Math.floor(mockUniqueOpens * 0.15); // 15% click rate on opens
+          const mockBounces = recipientCount - mockDelivered;
+          const mockUnsubscribes = Math.floor(mockDelivered * 0.01); // 1% unsubscribe rate
+
+          const updatedAnalytics: EmailCampaignAnalytics = {
+            totalRecipients: recipientCount,
+            emailsSent: mockSent,
+            emailsDelivered: mockDelivered,
+            emailsOpened: Math.floor(mockUniqueOpens * 1.2), // total opens slightly higher
+            uniqueOpens: mockUniqueOpens,
+            emailsClicked: Math.floor(mockUniqueClicks * 1.1), // total clicks slightly higher
+            uniqueClicks: mockUniqueClicks,
+            bounceCount: mockBounces,
+            unsubscribeCount: mockUnsubscribes,
+            spamReports: Math.floor(mockDelivered * 0.001),
+            deliveryRate: mockSent > 0 ? (mockDelivered / mockSent) : 0,
+            openRate: mockDelivered > 0 ? (mockUniqueOpens / mockDelivered) : 0,
+            clickThroughRate: mockDelivered > 0 ? (mockUniqueClicks / mockDelivered) : 0,
+            clickToOpenRate: mockUniqueOpens > 0 ? (mockUniqueClicks / mockUniqueOpens) : 0,
+            unsubscribeRate: mockDelivered > 0 ? (mockUnsubscribes / mockDelivered) : 0,
+            bounceRate: mockSent > 0 ? (mockBounces / mockSent) : 0,
+          };
+          await updateDoc(doc(db, "emailCampaigns", docRefId), { analytics: updatedAnalytics, status: 'Enviada', sentAt: Timestamp.now() });
+          fetchCampaigns(); // Refresh campaigns to show updated analytics
+        }, 5000); // Simulate 5 second delay for sending
+      }
+
+
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: `Campaña "${campaignData.name}" guardada.` });
       fetchCampaigns();
       return true;
@@ -295,6 +344,11 @@ export default function EmailCampaignsPage() {
       setIsDeleteCampaignDialogOpen(false);
       setCampaignToDelete(null);
     }
+  };
+
+  const handleViewAnalytics = (campaign: EmailCampaign) => {
+    setSelectedCampaignForAnalytics(campaign);
+    setIsAnalyticsDialogOpen(true);
   };
 
   const renderPlaceHolderContent = (title: string, features: string[], Icon?: LucideIcon, implemented: boolean = false) => (
@@ -371,7 +425,8 @@ export default function EmailCampaignsPage() {
                   key={campaign.id} 
                   campaign={campaign} 
                   onEdit={() => { setEditingCampaign(campaign); setIsCampaignDialogOpen(true); }}
-                  onDelete={() => confirmDeleteCampaign(campaign)} 
+                  onDelete={() => confirmDeleteCampaign(campaign)}
+                  onViewAnalytics={handleViewAnalytics} 
                 />
               ))}
             </div>
@@ -398,9 +453,9 @@ export default function EmailCampaignsPage() {
             </Card>
           )}
            {renderPlaceHolderContent("Funciones Avanzadas de Campaña", [
-                "Creación y programación de envíos (Implementado, mejora con hora).",
+                "Creación y programación de envíos (Mejorado).",
                 "Selección de listas de contactos y plantillas (Implementado).",
-                "Analíticas de rendimiento (aperturas, clics, etc.) (Próximamente).",
+                "Analíticas de rendimiento básicas (Implementado, datos simulados).",
                 "Pruebas A/B para asuntos y contenido (Próximamente).",
             ], Send, true)}
         </TabsContent>
@@ -598,8 +653,12 @@ export default function EmailCampaignsPage() {
         isOpen={isPreviewTemplateDialogOpen}
         onOpenChange={setIsPreviewTemplateDialogOpen}
       />
+      {/* Analytics Dialog */}
+      <EmailCampaignAnalyticsDialog
+        campaign={selectedCampaignForAnalytics}
+        isOpen={isAnalyticsDialogOpen}
+        onOpenChange={setIsAnalyticsDialogOpen}
+      />
     </div>
   );
 }
-
-    

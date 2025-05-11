@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -125,7 +124,8 @@ export function AddEditEmailCampaignDialog({
         fromEmail: data.fromEmail,
         contactListId: data.contactListId,
         emailTemplateId: data.emailTemplateId,
-        scheduledAt: scheduledAtISO, // This will be converted to Timestamp or null by parent
+        scheduledAt: scheduledAtISO, 
+        // Analytics will be initialized or kept by the parent onSave logic / Firestore
     };
     const success = await onSave(dataToSave, campaignToEdit?.id);
     if (success) {
@@ -215,7 +215,7 @@ export function AddEditEmailCampaignDialog({
                         />
                         </PopoverContent>
                     </Popover>
-                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador.</FormDescriptionUI>
+                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual.</FormDescriptionUI>
                     <FormMessage />
                 </FormItem>
             )} />
@@ -242,10 +242,9 @@ export function AddEditEmailCampaignDialog({
               <Construction className="inline h-4 w-4 mr-2 text-amber-500" />
               <strong>Funcionalidades Avanzadas (En Desarrollo):</strong>
               <ul className="list-disc list-inside ml-4 mt-1 text-xs space-y-1">
-                <li><BarChart2 className="inline h-3 w-3 mr-1 text-blue-500" />Analíticas de Rendimiento (Aperturas, Clics, etc.)</li>
+                <li><BarChart2 className="inline h-3 w-3 mr-1 text-blue-500" />Analíticas de Rendimiento Detalladas (Aperturas, Clics, etc.)</li>
                 <li><TestTube2 className="inline h-3 w-3 mr-1 text-purple-500" />Pruebas A/B para Asuntos y Contenido</li>
               </ul>
-               <p className="mt-2 text-xs">El envío inmediato se maneja programando para la hora actual o muy próxima.</p>
             </div>
 
             <DialogFooter>
@@ -268,5 +267,3 @@ export function AddEditEmailCampaignDialog({
     </Dialog>
   );
 }
-
-    

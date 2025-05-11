@@ -1,11 +1,10 @@
-
 "use client";
 
 import type { EmailCampaign } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Edit3, Trash2, BarChart2, CalendarClock } from "lucide-react"; // Removed unused icons
+import { Send, Edit3, Trash2, BarChart2, CalendarClock, TestTube2 } from "lucide-react"; 
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -13,9 +12,10 @@ interface EmailCampaignItemProps {
   campaign: EmailCampaign;
   onEdit: (campaignId: string) => void;
   onDelete: (campaignId: string) => void;
+  onViewAnalytics: (campaign: EmailCampaign) => void;
 }
 
-export function EmailCampaignItem({ campaign, onEdit, onDelete }: EmailCampaignItemProps) {
+export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics }: EmailCampaignItemProps) {
   
   const getStatusBadge = (status: EmailCampaign['status']) => {
     switch (status) {
@@ -56,10 +56,18 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete }: EmailCampaignI
             )}
              <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Creada: {format(parseISO(campaign.createdAt), "P", { locale: es })}</p>
         </div>
+         {campaign.analytics && (
+          <div className="text-xs text-muted-foreground pt-2 border-t mt-2">
+            <p>Enviados: {campaign.analytics.emailsSent || 0} | Abiertos: {campaign.analytics.uniqueOpens || 0} ({((campaign.analytics.openRate || 0) * 100).toFixed(1)}%)</p>
+          </div>
+        )}
       </CardContent>
-      <CardFooter className="flex justify-end gap-2 pt-3 border-t">
-        <Button variant="outline" size="sm" disabled> 
+      <CardFooter className="flex flex-wrap justify-end gap-2 pt-3 border-t">
+        <Button variant="outline" size="sm" onClick={() => onViewAnalytics(campaign)} disabled={campaign.status === 'Borrador' || campaign.status === 'Programada'}> 
           <BarChart2 className="mr-2 h-4 w-4" /> Analíticas
+        </Button>
+        <Button variant="outline" size="sm" disabled>
+          <TestTube2 className="mr-2 h-4 w-4" /> Pruebas A/B
         </Button>
         <Button variant="default" size="sm" onClick={() => onEdit(campaign.id)}>
           <Edit3 className="mr-2 h-4 w-4" /> Editar
@@ -71,5 +79,3 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete }: EmailCampaignI
     </Card>
   );
 }
-
-    
