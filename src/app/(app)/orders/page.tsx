@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { Order, Lead, User } from "@/lib/types";
+import type { Order, Lead, User, Quote } from "@/lib/types";
 import { NAV_ITEMS, ORDER_STATUSES } from "@/lib/constants";
 import { AddEditOrderDialog } from "@/components/orders/add-edit-order-dialog";
 import { OrderListItem } from "@/components/orders/order-list-item";
@@ -20,10 +19,12 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]); 
   const [users, setUsers] = useState<User[]>([]); 
+  const [quotes, setQuotes] = useState<Quote[]>([]);
 
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState(true);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -102,10 +103,41 @@ export default function OrdersPage() {
     }
   }, [getAllUsers]);
 
+  const fetchQuotes = useCallback(async () => {
+    setIsLoadingQuotes(true);
+    try {
+      const quotesCollectionRef = collection(db, "quotes");
+      const q = query(quotesCollectionRef, orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedQuotes = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+          validUntil: (data.validUntil as Timestamp)?.toDate().toISOString() || undefined,
+        } as Quote;
+      });
+      setQuotes(fetchedQuotes);
+    } catch (error) {
+      console.error("Error al obtener cotizaciones:", error);
+      toast({
+        title: "Error al Cargar Cotizaciones",
+        description: "No se pudieron cargar las cotizaciones para los pedidos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  }, [toast]);
+
+
   useEffect(() => {
     if (!authLoading) {
       fetchLeads();
       fetchUsers();
+      fetchQuotes();
       if (currentUser) {
         fetchOrders();
       } else {
@@ -113,7 +145,7 @@ export default function OrdersPage() {
         setIsLoadingOrders(false);
       }
     }
-  }, [authLoading, currentUser, fetchOrders, fetchLeads, fetchUsers]);
+  }, [authLoading, currentUser, fetchOrders, fetchLeads, fetchUsers, fetchQuotes]);
 
 
   const handleSaveOrder = async (orderData: Order) => {
@@ -129,6 +161,7 @@ export default function OrdersPage() {
         createdAt: Timestamp.fromDate(new Date(orderData.createdAt)),
         updatedAt: Timestamp.now(),
         placedByUserId: orderData.placedByUserId || currentUser.id,
+        quoteId: orderData.quoteId || null, // Ensure quoteId is null if undefined
     };
 
     try {
@@ -189,7 +222,7 @@ export default function OrdersPage() {
       (leads.find(l => l.id === order.leadId)?.name.toLowerCase().includes(searchTerm.toLowerCase()))
     ), [orders, filterStatus, searchTerm, leads]);
 
-  const pageIsLoading = authLoading || isLoadingOrders || isLoadingLeads || isLoadingUsers;
+  const pageIsLoading = authLoading || isLoadingOrders || isLoadingLeads || isLoadingUsers || isLoadingQuotes;
 
   return (
     <div className="flex flex-col gap-6">
@@ -206,6 +239,7 @@ export default function OrdersPage() {
           orderToEdit={editingOrder}
           leads={leads}
           users={users}
+          quotes={quotes}
           currentUser={currentUser}
           onSave={handleSaveOrder}
           key={editingOrder ? `edit-${editingOrder.id}` : 'new-order-dialog'}
@@ -249,6 +283,7 @@ export default function OrdersPage() {
               key={order.id}
               order={order}
               lead={leads.find(l => l.id === order.leadId)}
+              quote={quotes.find(q => q.id === order.quoteId)}
               placedBy={users.find(u => u.id === order.placedByUserId)}
               onEdit={() => openEditOrderDialog(order)}
               onDelete={() => handleDeleteOrder(order.id)}

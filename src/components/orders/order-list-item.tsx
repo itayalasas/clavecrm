@@ -1,6 +1,6 @@
 "use client";
 
-import type { Order, Lead, User } from "@/lib/types";
+import type { Order, Lead, User, Quote } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,13 @@ import { es } from 'date-fns/locale';
 interface OrderListItemProps {
   order: Order;
   lead?: Lead | null;
+  quote?: Quote | null;
   placedBy?: User | null;
   onEdit: (order: Order) => void;
   onDelete: (orderId: string) => void;
 }
 
-export function OrderListItem({ order, lead, placedBy, onEdit, onDelete }: OrderListItemProps) {
+export function OrderListItem({ order, lead, quote, placedBy, onEdit, onDelete }: OrderListItemProps) {
   
   const getStatusBadge = (status: Order['status']) => {
     switch (status) {
@@ -68,10 +69,10 @@ export function OrderListItem({ order, lead, placedBy, onEdit, onDelete }: Order
               Realizado por: {placedBy.name}
             </div>
           )}
-          {order.quoteId && (
+          {quote && (
             <div className="flex items-center gap-1 col-span-2">
                 <FileText className="h-3 w-3" />
-                Desde Cotización: #{order.quoteId.substring(0,8)}... {/* Assuming quoteId is like 'quote-xxxx' */}
+                Desde Cotización: #{quote.quoteNumber}
             </div>
           )}
         </div>

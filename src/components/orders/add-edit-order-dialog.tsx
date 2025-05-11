@@ -31,7 +31,7 @@ interface AddEditOrderDialogProps {
   orderToEdit?: Order | null;
   leads: Lead[];
   users: User[];
-  // quotes: Quote[]; // Optional: to prefill from a quote
+  quotes: Quote[]; 
   currentUser: User | null;
   onSave: (order: Order) => Promise<void>;
   isOpen?: boolean;
@@ -53,11 +53,14 @@ function generateOrderNumber(): string {
   return `PED-${year}-${randomNumber}`;
 }
 
+const NO_QUOTE_SELECTED_VALUE = "__no_quote_selected__";
+
 export function AddEditOrderDialog({
   trigger,
   orderToEdit,
   leads,
   users,
+  quotes,
   currentUser,
   onSave,
   isOpen: controlledIsOpen,
@@ -97,8 +100,8 @@ export function AddEditOrderDialog({
   const calculateTotals = (currentItems: OrderItem[], discount = 0) => {
     const subtotal = currentItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
     const discountAmount = subtotal * (discount / 100);
-    const total = subtotal - discountAmount; // Assuming tax is handled separately or included in unitPrice
-    return { subtotal, discountAmount, total, taxAmount: 0 }; // Simplified tax for now
+    const total = subtotal - discountAmount; 
+    return { subtotal, discountAmount, total, taxAmount: 0 }; 
   };
 
   const handleItemChange = (index: number, field: keyof OrderItem, value: string | number) => {
@@ -123,7 +126,22 @@ export function AddEditOrderDialog({
   };
   
   const handleSelectChange = (name: 'leadId' | 'status' | 'quoteId', value: string) => {
-     setFormData((prev) => ({ ...prev, [name]: value as OrderStatus }));
+     if (name === 'quoteId') {
+        const selectedQuote = quotes.find(q => q.id === value);
+        if (selectedQuote) {
+            setFormData(prev => ({
+                ...prev,
+                quoteId: value,
+                leadId: selectedQuote.leadId,
+                discount: selectedQuote.discount || 0,
+            }));
+            setItems(selectedQuote.items.map(qi => ({ ...qi, id: `item-${Date.now()}-${Math.random()}` })));
+        } else {
+             setFormData(prev => ({ ...prev, quoteId: undefined, leadId: prev.leadId })); // Keep leadId if quote removed
+        }
+     } else {
+        setFormData((prev) => ({ ...prev, [name]: value as OrderStatus }));
+     }
   };
 
   const handleSubmit = async () => {
@@ -142,7 +160,7 @@ export function AddEditOrderDialog({
       id: orderToEdit ? orderToEdit.id : `order-${Date.now()}`,
       orderNumber: formData.orderNumber!,
       leadId: formData.leadId!,
-      quoteId: formData.quoteId,
+      quoteId: formData.quoteId === NO_QUOTE_SELECTED_VALUE ? undefined : formData.quoteId,
       createdAt: orderToEdit ? orderToEdit.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       placedByUserId: orderToEdit ? orderToEdit.placedByUserId : currentUser!.id,
@@ -150,7 +168,7 @@ export function AddEditOrderDialog({
       items,
       subtotal,
       discount: formData.discount || 0,
-      taxAmount, // Simplified
+      taxAmount, 
       total,
       shippingAddress: formData.shippingAddress || "",
       billingAddress: formData.billingAddress || "",
@@ -174,20 +192,38 @@ export function AddEditOrderDialog({
 
         <div className="flex-grow overflow-y-auto pr-2 space-y-4 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                <Label htmlFor={`${dialogId}-leadId`}>Lead Asociado</Label>
-                <Select name="leadId" value={formData.leadId || ""} onValueChange={(value) => handleSelectChange('leadId', value)}>
-                    <SelectTrigger id={`${dialogId}-leadId`}>
-                    <SelectValue placeholder="Selecciona un lead" />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {leads.map((lead) => (
-                        <SelectItem key={lead.id} value={lead.id}>{lead.name} ({lead.company || 'N/A'})</SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
+                 <div>
+                    <Label htmlFor={`${dialogId}-quoteId`}>Cotización Asociada (Opcional)</Label>
+                    <Select name="quoteId" value={formData.quoteId || NO_QUOTE_SELECTED_VALUE} onValueChange={(value) => handleSelectChange('quoteId', value)}>
+                        <SelectTrigger id={`${dialogId}-quoteId`}>
+                            <SelectValue placeholder="Selecciona una cotización" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={NO_QUOTE_SELECTED_VALUE}>Ninguna</SelectItem>
+                            {quotes.filter(q => q.status === 'Aceptada' || q.status === 'Enviada').map((quote) => ( // Filter for relevant quotes
+                                <SelectItem key={quote.id} value={quote.id}>
+                                    #{quote.quoteNumber} ({leads.find(l => l.id === quote.leadId)?.name}) - Total: ${quote.total.toFixed(2)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
                 <div>
+                    <Label htmlFor={`${dialogId}-leadId`}>Lead Asociado</Label>
+                    <Select name="leadId" value={formData.leadId || ""} onValueChange={(value) => handleSelectChange('leadId', value)} disabled={!!formData.quoteId && formData.quoteId !== NO_QUOTE_SELECTED_VALUE}>
+                        <SelectTrigger id={`${dialogId}-leadId`}>
+                        <SelectValue placeholder="Selecciona un lead" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {leads.map((lead) => (
+                            <SelectItem key={lead.id} value={lead.id}>{lead.name} ({lead.company || 'N/A'})</SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                     {!!formData.quoteId && formData.quoteId !== NO_QUOTE_SELECTED_VALUE && <p className="text-xs text-muted-foreground mt-1">Lead seleccionado desde cotización.</p>}
+                </div>
+            </div>
+            <div>
                 <Label htmlFor={`${dialogId}-status`}>Estado</Label>
                 <Select name="status" value={formData.status || "Pendiente"} onValueChange={(value) => handleSelectChange('status', value)}>
                     <SelectTrigger id={`${dialogId}-status`}>
@@ -199,9 +235,7 @@ export function AddEditOrderDialog({
                     ))}
                     </SelectContent>
                 </Select>
-                </div>
             </div>
-            {/* TODO: Add QuoteId select if applicable */}
 
             <div>
                 <Label>Items del Pedido</Label>

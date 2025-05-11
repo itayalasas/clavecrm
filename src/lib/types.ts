@@ -117,7 +117,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   leadId: string;
-  quoteId?: string;
+  quoteId?: string; // Associated quote ID
   orderNumber: string;
   createdAt: string;
   updatedAt?: string;
