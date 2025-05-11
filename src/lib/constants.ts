@@ -1,5 +1,5 @@
 
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus } from './types';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown } from 'lucide-react'; // Added Settings icon
 
 export const APP_NAME = "CRM Rápido";
@@ -134,3 +134,66 @@ export const QUOTE_STATUSES: QuoteStatus[] = ['Borrador', 'Enviada', 'Aceptada',
 export const ORDER_STATUSES: OrderStatus[] = ['Pendiente', 'Procesando', 'Enviado', 'Entregado', 'Cancelado'];
 export const INVOICE_STATUSES: InvoiceStatus[] = ['Borrador', 'Enviada', 'Pagada', 'Vencida', 'Cancelada'];
 export const EMAIL_CAMPAIGN_STATUSES: EmailCampaignStatus[] = ['Borrador', 'Programada', 'Enviando', 'Enviada', 'Archivada', 'Fallida'];
+
+export const PREDEFINED_EMAIL_TEMPLATES: PredefinedEmailTemplate[] = [
+  {
+    id: 'basic-welcome',
+    name: 'Bienvenida Básica',
+    description: 'Un correo simple de bienvenida para nuevos suscriptores.',
+    contentHtml: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h1>¡Bienvenido/a, {{nombre_contacto}}!</h1>
+        <p>Gracias por unirte a nuestra comunidad. Estamos emocionados de tenerte con nosotros.</p>
+        <p>Pronto recibirás más información y novedades.</p>
+        <p>Saludos,<br/>El Equipo de {{nombre_empresa_remitente}}</p>
+      </div>
+    `,
+  },
+  {
+    id: 'simple-promo',
+    name: 'Promoción Simple',
+    description: 'Plantilla básica para anunciar una promoción o descuento.',
+    contentHtml: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; text-align: center;">
+        <h1 style="color: #29ABE2;">¡Oferta Especial para Ti, {{nombre_contacto}}!</h1>
+        <p>No te pierdas nuestro descuento exclusivo del <strong>20%</strong> en todos nuestros productos.</p>
+        <p>Usa el código: <strong>PROMO20</strong></p>
+        <p><a href="#" style="background-color: #29ABE2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Comprar Ahora</a></p>
+        <p style="font-size: 0.9em; color: #777;">Oferta válida hasta {{fecha_fin_oferta}}.</p>
+      </div>
+    `,
+  },
+  {
+    id: 'newsletter-update',
+    name: 'Actualización de Newsletter',
+    description: 'Estructura para un boletín informativo con un artículo principal.',
+    contentHtml: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
+        <header style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #1976D2;">{{nombre_empresa_remitente}} | Newsletter</h1>
+        </header>
+        <section>
+          <h2>Hola {{nombre_contacto}},</h2>
+          <p>Aquí tienes las últimas novedades:</p>
+          <h3>{{titulo_articulo_principal}}</h3>
+          <p>{{resumen_articulo_principal}}</p>
+          <p><a href="{{enlace_articulo_principal}}" style="color: #1976D2;">Leer más...</a></p>
+        </section>
+        <footer style="text-align: center; margin-top: 30px; font-size: 0.9em; color: #777;">
+          <p>&copy; ${new Date().getFullYear()} {{nombre_empresa_remitente}}. Todos los derechos reservados.</p>
+          <p><a href="{{enlace_desuscripcion}}" style="color: #777;">Darse de baja</a></p>
+        </footer>
+      </div>
+    `,
+  },
+];
+
+export const COMMON_EMAIL_VARIABLES: CommonEmailVariable[] = [
+  { variable: "{{nombre_contacto}}", description: "Nombre completo del contacto." },
+  { variable: "{{email_contacto}}", description: "Dirección de correo electrónico del contacto." },
+  { variable: "{{nombre_empresa_remitente}}", description: "Nombre de tu empresa (remitente)." },
+  { variable: "{{enlace_desuscripcion}}", description: "Enlace para que el contacto se dé de baja (requiere implementación)." },
+  // Example custom variables (user would define these elsewhere or they'd be context-specific)
+  { variable: "{{nombre_campana}}", description: "Nombre de la campaña actual." },
+  { variable: "{{fecha_actual}}", description: "Fecha actual del envío." },
+];

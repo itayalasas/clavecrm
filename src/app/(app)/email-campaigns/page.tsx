@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact } from "@/lib/types";
 import { NAV_ITEMS, EMAIL_CAMPAIGN_STATUSES } from "@/lib/constants";
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, Sliders, FileSignature, LucideIcon } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, Sliders, FileSignature, LucideIcon, Eye, BarChart2, Palette, ListChecks } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,7 +18,7 @@ import { ManageContactsDialog } from "@/components/email-campaigns/manage-contac
 import { AddEditEmailTemplateDialog } from "@/components/email-campaigns/add-edit-email-template-dialog";
 import { EmailTemplateItem } from "@/components/email-campaigns/email-template-item";
 import { AddEditEmailCampaignDialog } from "@/components/email-campaigns/add-edit-email-campaign-dialog";
-import { EmailCampaignItem } from "@/components/email-campaigns/email-campaign-item";
+import { PreviewEmailTemplateDialog } from "@/components/email-campaigns/preview-email-template-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function EmailCampaignsPage() {
@@ -28,7 +28,7 @@ export default function EmailCampaignsPage() {
   const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
   const [contactLists, setContactLists] = useState<ContactList[]>([]);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]); // General contacts pool
+  const [contacts, setContacts] = useState<Contact[]>([]); 
 
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
   const [isLoadingContactLists, setIsLoadingContactLists] = useState(true);
@@ -45,6 +45,9 @@ export default function EmailCampaignsPage() {
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [templateToDelete, setTemplateToDelete] = useState<EmailTemplate | null>(null);
   const [isDeleteTemplateDialogOpen, setIsDeleteTemplateDialogOpen] = useState(false);
+  const [isPreviewTemplateDialogOpen, setIsPreviewTemplateDialogOpen] = useState(false);
+  const [templateToPreview, setTemplateToPreview] = useState<EmailTemplate | null>(null);
+
 
   const [isCampaignDialogOpen, setIsCampaignDialogOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<EmailCampaign | null>(null);
@@ -53,7 +56,6 @@ export default function EmailCampaignsPage() {
 
   const { toast } = useToast();
 
-  // Fetch Contact Lists
   const fetchContactLists = useCallback(async () => {
     setIsLoadingContactLists(true);
     try {
@@ -77,7 +79,6 @@ export default function EmailCampaignsPage() {
     }
   }, [toast]);
 
-  // Fetch All Contacts (general pool)
   const fetchAllContacts = useCallback(async () => {
     setIsLoadingContacts(true);
     try {
@@ -99,7 +100,6 @@ export default function EmailCampaignsPage() {
         setIsLoadingContacts(false);
     }
   }, [toast]);
-
 
   const fetchTemplates = useCallback(async () => {
     setIsLoadingTemplates(true);
@@ -143,7 +143,6 @@ export default function EmailCampaignsPage() {
     }
   }, [toast]);
 
-
   useEffect(() => {
     fetchContactLists();
     fetchAllContacts();
@@ -176,8 +175,6 @@ export default function EmailCampaignsPage() {
   const handleDeleteContactList = async () => {
     if (!listToDelete) return;
     try {
-      // Note: This only deletes the list, not the contacts themselves from the general pool or their association.
-      // A more robust delete would remove listId from associated contacts.
       await deleteDoc(doc(db, "contactLists", listToDelete.id));
       toast({ title: "Lista Eliminada", description: `La lista "${listToDelete.name}" ha sido eliminada.` });
       fetchContactLists();
@@ -232,12 +229,17 @@ export default function EmailCampaignsPage() {
     }
   };
 
+  const handlePreviewTemplate = (template: EmailTemplate) => {
+    setTemplateToPreview(template);
+    setIsPreviewTemplateDialogOpen(true);
+  };
+
   const handleSaveCampaign = async (campaignData: Omit<EmailCampaign, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'analytics' | 'sentAt'>, id?: string) => {
     try {
       const docId = id || doc(collection(db, "emailCampaigns")).id;
       await setDoc(doc(db, "emailCampaigns", docId), {
         ...campaignData,
-        status: id ? campaigns.find(c=>c.id === id)?.status || EMAIL_CAMPAIGN_STATUSES[0] : EMAIL_CAMPAIGN_STATUSES[0], // Keep status if editing, else Borrador
+        status: id ? campaigns.find(c=>c.id === id)?.status || EMAIL_CAMPAIGN_STATUSES[0] : EMAIL_CAMPAIGN_STATUSES[0], 
         analytics: id ? campaigns.find(c=>c.id === id)?.analytics || {} : {},
         sentAt: id ? campaigns.find(c=>c.id === id)?.sentAt : undefined,
         [id ? 'updatedAt' : 'createdAt']: serverTimestamp(),
@@ -272,17 +274,17 @@ export default function EmailCampaignsPage() {
     }
   };
 
-  const renderPlaceHolderContent = (title: string, features: string[], Icon?: LucideIcon) => (
+  const renderPlaceHolderContent = (title: string, features: string[], Icon?: LucideIcon, implemented: boolean = false) => (
     <Card className="mt-6">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
-          {Icon ? <Icon className="h-5 w-5 text-primary" /> : <Construction className="h-5 w-5 text-amber-500" />}
+          {Icon ? <Icon className={`h-5 w-5 ${implemented ? 'text-green-500' : 'text-primary'}`} /> : <Construction className="h-5 w-5 text-amber-500" />}
           {title}
         </CardTitle>
-        <CardDescription>Esta sección está planificada y se implementará próximamente.</CardDescription>
+        <CardDescription>{implemented ? "Funcionalidad parcialmente implementada." : "Esta sección está planificada y se implementará próximamente."}</CardDescription>
       </CardHeader>
       <CardContent>
-        <h4 className="font-semibold mb-2">Funcionalidades Planeadas:</h4>
+        <h4 className="font-semibold mb-2">Funcionalidades {implemented ? 'Actuales/Planeadas' : 'Planeadas'}:</h4>
         <ul className="list-disc list-inside space-y-1 text-muted-foreground text-sm">
           {features.map(feature => <li key={feature}>{feature}</li>)}
         </ul>
@@ -323,7 +325,7 @@ export default function EmailCampaignsPage() {
             <h3 className="text-xl font-semibold">Gestión de Campañas</h3>
              <AddEditEmailCampaignDialog
               trigger={
-                <Button onClick={() => setIsCampaignDialogOpen(true)}>
+                <Button onClick={() => { setEditingCampaign(null); setIsCampaignDialogOpen(true); }}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Nueva Campaña
                 </Button>
               }
@@ -358,7 +360,7 @@ export default function EmailCampaignsPage() {
                 <p>Crea tu primera campaña para comunicarte con tus contactos.</p>
                  <AddEditEmailCampaignDialog
                     trigger={
-                        <Button className="mt-4">
+                        <Button className="mt-4" onClick={() => { setEditingCampaign(null); setIsCampaignDialogOpen(true); }}>
                             <PlusCircle className="mr-2 h-4 w-4" /> Crear Campaña
                         </Button>
                     }
@@ -373,9 +375,11 @@ export default function EmailCampaignsPage() {
             </Card>
           )}
            {renderPlaceHolderContent("Analíticas y Pruebas A/B", [
-                "Analíticas de rendimiento (aperturas, clics, etc.).",
-                "Pruebas A/B para asuntos y contenido.",
-            ])}
+                "Creación y programación de envíos masivos (Implementado parcialmente).",
+                "Selección de listas de contactos y plantillas (Implementado).",
+                "Analíticas de rendimiento (aperturas, clics, etc.) (Próximamente).",
+                "Pruebas A/B para asuntos y contenido (Próximamente).",
+            ], BarChart2, true)}
         </TabsContent>
 
         {/* CONTACT LISTS TAB */}
@@ -416,7 +420,7 @@ export default function EmailCampaignsPage() {
                 <p>Crea tu primera lista para empezar a organizar tus contactos.</p>
                  <AddEditContactListDialog
                     trigger={
-                        <Button className="mt-4">
+                        <Button className="mt-4" onClick={() => setIsContactListDialogOpen(true)}>
                             <PlusCircle className="mr-2 h-4 w-4" /> Crear Lista
                         </Button>
                     }
@@ -428,9 +432,9 @@ export default function EmailCampaignsPage() {
             </Card>
           )}
            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-             {renderPlaceHolderContent("Importar/Exportar Contactos", ["Importación y exportación de contactos (CSV)."], Import)}
-             {renderPlaceHolderContent("Segmentación Avanzada", ["Segmentación basada en etiquetas, actividad o campos personalizados."], Sliders)}
-             {renderPlaceHolderContent("Formularios de Suscripción", ["Creación y gestión de formularios de suscripción/desuscripción integrados."], FileSignature)}
+             {renderPlaceHolderContent("Importar/Exportar", ["Importación y exportación de contactos (CSV) (Próximamente)."], Import, false)}
+             {renderPlaceHolderContent("Segmentación", ["Gestión individual de contactos (Implementado parcialmente).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], Sliders, true)}
+             {renderPlaceHolderContent("Formularios Suscripción", ["Formularios de suscripción/desuscripción (Próximamente)."], FileSignature, false)}
            </div>
         </TabsContent>
 
@@ -440,7 +444,7 @@ export default function EmailCampaignsPage() {
             <h3 className="text-xl font-semibold">Plantillas de Correo</h3>
              <AddEditEmailTemplateDialog
                 trigger={
-                    <Button onClick={() => setIsTemplateDialogOpen(true)}>
+                    <Button onClick={() => { setEditingTemplate(null); setIsTemplateDialogOpen(true); }}>
                         <PlusCircle className="mr-2 h-4 w-4" /> Nueva Plantilla
                     </Button>
                 }
@@ -462,6 +466,7 @@ export default function EmailCampaignsPage() {
                     template={template} 
                     onEdit={() => { setEditingTemplate(template); setIsTemplateDialogOpen(true); }}
                     onDelete={() => confirmDeleteTemplate(template)}
+                    onPreview={handlePreviewTemplate}
                 />
               ))}
             </div>
@@ -473,7 +478,7 @@ export default function EmailCampaignsPage() {
                     <p>Crea tu primera plantilla para agilizar tus envíos de correo.</p>
                     <AddEditEmailTemplateDialog
                         trigger={
-                            <Button className="mt-4">
+                            <Button className="mt-4" onClick={() => { setEditingTemplate(null); setIsTemplateDialogOpen(true); }}>
                                 <PlusCircle className="mr-2 h-4 w-4" /> Crear Plantilla
                             </Button>
                         }
@@ -485,12 +490,13 @@ export default function EmailCampaignsPage() {
                 </CardContent>
              </Card>
           )}
-          {renderPlaceHolderContent("Editor de Plantillas Avanzado", [
-                "Editor visual (arrastrar y soltar) de plantillas.",
-                "Biblioteca de plantillas pre-diseñadas.",
-                "Personalización con variables (ej. {{nombre_contacto}}).",
-                "Previsualización en escritorio y móvil.",
-             ])}
+          {renderPlaceHolderContent("Editor Avanzado y Previsualización", [
+                "Editor visual (arrastrar y soltar) (Próximamente).",
+                "Opción para importar/editar HTML directamente (Implementado).",
+                "Biblioteca de plantillas pre-diseñadas (Implementado parcialmente).",
+                "Personalización con variables (ej. {{nombre_contacto}}) (Implementado).",
+                "Previsualización en escritorio y móvil (Implementado).",
+             ], Palette, true)}
         </TabsContent>
       </Tabs>
       
@@ -559,11 +565,16 @@ export default function EmailCampaignsPage() {
             isOpen={isManageContactsDialogOpen}
             onOpenChange={setIsManageContactsDialogOpen}
             list={selectedListForContacts}
-            allContacts={contacts} // Pass all contacts
-            onContactsUpdated={() => { fetchAllContacts(); fetchContactLists(); }} // Refresh all contacts and list counts
+            allContacts={contacts} 
+            onContactsUpdated={() => { fetchAllContacts(); fetchContactLists(); }} 
         />
       )}
+       {/* Preview Template Dialog */}
+      <PreviewEmailTemplateDialog
+        template={templateToPreview}
+        isOpen={isPreviewTemplateDialogOpen}
+        onOpenChange={setIsPreviewTemplateDialogOpen}
+      />
     </div>
   );
 }
-

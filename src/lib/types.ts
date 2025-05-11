@@ -220,3 +220,16 @@ export interface EmailCampaign {
     unsubscribeCount?: number;
   };
 }
+
+// Types for new email template features
+export interface PredefinedEmailTemplate {
+  id: string;
+  name: string;
+  description: string;
+  contentHtml: string;
+}
+
+export interface CommonEmailVariable {
+  variable: string;
+  description: string;
+}

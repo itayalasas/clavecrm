@@ -4,7 +4,7 @@
 import type { EmailTemplate } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText as TemplateIcon, Edit3, Trash2, CalendarDays } from "lucide-react";
+import { FileText as TemplateIcon, Edit3, Trash2, CalendarDays, Eye } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -12,9 +12,10 @@ interface EmailTemplateItemProps {
   template: EmailTemplate;
   onEdit: (templateId: string) => void;
   onDelete: (templateId: string) => void;
+  onPreview: (template: EmailTemplate) => void;
 }
 
-export function EmailTemplateItem({ template, onEdit, onDelete }: EmailTemplateItemProps) {
+export function EmailTemplateItem({ template, onEdit, onDelete, onPreview }: EmailTemplateItemProps) {
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-full">
       <CardHeader className="pb-3">
@@ -43,6 +44,9 @@ export function EmailTemplateItem({ template, onEdit, onDelete }: EmailTemplateI
         )}
       </CardContent>
       <CardFooter className="flex justify-end gap-2 pt-3 border-t">
+        <Button variant="ghost" size="sm" onClick={() => onPreview(template)}>
+          <Eye className="mr-2 h-4 w-4" /> Previsualizar
+        </Button>
         <Button variant="outline" size="sm" onClick={() => onEdit(template.id)}>
           <Edit3 className="mr-2 h-4 w-4" /> Editar
         </Button>
