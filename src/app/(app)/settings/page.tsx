@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NAV_ITEMS } from "@/lib/constants";
 import type { EmailSettings, SMTPSecurity } from "@/lib/types";
-import { Settings, Mail, Share2Icon, AlertTriangle, Loader2 } from "lucide-react";
+import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 const emailSettingsSchema = z.object({
   smtpHost: z.string().min(1, "El host SMTP es obligatorio."),
   smtpPort: z.coerce.number().int().positive("El puerto SMTP debe ser un número positivo."),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
   smtpSecurity: z.enum(["None", "SSL", "TLS"], { errorMap: () => ({ message: "Selecciona un tipo de seguridad."})}),
   defaultSenderEmail: z.string().email("El correo del remitente predeterminado es inválido."),
   defaultSenderName: z.string().min(1, "El nombre del remitente es obligatorio."),
@@ -36,12 +38,15 @@ export default function SettingsPage() {
 
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSmtpPass, setShowSmtpPass] = useState(false);
 
   const form = useForm<EmailSettingsFormValues>({
     resolver: zodResolver(emailSettingsSchema),
     defaultValues: {
       smtpHost: "",
       smtpPort: 587,
+      smtpUser: "",
+      smtpPass: "",
       smtpSecurity: "TLS",
       defaultSenderEmail: "",
       defaultSenderName: "",
@@ -124,6 +129,7 @@ export default function SettingsPage() {
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-1/2" />
               </div>
             ) : (
@@ -152,6 +158,41 @@ export default function SettingsPage() {
                         </FormItem>
                       )}
                     />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="smtpUser"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Usuario SMTP (Opcional)</FormLabel>
+                            <FormControl><Input placeholder="usuario@example.com" {...field} /></FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    <FormField
+                        control={form.control}
+                        name="smtpPass"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Contraseña SMTP (Opcional)</FormLabel>
+                            <div className="relative">
+                                <FormControl><Input type={showSmtpPass ? "text" : "password"} placeholder="••••••••" {...field} /></FormControl>
+                                <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-0 top-0 h-full px-3"
+                                onClick={() => setShowSmtpPass(!showSmtpPass)}
+                                >
+                                {showSmtpPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
                   </div>
                   <FormField
                     control={form.control}
@@ -210,7 +251,8 @@ export default function SettingsPage() {
                   <div className="p-3 border border-amber-500 bg-amber-50 rounded-md text-amber-700 text-sm flex items-start gap-2">
                     <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
                     <div>
-                      <span className="font-semibold">Nota de Seguridad Importante:</span> Las credenciales SMTP (usuario/contraseña) no se almacenan ni se solicitan aquí por motivos de seguridad. En una aplicación de producción, estas deben gestionarse de forma segura en un backend (ej. usando Firebase Cloud Functions) y no exponerse en el cliente.
+                      <span className="font-semibold">Nota de Seguridad Importante:</span> Las credenciales SMTP (usuario/contraseña) se almacenarán en Firestore. Asegúrate de que tus reglas de seguridad de Firestore protejan adecuadamente el documento `settings/emailConfiguration` para restringir el acceso no autorizado a estas credenciales. 
+                      Idealmente, en producción avanzada, estas credenciales se manejarían a través de secretos en el entorno de Cloud Functions, no directamente en Firestore si el acceso al documento no puede ser estrictamente limitado.
                     </div>
                   </div>
                   <CardFooter className="p-0 pt-4">

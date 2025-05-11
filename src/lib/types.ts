@@ -251,10 +251,10 @@ export type SMTPSecurity = 'None' | 'SSL' | 'TLS';
 export interface EmailSettings {
   smtpHost: string;
   smtpPort: number;
+  smtpUser?: string; // Added
+  smtpPass?: string; // Added
   smtpSecurity: SMTPSecurity;
   defaultSenderEmail: string;
   defaultSenderName: string;
   sendRateLimit?: number; // e.g., emails per hour
-  // SMTP username and password are intentionally omitted here for client-side security.
-  // They should be managed by a secure backend (e.g., Cloud Function).
 }
