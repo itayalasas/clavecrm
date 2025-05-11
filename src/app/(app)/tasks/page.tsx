@@ -26,7 +26,7 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
 
   const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
-  const { getAllUsers } = useAuth();
+  const { getAllUsers, currentUser } = useAuth(); // Added currentUser
   const { toast } = useToast();
 
   const fetchUsers = useCallback(async () => {
@@ -79,7 +79,17 @@ export default function TasksPage() {
   };
 
   const filteredTasks = useMemo(() => {
+    if (!currentUser) return [];
+
     return tasks
+      .filter(task => {
+        // Visibility filter based on user role
+        if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
+          return true; // Admins/Supervisors see all tasks initially
+        }
+        // Regular users see tasks they reported or are assigned to
+        return task.reporterUserId === currentUser.id || task.assigneeUserId === currentUser.id;
+      })
       .filter(task => {
         if (filterStatus === "pending") return !task.completed;
         if (filterStatus === "completed") return task.completed;
@@ -95,7 +105,7 @@ export default function TasksPage() {
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .sort((a,b) => Number(a.completed) - Number(b.completed));
-  }, [tasks, searchTerm, filterStatus, filterPriority]);
+  }, [tasks, searchTerm, filterStatus, filterPriority, currentUser]); // Added currentUser
 
   const openDialogForNewTask = () => {
     setEditingTask(null);
@@ -163,7 +173,7 @@ export default function TasksPage() {
         </TabsList>
       </Tabs>
 
-      {isLoadingUsers ? (
+      {isLoadingUsers || (!currentUser && tasks.length > 0) ? ( // Added loading state for when currentUser is not yet available but tasks might be
         <div className="space-y-4">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />

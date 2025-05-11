@@ -30,7 +30,7 @@ export default function TicketsPage() {
   const [filterAssignee, setFilterAssignee] = useState<"Todos" | string>("Todos");
 
   const { toast } = useToast();
-  const { getAllUsers } = useAuth();
+  const { getAllUsers, currentUser } = useAuth(); // Added currentUser
   const ticketsNavItem = NAV_ITEMS.find(item => item.href === '/tickets');
 
   const fetchUsers = useCallback(async () => {
@@ -59,7 +59,7 @@ export default function TicketsPage() {
   }, [fetchUsers]);
 
   const handleSaveTicket = (ticket: Ticket) => {
-    const isEditOperation = !!editingTicket;
+    const isEditOperation = !!editingTicket; // Check if it was an edit before clearing editingTicket
 
     setTickets(prevTickets => {
       const existingTicketIndex = prevTickets.findIndex(t => t.id === ticket.id);
@@ -109,7 +109,17 @@ export default function TicketsPage() {
   };
 
   const filteredTickets = useMemo(() => {
+    if (!currentUser) return [];
+
     return tickets
+      .filter(ticket => {
+        // Visibility filter based on user role
+        if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
+          return true; // Admins/Supervisors see all tickets initially
+        }
+        // Regular users see tickets they reported or are assigned to
+        return ticket.reporterUserId === currentUser.id || ticket.assigneeUserId === currentUser.id;
+      })
       .filter(ticket => {
         if (filterStatus === "Todos") return true;
         return ticket.status === filterStatus;
@@ -120,6 +130,8 @@ export default function TicketsPage() {
       })
       .filter(ticket => {
         if (filterAssignee === "Todos") return true;
+        // If current user is not admin/supervisor, this filter will apply on their already limited view.
+        // If they filter for "unassigned", they'll see their reported tickets that are unassigned.
         if (filterAssignee === "unassigned") return !ticket.assigneeUserId;
         return ticket.assigneeUserId === filterAssignee;
       })
@@ -128,7 +140,7 @@ export default function TicketsPage() {
         ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
       );
-  }, [tickets, searchTerm, filterStatus, filterPriority, filterAssignee]);
+  }, [tickets, searchTerm, filterStatus, filterPriority, filterAssignee, currentUser]); // Added currentUser
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
 
@@ -172,17 +184,19 @@ export default function TicketsPage() {
             {TICKET_PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers}>
-          <SelectTrigger className="w-full">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filtrar por asignado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Todos">Todos los Asignados</SelectItem>
-            <SelectItem value="unassigned">Sin asignar</SelectItem>
-            {users.map(user => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && ( // Only show assignee filter for admin/supervisor
+            <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers}>
+            <SelectTrigger className="w-full">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtrar por asignado" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="Todos">Todos los Asignados</SelectItem>
+                <SelectItem value="unassigned">Sin asignar</SelectItem>
+                {users.map(user => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
+            </SelectContent>
+            </Select>
+        )}
       </div>
 
       <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | TicketStatus)}>
@@ -193,7 +207,7 @@ export default function TicketsPage() {
         </TabsList>
       </Tabs>
 
-      {isLoadingUsers ? (
+      {isLoadingUsers || (!currentUser && tickets.length > 0) ? ( // Added loading state for when currentUser is not yet available but tickets might be
          <div className="space-y-4">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
