@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -24,8 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { es } from 'date-fns/locale'; 
 import { cn } from "@/lib/utils";
@@ -60,30 +60,33 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
   const [formData, setFormData] = useState<Omit<Task, 'id' | 'createdAt'>>({
     ...defaultTask,
     reporterUserId: taskToEdit ? taskToEdit.reporterUserId : (currentUser?.id || ""),
-    assigneeUserId: taskToEdit ? taskToEdit.assigneeUserId : (currentUser?.id || undefined) // Default to current user or undefined
+    assigneeUserId: taskToEdit ? taskToEdit.assigneeUserId : (currentUser?.id || undefined) 
   });
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
   useEffect(() => {
-    if (taskToEdit) {
-      setFormData({
-        title: taskToEdit.title,
-        description: taskToEdit.description || "",
-        dueDate: taskToEdit.dueDate,
-        completed: taskToEdit.completed,
-        relatedLeadId: taskToEdit.relatedLeadId || undefined,
-        priority: taskToEdit.priority || 'medium',
-        assigneeUserId: taskToEdit.assigneeUserId || undefined,
-        reporterUserId: taskToEdit.reporterUserId, 
-      });
-      setSelectedDate(taskToEdit.dueDate ? parseISO(taskToEdit.dueDate) : undefined);
-    } else {
-      setFormData({
-        ...defaultTask,
-        reporterUserId: currentUser?.id || "", 
-        assigneeUserId: currentUser?.id || undefined, // Default new tasks to current user or unassigned
-      });
-      setSelectedDate(undefined);
+    if (isOpen) {
+      if (taskToEdit) {
+        setFormData({
+          title: taskToEdit.title,
+          description: taskToEdit.description || "",
+          dueDate: taskToEdit.dueDate,
+          completed: taskToEdit.completed,
+          relatedLeadId: taskToEdit.relatedLeadId || undefined,
+          priority: taskToEdit.priority || 'medium',
+          assigneeUserId: taskToEdit.assigneeUserId || undefined,
+          reporterUserId: taskToEdit.reporterUserId, 
+        });
+        setSelectedDate(taskToEdit.dueDate ? parseISO(taskToEdit.dueDate) : undefined);
+      } else {
+        setFormData({
+          ...defaultTask,
+          reporterUserId: currentUser?.id || "", 
+          assigneeUserId: currentUser?.id || undefined, 
+        });
+        setSelectedDate(undefined);
+      }
     }
   }, [taskToEdit, isOpen, currentUser]);
 
@@ -112,7 +115,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
       alert("El título es obligatorio."); 
       return;
     }
-    if (!currentUser?.id && !taskToEdit) { // Ensure reporterId is set if creating new
+    if (!currentUser?.id && !taskToEdit) { 
         alert("No se pudo identificar al usuario reportador. Intenta recargar la página.");
         return;
     }
@@ -120,7 +123,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
     const newTaskData: Omit<Task, 'id' | 'createdAt'> = {
       ...formData,
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
-      reporterUserId: taskToEdit ? formData.reporterUserId : (currentUser?.id || ""), // Ensure reporter is current user for new tasks
+      reporterUserId: taskToEdit ? formData.reporterUserId : (currentUser?.id || ""), 
     };
 
     const finalTask: Task = {
@@ -131,6 +134,22 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
     onSave(finalTask);
     setIsOpen(false);
   };
+
+  let assigneeNameDisplay = "Selecciona un usuario (opcional)";
+  if (formData.assigneeUserId) {
+    const user = users.find(u => u.id === formData.assigneeUserId);
+    if (user) {
+      assigneeNameDisplay = user.name;
+      if (currentUser && user.id === currentUser.id) {
+        assigneeNameDisplay += " (Yo)";
+      }
+    } else if (formData.assigneeUserId !== NO_USER_SELECTED_VALUE) {
+        assigneeNameDisplay = "Usuario no encontrado";
+    }
+  }
+
+
+  const sortedUsers = users.slice().sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -192,23 +211,62 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="assigneeUserId" className="text-right">Asignar a</Label>
-            <Select
-              name="assigneeUserId"
-              value={formData.assigneeUserId || NO_USER_SELECTED_VALUE}
-              onValueChange={(value) => handleSelectChange('assigneeUserId', value)}
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Selecciona un usuario (opcional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_USER_SELECTED_VALUE}>Sin asignar</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={assigneePopoverOpen} onOpenChange={setAssigneePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={assigneePopoverOpen}
+                  className="col-span-3 justify-between font-normal"
+                >
+                  {assigneeNameDisplay}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]">
+                <Command>
+                  <CommandInput placeholder="Buscar usuario..." />
+                  <CommandList>
+                    <CommandEmpty>No se encontró usuario.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value={NO_USER_SELECTED_VALUE}
+                        onSelect={() => {
+                          handleSelectChange('assigneeUserId', NO_USER_SELECTED_VALUE);
+                          setAssigneePopoverOpen(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            (formData.assigneeUserId === NO_USER_SELECTED_VALUE || !formData.assigneeUserId) ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        Sin asignar
+                      </CommandItem>
+                      {sortedUsers.map((user) => (
+                        <CommandItem
+                          key={user.id}
+                          value={user.id}
+                          onSelect={() => {
+                            handleSelectChange('assigneeUserId', user.id);
+                            setAssigneePopoverOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              formData.assigneeUserId === user.id ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="relatedLeadId" className="text-right">Lead Relacionado</Label>
