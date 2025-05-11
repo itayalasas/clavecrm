@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { INITIAL_LEADS, INITIAL_PIPELINE_STAGES, INITIAL_TASKS } from "@/lib/con
 import type { Lead, PipelineStage, Task } from "@/lib/types";
 import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target, Activity, CalendarClock } from 'lucide-react';
 import { es } from 'date-fns/locale';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getMonth } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getMonth, isValid } from 'date-fns';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D'];
 const MONTH_NAMES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
+    // In a real application, fetch this data from your backend/Firebase
     setLeads(INITIAL_LEADS);
     setStages(INITIAL_PIPELINE_STAGES);
     setTasks(INITIAL_TASKS);
@@ -25,7 +27,7 @@ export default function DashboardPage() {
 
   const totalLeads = leads.length;
   const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
-  const wonLeads = leads.filter(lead => lead.stageId === 'stage-5').length; // Assuming stage-5 is "Closed Won"
+  const wonLeads = leads.filter(lead => lead.stageId === 'stage-5').length; // Assuming stage-5 is "Cerrado Ganado"
   const conversionRate = totalLeads > 0 ? (wonLeads / totalLeads) * 100 : 0;
   
   const openTasks = tasks.filter(task => !task.completed).length;
@@ -54,7 +56,7 @@ export default function DashboardPage() {
 
   // Funnel Value by Expected Close Date
   const funnelValueByCloseDateData = leads
-    .filter(lead => lead.expectedCloseDate && lead.value && lead.stageId !== 'stage-5' && lead.stageId !== 'stage-6')
+    .filter(lead => lead.expectedCloseDate && lead.value && lead.stageId !== 'stage-5' && lead.stageId !== 'stage-6') // Exclude won/lost
     .sort((a, b) => new Date(a.expectedCloseDate!).getTime() - new Date(b.expectedCloseDate!).getTime())
     .map(lead => ({
       date: format(parseISO(lead.expectedCloseDate!), 'dd MMM', { locale: es }),
