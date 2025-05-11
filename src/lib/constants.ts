@@ -1,5 +1,5 @@
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2 } from 'lucide-react'; // Added new icons
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings } from 'lucide-react'; // Added Settings icon
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -18,6 +18,7 @@ export const NAV_ITEMS = [
   { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap },
   { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate },
   { href: '/social-crm', label: 'Social CRM', icon: Share2 },
+  { href: '/settings', label: 'Configuración', icon: Settings },
 ];
 
 export const USER_ROLES: UserRole[] = ['admin', 'supervisor', 'empleado', 'analista', 'desarrollador', 'vendedor', 'user'];
