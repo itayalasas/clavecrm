@@ -51,7 +51,7 @@ export interface Comment {
   id: string;
   userId: string;
   userName: string; // Denormalized for easier display
-  userAvatarUrl?: string; // Denormalized for easier display
+  userAvatarUrl?: string | null; // Denormalized for easier display, can be null
   text: string;
   createdAt: string; // ISO string
   attachments?: { name: string, url: string }[];
@@ -69,7 +69,7 @@ export interface Ticket {
   assigneeUserId?: string; // ID of the user assigned to the ticket
   relatedLeadId?: string; // Optional: link ticket to a lead
   attachments?: { name: string, url: string }[]; // Attachments for the ticket itself
-  comments?: Comment[];
+  // comments?: Comment[]; // Removed: TicketItem will fetch comments from subcollection
   solutionDescription?: string; // Description of the solution provided by assignee
   solutionAttachments?: { name: string, url: string }[]; // Attachments for the solution
 }

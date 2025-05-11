@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -14,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion, onSnapshot } from "firebase/firestore";
 import { ref as storageRef, deleteObject } from "firebase/storage";
 import { format, parseISO, startOfMonth } from "date-fns"; // format, parseISO used in TicketItem and AddEdit...Dialog
 import { es } from 'date-fns/locale';
@@ -49,41 +50,50 @@ export default function TicketsPage() {
     setIsLoadingTickets(true);
     try {
       const ticketsCollectionRef = collection(db, "tickets");
+      // Real-time listener for tickets
       const q = query(ticketsCollectionRef, orderBy("createdAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      const fetchedTickets = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          title: data.title,
-          description: data.description,
-          status: data.status,
-          priority: data.priority,
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-          reporterUserId: data.reporterUserId,
-          assigneeUserId: data.assigneeUserId || undefined,
-          relatedLeadId: data.relatedLeadId || undefined,
-          attachments: data.attachments || [],
-          comments: (data.comments || []).map((comment: any) => ({
-            ...comment,
-            createdAt: (comment.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-            attachments: comment.attachments || [],
-            userAvatarUrl: comment.userAvatarUrl || null, // Ensure null if undefined
-          })),
-          solutionDescription: data.solutionDescription || undefined,
-          solutionAttachments: data.solutionAttachments || [],
-        } as Ticket;
+      
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const fetchedTickets = querySnapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            priority: data.priority,
+            createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+            updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+            reporterUserId: data.reporterUserId,
+            assigneeUserId: data.assigneeUserId || undefined,
+            relatedLeadId: data.relatedLeadId || undefined,
+            attachments: data.attachments || [],
+            // Comments are now handled by TicketItem in real-time
+            solutionDescription: data.solutionDescription || undefined,
+            solutionAttachments: data.solutionAttachments || [],
+          } as Ticket;
+        });
+        setTickets(fetchedTickets);
+        setIsLoadingTickets(false);
+      }, (error) => {
+        console.error("Error al obtener tickets en tiempo real:", error);
+        toast({
+          title: "Error al Cargar Tickets",
+          description: "No se pudieron cargar los tickets desde la base de datos.",
+          variant: "destructive",
+        });
+        setIsLoadingTickets(false);
       });
-      setTickets(fetchedTickets);
-    } catch (error) {
-      console.error("Error al obtener tickets:", error);
+      
+      return () => unsubscribe(); // Return unsubscribe function for cleanup
+
+    } catch (error) { // Catch for initial query setup errors, though onSnapshot handles stream errors
+      console.error("Error al configurar la escucha de tickets:", error);
       toast({
-        title: "Error al Cargar Tickets",
-        description: "No se pudieron cargar los tickets desde la base de datos.",
+        title: "Error al Configurar Tickets",
+        description: "No se pudo iniciar la carga de tickets.",
         variant: "destructive",
       });
-    } finally {
       setIsLoadingTickets(false);
     }
   }, [currentUser, toast]);
@@ -128,16 +138,23 @@ export default function TicketsPage() {
   }, [toast]);
 
   useEffect(() => {
+    let unsubscribeTickets: (() => void) | undefined;
     if (!authLoading) {
         fetchUsers();
         fetchLeads(); 
         if (currentUser) {
-          fetchTickets();
+          // fetchTickets now returns an unsubscribe function
+          fetchTickets().then(unsub => { unsubscribeTickets = unsub });
         } else {
           setTickets([]);
           setIsLoadingTickets(false);
         }
     }
+    return () => { // Cleanup function for useEffect
+      if (unsubscribeTickets) {
+        unsubscribeTickets();
+      }
+    };
   }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTickets]);
 
 
@@ -151,7 +168,7 @@ export default function TicketsPage() {
     
     const ticketToSave: Ticket = {
       ...ticketData,
-      comments: ticketData.comments || [], 
+      // comments are managed by TicketItem's subcollection listener
       solutionDescription: ticketData.solutionDescription || "",
       solutionAttachments: ticketData.solutionAttachments || [],
       updatedAt: new Date().toISOString(), // Always update this on save
@@ -159,30 +176,20 @@ export default function TicketsPage() {
     
     try {
       const ticketDocRef = doc(db, "tickets", ticketToSave.id);
+      const { ...ticketDataForFirestore } = ticketToSave; // Destructure to remove any client-side only fields if necessary
+      
       const firestoreSafeTicket = {
-        ...ticketToSave,
+        ...ticketDataForFirestore,
         createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
         updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
         assigneeUserId: ticketToSave.assigneeUserId || null, 
         relatedLeadId: ticketToSave.relatedLeadId || null, 
-        comments: (ticketToSave.comments || []).map(comment => ({
-          ...comment,
-          createdAt: Timestamp.fromDate(new Date(comment.createdAt)),
-          userAvatarUrl: comment.userAvatarUrl || null, // Ensure null if undefined
-        })),
+        // comments are NOT stored in the main ticket document anymore.
       };
       
       await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true }); 
 
-      if (isEditing) {
-        setTickets(prevTickets => prevTickets.map(t => t.id === ticketToSave.id ? ticketToSave : t)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) 
-        );
-      } else {
-        setTickets(prevTickets => [ticketToSave, ...prevTickets]
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        );
-      }
+      // No local state update for tickets needed here, onSnapshot will handle it.
       toast({
         title: isEditing ? "Ticket Actualizado" : "Ticket Creado",
         description: `El ticket "${ticketToSave.title}" ha sido ${isEditing ? 'actualizado' : 'creado'} exitosamente.`,
@@ -205,7 +212,7 @@ export default function TicketsPage() {
     const ticketToDelete = tickets.find(t => t.id === ticketId);
     if (!ticketToDelete) return;
 
-    if (window.confirm(`¿Estás seguro de que quieres eliminar el ticket "${ticketToDelete.title}"? Esta acción también eliminará los adjuntos asociados.`)) {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar el ticket "${ticketToDelete.title}"? Esta acción también eliminará los adjuntos asociados y comentarios.`)) {
       try {
         // Delete ticket attachments
         if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
@@ -223,29 +230,40 @@ export default function TicketsPage() {
             } catch (e) { console.warn("Falló al eliminar adjunto de la solución", attachment.url, e); }
           }
         }
-        // Delete comment attachments
-        if (ticketToDelete.comments && ticketToDelete.comments.length > 0) {
-          for (const comment of ticketToDelete.comments) {
-            if (comment.attachments && comment.attachments.length > 0) {
-              for (const attachment of comment.attachments) {
-                 try {
-                    const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
-                  } catch (e) { console.warn("Falló al eliminar adjunto del comentario", attachment.url, e); }
-              }
+        
+        // Delete comment attachments (if any are stored - good practice to check)
+        // This requires fetching comments first, or a more robust backend cleanup.
+        // For now, we assume attachments are deleted with the ticket storage path if structured well.
+        // Or, iterate through comments from TicketItem if it had them.
+        // Simplified: Deleting main ticket doc + its subcollection via a batched write or Cloud Function is more robust.
+
+        // Delete comments subcollection (client-side deletion is complex for subcollections)
+        // A common pattern is a Cloud Function triggered on ticket deletion.
+        // For client-side, you'd fetch all comment docs and delete them one by one or in a batch.
+        // This is a simplified deletion from client for now.
+        const commentsColRef = collection(db, "tickets", ticketId, "comments");
+        const commentsSnapshot = await getDocs(commentsColRef);
+        const batch = writeBatch(db);
+        commentsSnapshot.docs.forEach(commentDoc => {
+            // Also delete comment attachments here if they exist and paths are known
+            const commentData = commentDoc.data() as Comment;
+            if (commentData.attachments) {
+                for (const att of commentData.attachments) {
+                    try { storageRef(storage, att.url); deleteObject(storageRef(storage, att.url)); } catch (e) {console.warn("Error deleting comment attachment", e)}
+                }
             }
-          }
-        }
+            batch.delete(commentDoc.ref);
+        });
+        await batch.commit();
+
 
         const ticketDocRef = doc(db, "tickets", ticketId);
         await deleteDoc(ticketDocRef);
-        // Note: Subcollection 'comments' is NOT automatically deleted by Firebase.
-        // This would require a Cloud Function for robust cleanup or manual deletion if many comments.
-        // For this frontend, we just remove the ticket from state.
-
-        setTickets(prevTickets => prevTickets.filter(ticket => ticket.id !== ticketId));
+        
+        // Local state update will be handled by onSnapshot
         toast({
           title: "Ticket Eliminado",
-          description: `El ticket "${ticketToDelete.title}" ha sido eliminado. Es posible que los comentarios asociados necesiten ser eliminados manualmente o mediante una función de backend.`,
+          description: `El ticket "${ticketToDelete.title}" ha sido eliminado.`,
           variant: "destructive",
         });
       } catch (error) {
@@ -264,56 +282,27 @@ export default function TicketsPage() {
       toast({title: "Error", description: "Debes iniciar sesión para comentar.", variant: "destructive"});
       return;
     }
-    const ticketIndex = tickets.findIndex(t => t.id === ticketId);
-    if (ticketIndex === -1) {
-       toast({title: "Error", description: "Ticket no encontrado.", variant: "destructive"});
-       return;
-    }
-
-    const newComment: Comment = {
-      id: doc(collection(db, "tickets", ticketId, "comments")).id, 
+    
+    const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = { // Prepare for Firestore
       userId: currentUser.id,
       userName: currentUser.name || "Usuario Anónimo",
-      userAvatarUrl: currentUser.avatarUrl || null, // Ensure null instead of undefined
+      userAvatarUrl: currentUser.avatarUrl || null,
       text: commentText,
-      createdAt: new Date().toISOString(),
+      createdAt: Timestamp.now(), // Use Firestore Timestamp directly
       attachments: commentAttachments,
     };
 
     try {
-      const ticketDocRef = doc(db, "tickets", ticketId);
-      // Add comment to subcollection for better scalability
-      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments"), newComment.id);
-      await setDoc(commentDocRef, {
-        ...newComment,
-         createdAt: Timestamp.fromDate(new Date(newComment.createdAt)), // Store as Timestamp
-         userAvatarUrl: newComment.userAvatarUrl, // Already handled in newComment creation
-      });
+      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments")); // Auto-generate ID
+      await setDoc(commentDocRef, newComment);
       
-      // Update the main ticket's 'updatedAt' and its 'comments' array (optional, can be heavy)
-      // For simplicity here, we'll update updatedAt and optimistically add to local state's comments.
-      // A more robust solution might fetch comments separately or use a count.
+      // Update the main ticket's 'updatedAt'
+      const ticketDocRef = doc(db, "tickets", ticketId);
       await updateDoc(ticketDocRef, {
         updatedAt: Timestamp.now(),
-        // Optionally, store a small number of recent comments or just a count in the main ticket.
-        // For this example, we'll update the local state's comment array.
-         comments: arrayUnion({ // This is okay for a few comments, but not for hundreds.
-          ...newComment,
-          createdAt: Timestamp.fromDate(new Date(newComment.createdAt)),
-          userAvatarUrl: newComment.userAvatarUrl, // Already handled
-        })
       });
 
-
-      setTickets(prevTickets => {
-        const updatedTickets = [...prevTickets];
-        const updatedTicket = { ...updatedTickets[ticketIndex] };
-        updatedTicket.comments = [...(updatedTicket.comments || []), newComment].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        updatedTicket.updatedAt = new Date().toISOString();
-        updatedTickets[ticketIndex] = updatedTicket;
-        return updatedTickets;
-      });
-
+      // No local state update for comments in TicketsPage. TicketItem's onSnapshot handles this.
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
     } catch (error) {
       console.error("Error al añadir comentario:", error);
@@ -331,19 +320,16 @@ export default function TicketsPage() {
         toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
         return;
     }
-    const ticketIndex = tickets.findIndex(t => t.id === ticketId);
-    if (ticketIndex === -1) {
+    const ticketToUpdate = tickets.find(t => t.id === ticketId);
+    if (!ticketToUpdate) {
        toast({title: "Error", description: "Ticket no encontrado.", variant: "destructive"});
        return;
     }
 
-    const ticketToUpdate = tickets[ticketIndex];
-    // Allow admin/supervisor to update solution as well
     if (currentUser.id !== ticketToUpdate.assigneeUserId && currentUser.role !== 'admin' && currentUser.role !== 'supervisor') {
         toast({title: "Acción no permitida", description: "Solo el usuario asignado o un administrador/supervisor puede registrar la solución.", variant: "destructive"});
         return;
     }
-
 
     const updatedTicketData = {
         solutionDescription,
@@ -355,20 +341,7 @@ export default function TicketsPage() {
     try {
         const ticketDocRef = doc(db, "tickets", ticketId);
         await updateDoc(ticketDocRef, updatedTicketData);
-
-        setTickets(prevTickets => 
-            prevTickets.map(t => 
-                t.id === ticketId 
-                ? { 
-                    ...t, 
-                    solutionDescription, 
-                    solutionAttachments, 
-                    status, 
-                    updatedAt: new Date().toISOString() 
-                  } 
-                : t
-            )
-        );
+        // Local state update handled by onSnapshot
         toast({title: "Solución Actualizada", description: `La solución para el ticket "${ticketToUpdate.title}" ha sido guardada.`});
     } catch (error) {
         console.error("Error al actualizar la solución del ticket:", error);
@@ -390,7 +363,7 @@ export default function TicketsPage() {
   const filteredTickets = useMemo(() => {
     if (!currentUser) return [];
 
-    return tickets
+    return tickets // tickets state is now updated by onSnapshot
       .filter(ticket => {
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
           return true; 
@@ -485,7 +458,7 @@ export default function TicketsPage() {
         </TabsList>
       </Tabs>
 
-      {isLoading ? ( 
+      {isLoading && tickets.length === 0 ? ( // Show skeleton only if truly loading initial data
          <div className="space-y-4">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />

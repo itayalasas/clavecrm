@@ -11,12 +11,13 @@ import { es } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { storage } from "@/lib/firebase"; // db is not needed here, only storage
+import { db, storage } from "@/lib/firebase";
+import { collection, query, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { TICKET_STATUSES } from "@/lib/constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,7 +29,7 @@ interface TicketItemProps {
   leads: Lead[];
   users: User[];
   currentUser: User | null;
-  onEdit: (ticket: Ticket) => void; // For creator/admin to edit core details
+  onEdit: (ticket: Ticket) => void; 
   onDelete: (ticketId: string) => void; 
   onAddComment: (ticketId: string, commentText: string, attachments: {name: string, url: string}[]) => Promise<void>;
   onUpdateTicketSolution: (ticketId: string, solutionDescription: string, solutionAttachments: { name: string; url: string }[], status: TicketStatus) => Promise<void>;
@@ -72,6 +73,7 @@ export function TicketItem({
   const reporter = users.find(u => u.id === ticket.reporterUserId);
   const assignee = ticket.assigneeUserId ? users.find(u => u.id === ticket.assigneeUserId) : null;
 
+  const [internalComments, setInternalComments] = useState<Comment[]>([]);
   const [newCommentText, setNewCommentText] = useState("");
   const [commentFile, setCommentFile] = useState<File | null>(null);
   const [isUploadingCommentAttachment, setIsUploadingCommentAttachment] = useState(false);
@@ -91,6 +93,33 @@ export function TicketItem({
   const isAssignee = currentUser?.id === ticket.assigneeUserId;
   const canManageSolution = isAssignee && ticket.status !== 'Cerrado' && ticket.status !== 'Resuelto';
   const canEditTicket = isCreator || currentUser?.role === 'admin' || currentUser?.role === 'supervisor';
+
+  useEffect(() => {
+    if (!ticket.id) return;
+    const commentsColRef = collection(db, "tickets", ticket.id, "comments");
+    const qComments = query(commentsColRef, orderBy("createdAt", "asc"));
+
+    const unsubscribe = onSnapshot(qComments, (snapshot) => {
+      const fetchedComments = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          userId: data.userId,
+          userName: data.userName,
+          userAvatarUrl: data.userAvatarUrl || null,
+          text: data.text,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          attachments: data.attachments || [],
+        } as Comment;
+      });
+      setInternalComments(fetchedComments);
+    }, (error) => {
+      console.error(`Error al obtener comentarios para ticket ${ticket.id}: `, error);
+      toast({ title: "Error al Cargar Comentarios", description: "No se pudieron actualizar los comentarios en tiempo real.", variant: "destructive"});
+    });
+
+    return () => unsubscribe();
+  }, [ticket.id, toast]);
 
 
   const getPriorityBadge = (priority: TicketPriority) => {
@@ -223,7 +252,7 @@ export function TicketItem({
     }
     
     await onUpdateTicketSolution(ticket.id, solutionDescription, newSolutionAttachments, solutionStatus);
-    setCurrentSolutionAttachments(newSolutionAttachments); // Update local state for attachments
+    setCurrentSolutionAttachments(newSolutionAttachments); 
   };
 
   const handleRemoveSolutionAttachment = async (attachmentUrlToRemove: string) => {
@@ -233,8 +262,7 @@ export function TicketItem({
         await deleteObject(fileRef);
         const updatedAttachments = currentSolutionAttachments.filter(att => att.url !== attachmentUrlToRemove);
         setCurrentSolutionAttachments(updatedAttachments);
-        // Immediately update Firestore as well if needed, or rely on next save
-        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status); // Use current ticket.status or solutionStatus? If this action means "save current state", then solutionStatus.
+        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status); 
         toast({ title: "Adjunto de solución eliminado" });
     } catch (error: any) {
         console.error("Error eliminando adjunto de solución:", error);
@@ -439,10 +467,10 @@ export function TicketItem({
 
             {/* Comments Section */}
             <div className="pt-3 border-t">
-              <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-2"><MessageCircle className="h-4 w-4"/>Comentarios ({ticket.comments?.length || 0})</h4>
-              {ticket.comments && ticket.comments.length > 0 ? (
+              <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-2"><MessageCircle className="h-4 w-4"/>Comentarios ({internalComments.length || 0})</h4>
+              {internalComments && internalComments.length > 0 ? (
                 <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                  {ticket.comments.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map(comment => (
+                  {internalComments.map(comment => (
                     <div key={comment.id} className="p-3 rounded-md bg-muted/50">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
