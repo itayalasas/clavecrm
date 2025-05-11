@@ -26,11 +26,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Check, ChevronsUpDown, Paperclip } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, Paperclip, UploadCloud, X } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from 'date-fns/locale'; 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
+import { storage, db } from "@/lib/firebase"; // Import storage
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { doc, collection } from "firebase/firestore";
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
 
 
 interface AddEditTaskDialogProps {
@@ -72,7 +77,12 @@ export function AddEditTaskDialog({
   const setIsDialogOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalIsOpen;
   
   const { currentUser } = useAuth();
+  const { toast } = useToast();
   const dialogId = useId(); 
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const getInitialFormData = useCallback(() => {
     if (taskToEdit) {
@@ -109,9 +119,12 @@ export function AddEditTaskDialog({
     if (isDialogOpen) {
       const initialData = getInitialFormData();
       setFormData(initialData);
-      setSelectedDate(initialData.dueDate && initialData.dueDate && isValid(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined);
+      setSelectedDate(initialData.dueDate && isValid(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined);
+      setSelectedFile(null);
+      setIsUploading(false);
+      setUploadProgress(0);
     }
-  }, [isDialogOpen, taskToEdit, currentUser, getInitialFormData]);
+  }, [isDialogOpen, getInitialFormData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -133,34 +146,106 @@ export function AddEditTaskDialog({
     setFormData((prev) => ({ ...prev, dueDate: date ? date.toISOString() : undefined }));
   };
 
-  const handleSubmit = () => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFile(event.target.files[0]);
+    } else {
+      setSelectedFile(null);
+    }
+  };
+
+  const handleRemoveAttachment = async (attachmentUrlToRemove: string) => {
+    if (!window.confirm("¿Estás seguro de que quieres eliminar este adjunto?")) return;
+    
+    try {
+      const fileRef = storageRef(storage, attachmentUrlToRemove); // Firebase SDK can parse gs:// or https:// URLs
+      await deleteObject(fileRef);
+      setFormData(prev => ({
+        ...prev,
+        attachments: prev.attachments?.filter(url => url !== attachmentUrlToRemove) || []
+      }));
+      toast({ title: "Adjunto eliminado", description: "El archivo adjunto ha sido eliminado." });
+    } catch (error: any) {
+      console.error("Error eliminando adjunto:", error);
+      if (error.code === 'storage/object-not-found') {
+        // If file not found in storage, still remove it from DB
+         setFormData(prev => ({
+            ...prev,
+            attachments: prev.attachments?.filter(url => url !== attachmentUrlToRemove) || []
+          }));
+        toast({ title: "Adjunto eliminado localmente", description: "El archivo no se encontró en el almacenamiento, pero se eliminó la referencia." });
+      } else {
+        toast({ title: "Error al eliminar adjunto", description: error.message, variant: "destructive" });
+      }
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!formData.title) {
-      alert("El título es obligatorio."); 
+      toast({ title: "Error de validación", description: "El título es obligatorio.", variant: "destructive" });
       return;
     }
-    if (!currentUser?.id && !taskToEdit) { 
-        alert("No se pudo identificar al usuario reportador. Intenta recargar la página.");
-        return;
+    if (!currentUser?.id && !taskToEdit) {
+      toast({ title: "Error de autenticación", description: "No se pudo identificar al usuario. Intenta recargar la página.", variant: "destructive" });
+      return;
+    }
+
+    let taskAttachments = formData.attachments || [];
+    const taskId = taskToEdit ? taskToEdit.id : doc(collection(db, "tasks")).id;
+
+    if (selectedFile) {
+      setIsUploading(true);
+      setUploadProgress(0);
+      const filePath = `task-attachments/${currentUser!.id}/${taskId}/${Date.now()}-${selectedFile.name}`;
+      const fileStorageRef = storageRef(storage, filePath);
+      const uploadTask = uploadBytesResumable(fileStorageRef, selectedFile);
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on(
+            "state_changed",
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            },
+            (error) => {
+              console.error("Error al subir archivo:", error);
+              toast({ title: "Error al Subir Archivo", description: error.message, variant: "destructive" });
+              setIsUploading(false);
+              reject(error);
+            },
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              taskAttachments = [...taskAttachments, downloadURL]; // Add new URL
+              setIsUploading(false);
+              setSelectedFile(null); // Clear selected file after successful upload
+              resolve();
+            }
+          );
+        });
+      } catch (error) {
+        // Error already handled and toasted by the uploadTask's error callback
+        return; // Stop submission if file upload failed
+      }
     }
 
     const taskToSave: Task = {
-      id: taskToEdit ? taskToEdit.id : '', 
+      id: taskId,
       createdAt: taskToEdit ? taskToEdit.createdAt : new Date().toISOString(),
       title: formData.title!,
       description: formData.description || "",
-      dueDate: formData.dueDate, 
+      dueDate: formData.dueDate,
       completed: formData.completed || false,
       relatedLeadId: formData.relatedLeadId === NO_LEAD_SELECTED_VALUE ? undefined : formData.relatedLeadId,
       priority: formData.priority || 'medium',
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
       reporterUserId: taskToEdit ? formData.reporterUserId! : currentUser!.id,
       solutionDescription: formData.solutionDescription || "",
-      // For now, attachments are not fully implemented with file upload
-      attachments: formData.attachments || [], 
+      attachments: taskAttachments,
     };
 
     onSave(taskToSave);
-    // setIsDialogOpen(false); // Parent component will handle closing the dialog via onSave callback
+    // setIsDialogOpen(false); // Parent closes dialog
   };
 
   let assigneeNameDisplay = "Selecciona un usuario (opcional)";
@@ -191,11 +276,11 @@ export function AddEditTaskDialog({
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-title`} className="text-right">Título</Label>
-            <Input id={`${dialogId}-title`} name="title" value={formData.title || ""} onChange={handleChange} className="col-span-3" />
+            <Input id={`${dialogId}-title`} name="title" value={formData.title || ""} onChange={handleChange} className="col-span-3" disabled={isUploading} />
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor={`${dialogId}-description`} className="text-right pt-2">Descripción</Label>
-            <Textarea id={`${dialogId}-description`} name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={3} />
+            <Textarea id={`${dialogId}-description`} name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={3} disabled={isUploading} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-dueDate`} className="text-right">Fecha de Vencimiento</Label>
@@ -207,6 +292,7 @@ export function AddEditTaskDialog({
                     "col-span-3 justify-start text-left font-normal",
                     !selectedDate && "text-muted-foreground"
                   )}
+                  disabled={isUploading}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Elige una fecha</span>}
@@ -225,7 +311,7 @@ export function AddEditTaskDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-priority`} className="text-right">Prioridad</Label>
-            <Select name="priority" value={formData.priority || 'medium'} onValueChange={(value) => handleSelectChange('priority', value)}>
+            <Select name="priority" value={formData.priority || 'medium'} onValueChange={(value) => handleSelectChange('priority', value)} disabled={isUploading}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona prioridad" />
               </SelectTrigger>
@@ -245,6 +331,7 @@ export function AddEditTaskDialog({
                   role="combobox"
                   aria-expanded={assigneePopoverOpen}
                   className="col-span-3 justify-between font-normal"
+                  disabled={isUploading}
                 >
                   {assigneeNameDisplay}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -307,6 +394,7 @@ export function AddEditTaskDialog({
               name="relatedLeadId"
               value={formData.relatedLeadId || NO_LEAD_SELECTED_VALUE}
               onValueChange={(value) => handleSelectChange('relatedLeadId', value)}
+              disabled={isUploading}
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un lead (opcional)" />
@@ -322,47 +410,69 @@ export function AddEditTaskDialog({
             </Select>
           </div>
           
-          {taskToEdit && (
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor={`${dialogId}-solutionDescription`} className="text-right pt-2">Descripción de la Solución</Label>
-              <Textarea id={`${dialogId}-solutionDescription`} name="solutionDescription" value={formData.solutionDescription || ""} onChange={handleChange} className="col-span-3" rows={3} placeholder="Detalla la solución aplicada a esta tarea..."/>
-            </div>
-          )}
+          <div className="grid grid-cols-4 items-start gap-4">
+            <Label htmlFor={`${dialogId}-solutionDescription`} className="text-right pt-2">Descripción de la Solución</Label>
+            <Textarea id={`${dialogId}-solutionDescription`} name="solutionDescription" value={formData.solutionDescription || ""} onChange={handleChange} className="col-span-3" rows={3} placeholder="Detalla la solución aplicada a esta tarea..." disabled={isUploading} />
+          </div>
 
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor={`${dialogId}-attachments`} className="text-right pt-2">Adjuntos</Label>
-            <div className="col-span-3">
+            <div className="col-span-3 space-y-2">
               <Input 
                 id={`${dialogId}-attachments`} 
                 name="attachments" 
                 type="file" 
+                onChange={handleFileChange}
                 className="mb-2"
-                disabled // Full file upload not implemented yet
-                onChange={(e) => {
-                  // Placeholder for future file handling
-                  // if (e.target.files && e.target.files.length > 0) {
-                  //   // For now, storing the file name as a simple string.
-                  //   // In a real app, this would involve uploading to Firebase Storage and storing URLs.
-                  //   setFormData(prev => ({...prev, attachments: [...(prev.attachments || []), e.target.files![0].name]}));
-                  // }
-                }}
-                />
-              <p className="text-xs text-muted-foreground">
-                La subida de archivos no está implementada completamente. Este campo es un marcador de posición.
-                {formData.attachments && formData.attachments.length > 0 && (
-                  <span className="block mt-1">Archivos actuales (simulado): {formData.attachments.join(", ")}</span>
-                )}
-              </p>
+                disabled={isUploading}
+                accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx" 
+              />
+              {isUploading && (
+                <div className="space-y-1">
+                  <Progress value={uploadProgress} className="w-full h-2" />
+                  <p className="text-xs text-muted-foreground text-center">Subiendo archivo... {uploadProgress.toFixed(0)}%</p>
+                </div>
+              )}
+              {selectedFile && !isUploading && (
+                <p className="text-xs text-muted-foreground">Archivo seleccionado: {selectedFile.name}</p>
+              )}
+              {formData.attachments && formData.attachments.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium">Archivos actuales:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    {formData.attachments.map((url, index) => {
+                      const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'archivo').substring(url.indexOf('-') + 1) ;
+                      return (
+                        <li key={index} className="text-xs flex items-center justify-between">
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[200px]" title={fileName}>
+                            <Paperclip className="h-3 w-3 inline mr-1" />{fileName}
+                          </a>
+                          {!isUploading && (
+                             <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveAttachment(url)} title="Eliminar adjunto">
+                               <X className="h-3 w-3 text-destructive"/>
+                             </Button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
 
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-          <Button type="submit" onClick={handleSubmit}>Guardar Tarea</Button>
+          <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isUploading}>Cancelar</Button>
+          <Button type="submit" onClick={handleSubmit} disabled={isUploading}>
+            {isUploading ? (
+              <>
+                <UploadCloud className="mr-2 h-4 w-4 animate-pulse" /> Subiendo...
+              </>
+            ) : (taskToEdit ? "Guardar Cambios" : "Crear Tarea")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

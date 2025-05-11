@@ -60,7 +60,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
   const assignee = task.assigneeUserId ? users.find(u => u.id === task.assigneeUserId) : null;
   
   const getDueDateBadge = () => {
-    if (!task.dueDate) return null;
+    if (!task.dueDate || !isValid(parseISO(task.dueDate))) return null;
     const dueDate = parseISO(task.dueDate);
     const today = new Date();
     today.setHours(0,0,0,0); 
@@ -90,7 +90,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
 
   return (
     <Card className={`transition-all duration-200 ${task.completed ? 'bg-muted/50 opacity-70' : 'bg-card'}`}>
-      <CardContent className="p-0"> {/* Remove padding from CardContent to allow Accordion to manage it */}
+      <CardContent className="p-0">
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value={`task-${task.id}-details`} className="border-b-0">
              <div className="flex items-start gap-4 p-4">
@@ -104,7 +104,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
                 <div className="flex-grow">
                   <AccordionTrigger className="p-0 hover:no-underline">
                     <label
-                        htmlFor={`task-${task.id}`} // Keep for accessibility with checkbox
+                        htmlFor={`task-${task.id}`} 
                         className={`font-medium cursor-pointer text-left ${task.completed ? "line-through text-muted-foreground" : "text-card-foreground"}`}
                     >
                         {task.title}
@@ -117,7 +117,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
                     </p>
                 )}
                 <div className="mt-2 flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
-                    {task.dueDate && (
+                    {task.dueDate && isValid(parseISO(task.dueDate)) && (
                     <span className="flex items-center gap-1">
                         <CalendarDays className="h-3 w-3" /> {format(parseISO(task.dueDate), "PP", { locale: es })}
                     </span>
@@ -156,15 +156,15 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
                 </Button>
                 </div>
             </div>
-            <AccordionContent className="px-4 pb-4">
+            <AccordionContent className="px-4 pb-4 space-y-3">
                 {task.description && task.description.length > 100 && (
-                    <div className="mb-3">
+                    <div className="pt-2 border-t">
                         <h4 className="text-xs font-semibold text-muted-foreground mb-1">Descripción Completa:</h4>
                         <p className="text-sm text-card-foreground whitespace-pre-wrap">{task.description}</p>
                     </div>
                 )}
                 {task.solutionDescription && (
-                <div className="mb-3 pt-2 border-t">
+                <div className="pt-2 border-t">
                     <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-1"><MessageSquareText className="h-4 w-4"/>Descripción de la Solución:</h4>
                     <p className="text-sm text-card-foreground whitespace-pre-wrap">{task.solutionDescription}</p>
                 </div>
@@ -172,15 +172,28 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
                 {task.attachments && task.attachments.length > 0 && (
                 <div className="pt-2 border-t">
                     <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-1"><Paperclip className="h-4 w-4"/>Adjuntos:</h4>
-                    <ul className="list-disc list-inside text-sm text-card-foreground">
-                    {task.attachments.map((att, index) => (
-                        <li key={index}>{att} (Enlace simulado)</li> 
-                    ))}
+                    <ul className="list-none space-y-1 text-sm text-card-foreground">
+                    {task.attachments.map((url, index) => {
+                       const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'archivo').substring(url.indexOf('-') + 1) ; // Basic name extraction
+                       return (
+                         <li key={index}>
+                           <a 
+                             href={url} 
+                             target="_blank" 
+                             rel="noopener noreferrer" 
+                             className="text-primary hover:underline flex items-center gap-1 break-all"
+                             title={`Descargar ${fileName}`}
+                            >
+                             <Paperclip className="h-3 w-3 shrink-0"/> {fileName}
+                           </a>
+                         </li> 
+                       );
+                    })}
                     </ul>
                 </div>
                 )}
                 {!task.solutionDescription && (!task.attachments || task.attachments.length === 0) && (!task.description || task.description.length <=100) && (
-                     <p className="text-sm text-muted-foreground">No hay detalles adicionales para esta tarea.</p>
+                     <p className="text-sm text-muted-foreground pt-2 border-t">No hay detalles adicionales para esta tarea.</p>
                 )}
             </AccordionContent>
           </AccordionItem>
@@ -189,4 +202,3 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
     </Card>
   );
 }
-

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Task, Lead, User } from "@/lib/types";
-import { INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants"; // Keep INITIAL_LEADS for now if AddEditTaskDialog depends on it directly
+import { INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants"; 
 import { TaskItem } from "@/components/tasks/task-item";
 import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy,
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS); // Keep using initial leads, or fetch if needed
   const [users, setUsers] = useState<User[]>([]);
   
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
@@ -53,7 +53,6 @@ export default function TasksPage() {
           id: docSnap.id,
           title: data.title as string,
           description: data.description as string | undefined,
-          // Ensure createdAt and dueDate are handled correctly if they are strings or Timestamps
           createdAt: typeof data.createdAt === 'string' ? data.createdAt : (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
           dueDate: typeof data.dueDate === 'string' ? data.dueDate : (data.dueDate as Timestamp)?.toDate().toISOString() || undefined,
           completed: data.completed as boolean,
@@ -118,46 +117,43 @@ export default function TasksPage() {
     }
     setIsSubmittingTask(true);
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
-    const taskId = isEditing ? taskData.id : doc(collection(db, "tasks")).id;
-
-    // Ensure dates are ISO strings or undefined
-    const dueDateString = taskData.dueDate ? (typeof taskData.dueDate === 'string' ? taskData.dueDate : new Date(taskData.dueDate).toISOString()) : undefined;
-    const createdAtString = isEditing ? (typeof taskData.createdAt === 'string' ? taskData.createdAt : new Date(taskData.createdAt).toISOString()) : new Date().toISOString();
+    
+    // taskData.id is now guaranteed to be present by AddEditTaskDialog
+    const taskId = taskData.id; 
 
     const taskToSave: Task = {
       ...taskData, 
-      id: taskId,
-      reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id, 
-      createdAt: createdAtString,
-      dueDate: dueDateString,
+      // reporterUserId is set in AddEditTaskDialog
+      // createdAt is set in AddEditTaskDialog
       solutionDescription: taskData.solutionDescription || "",
       attachments: taskData.attachments || [],
     };
     
     try {
       const taskDocRef = doc(db, "tasks", taskId);
-      // Firestore expects plain objects, so ensure all fields are serializable
       const firestoreSafeTask = {
         ...taskToSave,
-        // Convert Date objects to Timestamps or ISO strings if not already
         createdAt: Timestamp.fromDate(new Date(taskToSave.createdAt)),
-        dueDate: taskToSave.dueDate ? Timestamp.fromDate(new Date(taskToSave.dueDate)) : null, // Firestore likes null for absent dates
+        dueDate: taskToSave.dueDate ? Timestamp.fromDate(new Date(taskToSave.dueDate)) : null,
       };
       
-      await setDoc(taskDocRef, firestoreSafeTask, { merge: isEditing }); 
+      await setDoc(taskDocRef, firestoreSafeTask, { merge: true }); // Always merge to handle edits or new
 
-      // After saving to Firestore, update local state with the original Task object (with ISO strings for dates)
       if (isEditing) {
-        setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t));
+        setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t)
+          .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        );
       } else {
-        setTasks(prevTasks => [taskToSave, ...prevTasks].sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setTasks(prevTasks => [taskToSave, ...prevTasks]
+          .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        );
       }
       toast({
         title: isEditing ? "Tarea Actualizada" : "Tarea Creada",
         description: `La tarea "${taskToSave.title}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
       });
       setEditingTask(null);
-      setIsTaskDialogOpen(false); // Close dialog after saving
+      setIsTaskDialogOpen(false);
     } catch (error) {
       console.error("Error al guardar tarea:", error);
       toast({
@@ -178,7 +174,9 @@ export default function TasksPage() {
     try {
       const taskDocRef = doc(db, "tasks", taskId);
       await updateDoc(taskDocRef, { completed: updatedTask.completed });
-      setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? updatedTask : t));
+      setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? updatedTask : t)
+        .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      );
       toast({
         title: "Tarea Actualizada",
         description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
@@ -199,6 +197,7 @@ export default function TasksPage() {
 
     if (window.confirm(`¿Estás seguro de que quieres eliminar la tarea "${taskToDelete.title}"?`)) {
       try {
+        // TODO: Delete attachments from Firebase Storage if any
         const taskDocRef = doc(db, "tasks", taskId);
         await deleteDoc(taskDocRef);
         setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
@@ -340,4 +339,3 @@ export default function TasksPage() {
     </div>
   );
 }
-
