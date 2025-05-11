@@ -160,3 +160,60 @@ export interface Invoice {
   notes?: string;
   issuedByUserId: string;
 }
+
+// Email Campaign Types
+export interface Contact {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  tags?: string[];
+  subscribed: boolean;
+  createdAt: string; // ISO string
+  listIds?: string[]; // IDs of ContactList this contact belongs to
+}
+
+export interface ContactList {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string; // ISO string
+  // Contacts can be a subcollection or an array of IDs depending on scale
+  // For simplicity now, we might not store contact IDs directly in the list object
+  // but rather query contacts based on listId.
+  // contactCount?: number; // Denormalized, can be updated via triggers
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  htmlContent: string; // For simple HTML, or reference to a more complex structure
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  previewImageUrl?: string; // Optional
+}
+
+export type EmailCampaignStatus = 'Borrador' | 'Programada' | 'Enviando' | 'Enviada' | 'Archivada' | 'Fallida';
+
+export interface EmailCampaign {
+  id: string;
+  name: string;
+  contactListId: string;
+  emailTemplateId: string;
+  status: EmailCampaignStatus;
+  scheduledAt?: string; // ISO string
+  sentAt?: string; // ISO string
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  // Basic analytics (mock for now)
+  analytics?: {
+    totalRecipients?: number;
+    sentCount?: number;
+    deliveredCount?: number;
+    openRate?: number; // Percentage
+    clickRate?: number; // Percentage
+    bounceCount?: number;
+    unsubscribeCount?: number;
+  };
+}

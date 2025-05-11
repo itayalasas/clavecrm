@@ -1,5 +1,5 @@
 
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus } from './types';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown } from 'lucide-react'; // Added Settings icon
 
 export const APP_NAME = "CRM Rápido";
@@ -133,3 +133,4 @@ export const TICKET_PRIORITIES: TicketPriority[] = ['Baja', 'Media', 'Alta'];
 export const QUOTE_STATUSES: QuoteStatus[] = ['Borrador', 'Enviada', 'Aceptada', 'Rechazada', 'Expirada'];
 export const ORDER_STATUSES: OrderStatus[] = ['Pendiente', 'Procesando', 'Enviado', 'Entregado', 'Cancelado'];
 export const INVOICE_STATUSES: InvoiceStatus[] = ['Borrador', 'Enviada', 'Pagada', 'Vencida', 'Cancelada'];
+export const EMAIL_CAMPAIGN_STATUSES: EmailCampaignStatus[] = ['Borrador', 'Programada', 'Enviando', 'Enviada', 'Archivada', 'Fallida'];
