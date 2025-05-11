@@ -1,27 +1,31 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Quote, Lead, User } from "@/lib/types";
-import { NAV_ITEMS, QUOTE_STATUSES, INITIAL_LEADS, INITIAL_USERS } from "@/lib/constants"; // Using initial data for now
+import { NAV_ITEMS, QUOTE_STATUSES } from "@/lib/constants"; 
 import { AddEditQuoteDialog } from "@/components/quotes/add-edit-quote-dialog";
 import { QuoteListItem } from "@/components/quotes/quote-list-item";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Search, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-// import { db } from "@/lib/firebase";
-// import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS); // Placeholder
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS); // Placeholder
+  const [leads, setLeads] = useState<Lead[]>([]); 
+  const [users, setUsers] = useState<User[]>([]); 
 
-  const [isLoading, setIsLoading] = useState(false); // Will be true when fetching
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState(true);
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
+
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [isQuoteDialogOpen, setIsQuoteDialogOpen] = useState(false);
 
@@ -29,36 +33,156 @@ export default function QuotesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Quote['status']>("Todos");
 
   const quotesNavItem = NAV_ITEMS.find(item => item.href === '/quotes');
-  const { currentUser, loading: authLoading } = useAuth();
+  const { currentUser, loading: authLoading, getAllUsers } = useAuth();
   const { toast } = useToast();
 
-  // TODO: Implement Firestore fetching for quotes, leads, users
-  // For now, using mock data
+  const fetchQuotes = useCallback(async () => {
+    if (!currentUser) {
+      setIsLoadingQuotes(false);
+      return;
+    }
+    setIsLoadingQuotes(true);
+    try {
+      const quotesCollectionRef = collection(db, "quotes");
+      // TODO: Add query filters based on user role if necessary
+      const q = query(quotesCollectionRef, orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedQuotes = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+          validUntil: (data.validUntil as Timestamp)?.toDate().toISOString() || undefined,
+        } as Quote;
+      });
+      setQuotes(fetchedQuotes);
+    } catch (error) {
+      console.error("Error al obtener cotizaciones:", error);
+      toast({
+        title: "Error al Cargar Cotizaciones",
+        description: "No se pudieron cargar las cotizaciones desde la base de datos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  }, [currentUser, toast]);
+
+  const fetchLeads = useCallback(async () => {
+    setIsLoadingLeads(true);
+    try {
+      const leadsCollectionRef = collection(db, "leads");
+      const querySnapshot = await getDocs(leadsCollectionRef);
+      const fetchedLeads = querySnapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as Lead));
+      setLeads(fetchedLeads);
+    } catch (error) {
+      console.error("Error al obtener leads:", error);
+      toast({
+        title: "Error al Cargar Leads",
+        description: "No se pudieron cargar los datos de los leads para las cotizaciones.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingLeads(false);
+    }
+  }, [toast]);
+
+  const fetchUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
+    try {
+      const fetchedUsers = await getAllUsers();
+      setUsers(fetchedUsers);
+    } catch (error) {
+      console.error("Error al obtener usuarios para cotizaciones:", error);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [getAllUsers]);
+
+
+  useEffect(() => {
+    if (!authLoading) {
+      fetchLeads();
+      fetchUsers();
+      if (currentUser) {
+        fetchQuotes();
+      } else {
+        setQuotes([]);
+        setIsLoadingQuotes(false);
+      }
+    }
+  }, [authLoading, currentUser, fetchQuotes, fetchLeads, fetchUsers]);
 
   const handleSaveQuote = async (quoteData: Quote) => {
-    // TODO: Save to Firestore
-    const isEditing = quotes.some(q => q.id === quoteData.id);
-    if (isEditing) {
-      setQuotes(prevQuotes => prevQuotes.map(q => q.id === quoteData.id ? quoteData : q));
-    } else {
-      setQuotes(prevQuotes => [{...quoteData, id: `quote-${Date.now()}`}, ...prevQuotes]);
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
     }
-    toast({
-      title: isEditing ? "Cotización Actualizada" : "Cotización Creada",
-      description: `La cotización "${quoteData.quoteNumber}" ha sido ${isEditing ? 'actualizada' : 'creada'}.`,
-    });
-    setEditingQuote(null);
-    setIsQuoteDialogOpen(false);
+    setIsSubmittingQuote(true);
+    const isEditing = quotes.some(q => q.id === quoteData.id);
+
+    const firestoreSafeQuote = {
+        ...quoteData,
+        createdAt: Timestamp.fromDate(new Date(quoteData.createdAt)),
+        updatedAt: Timestamp.now(), // Always update this
+        validUntil: quoteData.validUntil ? Timestamp.fromDate(new Date(quoteData.validUntil)) : null,
+        preparedByUserId: quoteData.preparedByUserId || currentUser.id,
+    };
+
+    try {
+      const quoteDocRef = doc(db, "quotes", quoteData.id);
+      await setDoc(quoteDocRef, firestoreSafeQuote, { merge: true }); 
+      
+      fetchQuotes(); // Re-fetch to update the list
+      toast({
+        title: isEditing ? "Cotización Actualizada" : "Cotización Creada",
+        description: `La cotización "${quoteData.quoteNumber}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
+      });
+      setIsQuoteDialogOpen(false);
+      setEditingQuote(null);
+    } catch (error) {
+      console.error("Error al guardar cotización:", error);
+      toast({
+        title: "Error al Guardar Cotización",
+        description: "Ocurrió un error al guardar la cotización.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingQuote(false);
+    }
   };
 
   const handleDeleteQuote = async (quoteId: string) => {
-    // TODO: Delete from Firestore
-    if (window.confirm("¿Estás seguro de que quieres eliminar esta cotización?")) {
-      setQuotes(prevQuotes => prevQuotes.filter(q => q.id !== quoteId));
-      toast({
-        title: "Cotización Eliminada",
-        variant: "destructive",
-      });
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
+    }
+    const quoteToDelete = quotes.find(q => q.id === quoteId);
+    if (!quoteToDelete) return;
+
+    if (window.confirm(`¿Estás seguro de que quieres eliminar la cotización "${quoteToDelete.quoteNumber}"?`)) {
+      try {
+        const quoteDocRef = doc(db, "quotes", quoteId);
+        await deleteDoc(quoteDocRef);
+        fetchQuotes(); // Re-fetch
+        toast({
+          title: "Cotización Eliminada",
+          description: `La cotización "${quoteToDelete.quoteNumber}" ha sido eliminada.`,
+          variant: "default", 
+        });
+      } catch (error) {
+        console.error("Error al eliminar cotización:", error);
+        toast({
+          title: "Error al Eliminar Cotización",
+          description: "Ocurrió un error al eliminar la cotización.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -72,14 +196,14 @@ export default function QuotesPage() {
     setIsQuoteDialogOpen(true);
   };
 
-  const filteredQuotes = quotes
+  const filteredQuotes = useMemo(() => quotes
     .filter(quote => filterStatus === "Todos" || quote.status === filterStatus)
     .filter(quote => 
       quote.quoteNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (leads.find(l => l.id === quote.leadId)?.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    ), [quotes, filterStatus, searchTerm, leads]);
 
-  const pageIsLoading = authLoading || isLoading;
+  const pageIsLoading = authLoading || isLoadingQuotes || isLoadingLeads || isLoadingUsers;
 
   return (
     <div className="flex flex-col gap-6">
@@ -87,7 +211,7 @@ export default function QuotesPage() {
         <h2 className="text-2xl font-semibold">{quotesNavItem?.label || "Cotizaciones"}</h2>
         <AddEditQuoteDialog
           trigger={
-            <Button onClick={openNewQuoteDialog} disabled={pageIsLoading}>
+            <Button onClick={openNewQuoteDialog} disabled={pageIsLoading || isSubmittingQuote}>
               <PlusCircle className="mr-2 h-5 w-5" /> Añadir Cotización
             </Button>
           }
@@ -111,9 +235,10 @@ export default function QuotesPage() {
             className="pl-8 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={pageIsLoading}
           />
         </div>
-        <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | Quote['status'])}>
+        <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | Quote['status'])} disabled={pageIsLoading}>
           <SelectTrigger className="w-full sm:w-[200px]">
             <Filter className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Filtrar por estado" />
@@ -127,7 +252,7 @@ export default function QuotesPage() {
         </Select>
       </div>
 
-      {pageIsLoading ? (
+      {pageIsLoading && quotes.length === 0 ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>

@@ -1,8 +1,9 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Order, Lead, User } from "@/lib/types";
-import { NAV_ITEMS, ORDER_STATUSES, INITIAL_LEADS, INITIAL_USERS } from "@/lib/constants";
+import { NAV_ITEMS, ORDER_STATUSES } from "@/lib/constants";
 import { AddEditOrderDialog } from "@/components/orders/add-edit-order-dialog";
 import { OrderListItem } from "@/components/orders/order-list-item";
 import { Button } from "@/components/ui/button";
@@ -12,13 +13,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS); 
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS); 
+  const [leads, setLeads] = useState<Lead[]>([]); 
+  const [users, setUsers] = useState<User[]>([]); 
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
 
@@ -26,32 +33,142 @@ export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Order['status']>("Todos");
 
   const ordersNavItem = NAV_ITEMS.find(item => item.href === '/orders');
-  const { currentUser, loading: authLoading } = useAuth();
+  const { currentUser, loading: authLoading, getAllUsers } = useAuth();
   const { toast } = useToast();
 
-  // TODO: Implement Firestore fetching for orders
+  const fetchOrders = useCallback(async () => {
+    if (!currentUser) {
+      setIsLoadingOrders(false);
+      return;
+    }
+    setIsLoadingOrders(true);
+    try {
+      const ordersCollectionRef = collection(db, "orders");
+      const q = query(ordersCollectionRef, orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedOrders = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+        } as Order;
+      });
+      setOrders(fetchedOrders);
+    } catch (error) {
+      console.error("Error al obtener pedidos:", error);
+      toast({
+        title: "Error al Cargar Pedidos",
+        description: "No se pudieron cargar los pedidos desde la base de datos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, [currentUser, toast]);
+
+  const fetchLeads = useCallback(async () => {
+    setIsLoadingLeads(true);
+    try {
+      const leadsCollectionRef = collection(db, "leads");
+      const querySnapshot = await getDocs(leadsCollectionRef);
+      const fetchedLeads = querySnapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as Lead));
+      setLeads(fetchedLeads);
+    } catch (error) {
+      console.error("Error al obtener leads:", error);
+      toast({
+        title: "Error al Cargar Leads",
+        description: "No se pudieron cargar los datos de los leads para los pedidos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingLeads(false);
+    }
+  }, [toast]);
+
+  const fetchUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
+    try {
+      const fetchedUsers = await getAllUsers();
+      setUsers(fetchedUsers);
+    } catch (error) {
+      console.error("Error al obtener usuarios para pedidos:", error);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [getAllUsers]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      fetchLeads();
+      fetchUsers();
+      if (currentUser) {
+        fetchOrders();
+      } else {
+        setOrders([]);
+        setIsLoadingOrders(false);
+      }
+    }
+  }, [authLoading, currentUser, fetchOrders, fetchLeads, fetchUsers]);
+
 
   const handleSaveOrder = async (orderData: Order) => {
-    // TODO: Save to Firestore
-    const isEditing = orders.some(o => o.id === orderData.id);
-    if (isEditing) {
-      setOrders(prevOrders => prevOrders.map(o => o.id === orderData.id ? orderData : o));
-    } else {
-      setOrders(prevOrders => [{...orderData, id: `order-${Date.now()}`}, ...prevOrders]);
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
     }
-    toast({
-      title: isEditing ? "Pedido Actualizado" : "Pedido Creado",
-      description: `El pedido "${orderData.orderNumber}" ha sido ${isEditing ? 'actualizado' : 'creado'}.`,
-    });
-    setEditingOrder(null);
-    setIsOrderDialogOpen(false);
+    setIsSubmittingOrder(true);
+    const isEditing = orders.some(o => o.id === orderData.id);
+
+    const firestoreSafeOrder = {
+        ...orderData,
+        createdAt: Timestamp.fromDate(new Date(orderData.createdAt)),
+        updatedAt: Timestamp.now(),
+        placedByUserId: orderData.placedByUserId || currentUser.id,
+    };
+
+    try {
+      const orderDocRef = doc(db, "orders", orderData.id);
+      await setDoc(orderDocRef, firestoreSafeOrder, { merge: true });
+      
+      fetchOrders(); // Re-fetch
+      toast({
+        title: isEditing ? "Pedido Actualizado" : "Pedido Creado",
+        description: `El pedido "${orderData.orderNumber}" ha sido ${isEditing ? 'actualizado' : 'creado'} exitosamente.`,
+      });
+      setEditingOrder(null);
+      setIsOrderDialogOpen(false);
+    } catch (error) {
+      console.error("Error al guardar pedido:", error);
+      toast({
+        title: "Error al Guardar Pedido",
+        description: "Ocurrió un error al guardar el pedido.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingOrder(false);
+    }
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    // TODO: Delete from Firestore
-     if (window.confirm("¿Estás seguro de que quieres eliminar este pedido?")) {
-        setOrders(prevOrders => prevOrders.filter(o => o.id !== orderId));
-        toast({ title: "Pedido Eliminado", variant: "destructive" });
+    if (!currentUser) return;
+    const orderToDelete = orders.find(o => o.id === orderId);
+    if (!orderToDelete) return;
+
+     if (window.confirm(`¿Estás seguro de que quieres eliminar el pedido "${orderToDelete.orderNumber}"?`)) {
+        try {
+            const orderDocRef = doc(db, "orders", orderId);
+            await deleteDoc(orderDocRef);
+            fetchOrders();
+            toast({ title: "Pedido Eliminado", description: `El pedido "${orderToDelete.orderNumber}" ha sido eliminado.`, variant: "default" });
+        } catch (error) {
+            console.error("Error al eliminar pedido:", error);
+            toast({ title: "Error al Eliminar Pedido", variant: "destructive" });
+        }
     }
   };
   
@@ -65,14 +182,14 @@ export default function OrdersPage() {
     setIsOrderDialogOpen(true);
   };
 
-  const filteredOrders = orders
+  const filteredOrders = useMemo(() => orders
     .filter(order => filterStatus === "Todos" || order.status === filterStatus)
     .filter(order => 
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (leads.find(l => l.id === order.leadId)?.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    ), [orders, filterStatus, searchTerm, leads]);
 
-  const pageIsLoading = authLoading || isLoading;
+  const pageIsLoading = authLoading || isLoadingOrders || isLoadingLeads || isLoadingUsers;
 
   return (
     <div className="flex flex-col gap-6">
@@ -80,7 +197,7 @@ export default function OrdersPage() {
         <h2 className="text-2xl font-semibold">{ordersNavItem?.label || "Pedidos"}</h2>
          <AddEditOrderDialog
           trigger={
-            <Button onClick={openNewOrderDialog} disabled={pageIsLoading}>
+            <Button onClick={openNewOrderDialog} disabled={pageIsLoading || isSubmittingOrder}>
               <PlusCircle className="mr-2 h-5 w-5" /> Añadir Pedido
             </Button>
           }
@@ -104,9 +221,10 @@ export default function OrdersPage() {
             className="pl-8 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={pageIsLoading}
           />
         </div>
-        <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | Order['status'])}>
+        <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | Order['status'])} disabled={pageIsLoading}>
           <SelectTrigger className="w-full sm:w-[200px]">
             <Filter className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Filtrar por estado" />
@@ -120,7 +238,7 @@ export default function OrdersPage() {
         </Select>
       </div>
 
-      {pageIsLoading ? (
+      {pageIsLoading && orders.length === 0 ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
