@@ -66,26 +66,35 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
     today.setHours(0,0,0,0); 
     const daysDiff = differenceInDays(dueDate, today);
 
-    if (task.completed) return <Badge variant="outline">Completada</Badge>;
-    if (daysDiff < 0) return <Badge variant="destructive">Vencida</Badge>;
-    if (daysDiff === 0) return <Badge variant="default" className="bg-amber-500 hover:bg-amber-600 text-white">Vence Hoy</Badge>;
-    if (daysDiff <= 3) return <Badge variant="secondary" className="bg-yellow-400 hover:bg-yellow-500 text-black">Vence Pronto</Badge>;
+    if (task.completed) return <Badge className="bg-green-500 hover:bg-green-600 text-white">Completada</Badge>;
+    if (daysDiff < 0) return <Badge className="bg-red-500 hover:bg-red-600 text-white">Vencida</Badge>;
+    if (daysDiff === 0) return <Badge className="bg-amber-500 hover:bg-amber-600 text-white">Vence Hoy</Badge>;
+    if (daysDiff <= 3) return <Badge className="bg-yellow-400 hover:bg-yellow-500 text-black">Vence Pronto</Badge>;
     return <Badge variant="outline">Vence {format(dueDate, "d MMM", { locale: es })}</Badge>;
   };
 
   const getPriorityBadge = () => {
     if (!task.priority) return null;
     let priorityText = task.priority;
-    if (task.priority === 'high') priorityText = 'Alta';
-    if (task.priority === 'medium') priorityText = 'Media';
-    if (task.priority === 'low') priorityText = 'Baja';
-    
+    let badgeClass = "capitalize";
+
     switch (task.priority) {
-      case 'high': return <Badge variant="destructive" className="capitalize">{priorityText}</Badge>;
-      case 'medium': return <Badge variant="default" className="bg-amber-500 hover:bg-amber-600 text-white capitalize">{priorityText}</Badge>;
-      case 'low': return <Badge variant="secondary" className="capitalize">{priorityText}</Badge>;
-      default: return <Badge variant="outline" className="capitalize">{priorityText}</Badge>;
+      case 'high': 
+        priorityText = 'Alta';
+        badgeClass += " bg-red-500 hover:bg-red-600 text-white"; // More specific red for high priority
+        break;
+      case 'medium': 
+        priorityText = 'Media';
+        badgeClass += " bg-amber-500 hover:bg-amber-600 text-white";
+        break;
+      case 'low': 
+        priorityText = 'Baja';
+        badgeClass += " bg-gray-400 hover:bg-gray-500 text-white"; // Example: Grey for low
+        break;
+      default: 
+        return <Badge variant="outline" className="capitalize">{priorityText}</Badge>;
     }
+    return <Badge className={badgeClass}>{priorityText}</Badge>;
   };
 
   return (
