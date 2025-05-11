@@ -24,6 +24,8 @@ import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2 } from 
 import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
+import { Timestamp } from "firebase/firestore";
+
 
 const formSchema = z.object({
   name: z.string().min(1, "El nombre de la campaña es obligatorio."),
@@ -123,7 +125,7 @@ export function AddEditEmailCampaignDialog({
         fromEmail: data.fromEmail,
         contactListId: data.contactListId,
         emailTemplateId: data.emailTemplateId,
-        scheduledAt: scheduledAtISO,
+        scheduledAt: scheduledAtISO, // This will be converted to Timestamp or null by parent
     };
     const success = await onSave(dataToSave, campaignToEdit?.id);
     if (success) {

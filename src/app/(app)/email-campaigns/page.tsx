@@ -73,7 +73,7 @@ export default function EmailCampaignsPage() {
       });
       setContactLists(fetchedLists);
     } catch (error) {
-      console.error("Error fetching contact lists:", error);
+      console.error("Error al obtener listas de contactos:", error);
       toast({ title: "Error al Cargar Listas", description: "No se pudieron cargar las listas de contactos.", variant: "destructive" });
     } finally {
       setIsLoadingContactLists(false);
@@ -95,7 +95,7 @@ export default function EmailCampaignsPage() {
         });
         setContacts(fetchedContacts);
     } catch (error) {
-        console.error("Error fetching all contacts:", error);
+        console.error("Error al obtener todos los contactos:", error);
         toast({ title: "Error al Cargar Contactos", description: "No se pudieron cargar los contactos generales.", variant: "destructive" });
     } finally {
         setIsLoadingContacts(false);
@@ -115,7 +115,7 @@ export default function EmailCampaignsPage() {
       } as EmailTemplate));
       setTemplates(fetchedTemplates);
     } catch (error) {
-      console.error("Error fetching templates:", error);
+      console.error("Error al obtener plantillas:", error);
       toast({ title: "Error al Cargar Plantillas", variant: "destructive" });
     } finally {
       setIsLoadingTemplates(false);
@@ -127,17 +127,19 @@ export default function EmailCampaignsPage() {
     try {
       const q = query(collection(db, "emailCampaigns"), orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
-      const fetchedCampaigns = querySnapshot.docs.map(docSnap => ({
+      const fetchedCampaigns = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
         id: docSnap.id,
-        ...docSnap.data(),
-        createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-        updatedAt: (docSnap.data().updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-        scheduledAt: (docSnap.data().scheduledAt as Timestamp)?.toDate().toISOString() || undefined,
-        sentAt: (docSnap.data().sentAt as Timestamp)?.toDate().toISOString() || undefined,
-      } as EmailCampaign));
+        ...data,
+        createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+        updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+        scheduledAt: (data.scheduledAt as Timestamp)?.toDate().toISOString() || undefined,
+        sentAt: (data.sentAt as Timestamp)?.toDate().toISOString() || undefined,
+      } as EmailCampaign});
       setCampaigns(fetchedCampaigns);
     } catch (error) {
-      console.error("Error fetching campaigns:", error);
+      console.error("Error al obtener campañas:", error);
       toast({ title: "Error al Cargar Campañas", variant: "destructive" });
     } finally {
       setIsLoadingCampaigns(false);
@@ -162,7 +164,7 @@ export default function EmailCampaignsPage() {
       fetchContactLists();
       return true;
     } catch (error) {
-      console.error("Error creating contact list:", error);
+      console.error("Error al crear lista de contactos:", error);
       toast({ title: "Error al Crear Lista", variant: "destructive" });
       return false;
     }
@@ -180,7 +182,7 @@ export default function EmailCampaignsPage() {
       toast({ title: "Lista Eliminada", description: `La lista "${listToDelete.name}" ha sido eliminada.` });
       fetchContactLists();
     } catch (error) {
-      console.error("Error deleting contact list:", error);
+      console.error("Error al eliminar lista de contactos:", error);
       toast({ title: "Error al Eliminar Lista", variant: "destructive" });
     } finally {
         setIsDeleteDialogOpen(false);
@@ -204,7 +206,7 @@ export default function EmailCampaignsPage() {
       fetchTemplates();
       return true;
     } catch (error) {
-      console.error("Error saving template:", error);
+      console.error("Error al guardar plantilla:", error);
       toast({ title: "Error al Guardar Plantilla", variant: "destructive" });
       return false;
     }
@@ -222,7 +224,7 @@ export default function EmailCampaignsPage() {
       toast({ title: "Plantilla Eliminada", description: `La plantilla "${templateToDelete.name}" fue eliminada.` });
       fetchTemplates();
     } catch (error) {
-      console.error("Error deleting template:", error);
+      console.error("Error al eliminar plantilla:", error);
       toast({ title: "Error al Eliminar Plantilla", variant: "destructive" });
     } finally {
       setIsDeleteTemplateDialogOpen(false);
@@ -238,18 +240,38 @@ export default function EmailCampaignsPage() {
   const handleSaveCampaign = async (campaignData: Omit<EmailCampaign, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'analytics' | 'sentAt'>, id?: string) => {
     try {
       const docRefId = id || doc(collection(db, "emailCampaigns")).id;
-      await setDoc(doc(db, "emailCampaigns", docRefId), {
+      const existingCampaign = id ? campaigns.find(c => c.id === id) : null;
+      
+      const dataToSave: any = {
         ...campaignData,
-        status: id ? campaigns.find(c=>c.id === id)?.status || EMAIL_CAMPAIGN_STATUSES[0] : EMAIL_CAMPAIGN_STATUSES[0], 
-        analytics: id ? campaigns.find(c=>c.id === id)?.analytics || {} : {},
-        sentAt: id ? campaigns.find(c=>c.id === id)?.sentAt : undefined,
+        status: existingCampaign?.status || EMAIL_CAMPAIGN_STATUSES[0], 
+        analytics: existingCampaign?.analytics || {},
         [id ? 'updatedAt' : 'createdAt']: serverTimestamp(),
-      }, { merge: true });
+      };
+
+      // Ensure sentAt is either a Timestamp or null, not undefined
+      if (campaignData.scheduledAt && (dataToSave.status === 'Enviada' || dataToSave.status === 'Enviando')) {
+         dataToSave.sentAt = existingCampaign?.sentAt ? Timestamp.fromDate(new Date(existingCampaign.sentAt)) : Timestamp.fromDate(new Date(campaignData.scheduledAt));
+      } else if (existingCampaign?.sentAt) {
+         dataToSave.sentAt = Timestamp.fromDate(new Date(existingCampaign.sentAt));
+      }
+      else {
+        dataToSave.sentAt = null; // Explicitly set to null if not sending now/previously sent
+      }
+      
+      if (campaignData.scheduledAt) {
+        dataToSave.scheduledAt = Timestamp.fromDate(new Date(campaignData.scheduledAt));
+      } else {
+        dataToSave.scheduledAt = null;
+      }
+
+
+      await setDoc(doc(db, "emailCampaigns", docRefId), dataToSave, { merge: true });
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: `Campaña "${campaignData.name}" guardada.` });
       fetchCampaigns();
       return true;
     } catch (error) {
-      console.error("Error saving campaign:", error);
+      console.error("Error al guardar campaña:", error);
       toast({ title: "Error al Guardar Campaña", variant: "destructive" });
       return false;
     }
@@ -267,7 +289,7 @@ export default function EmailCampaignsPage() {
       toast({ title: "Campaña Eliminada", description: `La campaña "${campaignToDelete.name}" fue eliminada.` });
       fetchCampaigns();
     } catch (error) {
-      console.error("Error deleting campaign:", error);
+      console.error("Error al eliminar campaña:", error);
       toast({ title: "Error al Eliminar Campaña", variant: "destructive" });
     } finally {
       setIsDeleteCampaignDialogOpen(false);
