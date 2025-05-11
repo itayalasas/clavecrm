@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import type { Task, Lead, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { es } from 'date-fns/locale'; 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
@@ -39,9 +38,10 @@ interface AddEditTaskDialogProps {
   leads: Lead[];
   users: User[]; 
   onSave: (task: Task) => void;
+  key?: string; // Key to force re-mount
 }
 
-const defaultTask: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
+const defaultTaskBase: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
   title: "",
   description: "",
   dueDate: undefined,
@@ -54,42 +54,48 @@ const defaultTask: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
 const NO_USER_SELECTED_VALUE = "__no_user_selected__";
 
-export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }: AddEditTaskDialogProps) {
+export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave, key: propKey }: AddEditTaskDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { currentUser } = useAuth();
+  const dialogId = useId(); // Unique ID for this instance of the dialog
+
+  const getInitialFormData = () => {
+    if (taskToEdit) {
+      return {
+        id: taskToEdit.id,
+        createdAt: taskToEdit.createdAt,
+        title: taskToEdit.title,
+        description: taskToEdit.description || "",
+        dueDate: taskToEdit.dueDate, // Keep as string from Firestore
+        completed: taskToEdit.completed,
+        relatedLeadId: taskToEdit.relatedLeadId || undefined,
+        priority: taskToEdit.priority || 'medium',
+        assigneeUserId: taskToEdit.assigneeUserId || undefined,
+        reporterUserId: taskToEdit.reporterUserId, 
+      };
+    }
+    return {
+      ...defaultTaskBase,
+      reporterUserId: currentUser?.id || "", 
+      assigneeUserId: currentUser?.id || undefined, 
+    };
+  };
   
-  const [formData, setFormData] = useState<Omit<Task, 'id' | 'createdAt'>>({
-    ...defaultTask,
-    reporterUserId: taskToEdit ? taskToEdit.reporterUserId : (currentUser?.id || ""),
-    assigneeUserId: taskToEdit ? taskToEdit.assigneeUserId : (currentUser?.id || undefined) 
-  });
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [formData, setFormData] = useState<Partial<Task>>(getInitialFormData());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    taskToEdit && taskToEdit.dueDate ? parseISO(taskToEdit.dueDate) : undefined
+  );
   const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
+
   useEffect(() => {
+    // This effect runs when the dialog is opened OR when taskToEdit changes (due to propKey changing parent)
     if (isOpen) {
-      if (taskToEdit) {
-        setFormData({
-          title: taskToEdit.title,
-          description: taskToEdit.description || "",
-          dueDate: taskToEdit.dueDate,
-          completed: taskToEdit.completed,
-          relatedLeadId: taskToEdit.relatedLeadId || undefined,
-          priority: taskToEdit.priority || 'medium',
-          assigneeUserId: taskToEdit.assigneeUserId || undefined,
-          reporterUserId: taskToEdit.reporterUserId, 
-        });
-        setSelectedDate(taskToEdit.dueDate ? parseISO(taskToEdit.dueDate) : undefined);
-      } else {
-        setFormData({
-          ...defaultTask,
-          reporterUserId: currentUser?.id || "", 
-          assigneeUserId: currentUser?.id || undefined, 
-        });
-        setSelectedDate(undefined);
-      }
+      const initialData = getInitialFormData();
+      setFormData(initialData);
+      setSelectedDate(initialData.dueDate && isValid(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined);
     }
-  }, [taskToEdit, isOpen, currentUser]);
+  }, [isOpen, propKey, taskToEdit, currentUser]); // Rely on propKey to reset when taskToEdit changes
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -121,30 +127,33 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
         return;
     }
 
-    const newTaskData: Omit<Task, 'id' | 'createdAt'> = {
-      ...formData,
+    // Construct the full task object for onSave
+    const taskToSave: Task = {
+      id: taskToEdit ? taskToEdit.id : '', // ID will be generated by parent if new
+      createdAt: taskToEdit ? taskToEdit.createdAt : new Date().toISOString(),
+      title: formData.title!,
+      description: formData.description || "",
+      dueDate: formData.dueDate, // Already an ISO string or undefined
+      completed: formData.completed || false,
+      relatedLeadId: formData.relatedLeadId === NO_LEAD_SELECTED_VALUE ? undefined : formData.relatedLeadId,
+      priority: formData.priority || 'medium',
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
-      reporterUserId: taskToEdit ? formData.reporterUserId : (currentUser?.id || ""), 
+      reporterUserId: taskToEdit ? formData.reporterUserId! : currentUser!.id,
     };
 
-    const finalTask: Task = {
-      ...newTaskData,
-      id: taskToEdit ? taskToEdit.id : `task-${Date.now()}`,
-      createdAt: taskToEdit ? taskToEdit.createdAt : new Date().toISOString(),
-    };
-    onSave(finalTask);
+    onSave(taskToSave);
     setIsOpen(false);
   };
 
   let assigneeNameDisplay = "Selecciona un usuario (opcional)";
-  if (formData.assigneeUserId) {
+  if (formData.assigneeUserId && formData.assigneeUserId !== NO_USER_SELECTED_VALUE) {
     const user = users.find(u => u.id === formData.assigneeUserId);
     if (user) {
       assigneeNameDisplay = user.name;
       if (currentUser && user.id === currentUser.id) {
         assigneeNameDisplay += " (Yo)";
       }
-    } else if (formData.assigneeUserId !== NO_USER_SELECTED_VALUE) {
+    } else {
         assigneeNameDisplay = "Usuario no encontrado";
     }
   }
@@ -153,7 +162,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
   const sortedUsers = users.slice().sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen} key={propKey || dialogId}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
@@ -164,15 +173,15 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="title" className="text-right">Título</Label>
-            <Input id="title" name="title" value={formData.title} onChange={handleChange} className="col-span-3" />
+            <Label htmlFor={`${dialogId}-title`} className="text-right">Título</Label>
+            <Input id={`${dialogId}-title`} name="title" value={formData.title || ""} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="description" className="text-right pt-2">Descripción</Label>
-            <Textarea id="description" name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={3} />
+            <Label htmlFor={`${dialogId}-description`} className="text-right pt-2">Descripción</Label>
+            <Textarea id={`${dialogId}-description`} name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={3} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="dueDate" className="text-right">Fecha de Vencimiento</Label>
+            <Label htmlFor={`${dialogId}-dueDate`} className="text-right">Fecha de Vencimiento</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -198,8 +207,8 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
             </Popover>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="priority" className="text-right">Prioridad</Label>
-            <Select name="priority" value={formData.priority} onValueChange={(value) => handleSelectChange('priority', value)}>
+            <Label htmlFor={`${dialogId}-priority`} className="text-right">Prioridad</Label>
+            <Select name="priority" value={formData.priority || 'medium'} onValueChange={(value) => handleSelectChange('priority', value)}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona prioridad" />
               </SelectTrigger>
@@ -211,7 +220,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="assigneeUserId" className="text-right">Asignar a</Label>
+            <Label htmlFor={`${dialogId}-assigneeUserId`} className="text-right">Asignar a</Label>
             <Popover open={assigneePopoverOpen} onOpenChange={setAssigneePopoverOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -249,13 +258,12 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
                       {sortedUsers.map((user) => (
                         <CommandItem
                           key={user.id}
-                          value={user.name} // Use user.name for filtering value
+                          value={user.name} 
                           onSelect={(currentValue) => {
-                            // Find user by name to get ID for handleSelectChange
-                            const selectedUserObj = sortedUsers.find(u => u.name === currentValue);
+                            const selectedUserObj = sortedUsers.find(u => u.name.toLowerCase() === currentValue.toLowerCase());
                             if (selectedUserObj) {
                               handleSelectChange('assigneeUserId', selectedUserObj.id);
-                            } else if (currentValue === NO_USER_SELECTED_VALUE) { // Handle re-selecting "Sin asignar" if it was typed
+                            } else if (currentValue === NO_USER_SELECTED_VALUE) { 
                                handleSelectChange('assigneeUserId', NO_USER_SELECTED_VALUE);
                             }
                             setAssigneePopoverOpen(false);
@@ -277,7 +285,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
             </Popover>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="relatedLeadId" className="text-right">Lead Relacionado</Label>
+            <Label htmlFor={`${dialogId}-relatedLeadId`} className="text-right">Lead Relacionado</Label>
             <Select
               name="relatedLeadId"
               value={formData.relatedLeadId || NO_LEAD_SELECTED_VALUE}
@@ -305,4 +313,3 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
     </Dialog>
   );
 }
-

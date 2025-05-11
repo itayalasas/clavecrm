@@ -1,33 +1,71 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Task, Lead, User } from "@/lib/types";
-import { INITIAL_TASKS, INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants";
+import { INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants"; // Keep INITIAL_LEADS for now if AddEditTaskDialog depends on it directly
 import { TaskItem } from "@/components/tasks/task-item";
 import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Search, Filter } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Removed TabsContent as it's not used directly here
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp } from "firebase/firestore";
+
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS); // Continue using initial leads for now
   const [users, setUsers] = useState<User[]>([]);
+  
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
+
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
 
   const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
-  const { getAllUsers, currentUser } = useAuth(); // Added currentUser
+  const { getAllUsers, currentUser } = useAuth();
   const { toast } = useToast();
+
+  const fetchTasks = useCallback(async () => {
+    if (!currentUser) {
+      setIsLoadingTasks(false);
+      return;
+    }
+    setIsLoadingTasks(true);
+    try {
+      const tasksCollectionRef = collection(db, "tasks");
+      // Basic query, can be expanded with role-based filtering if needed later
+      // For now, filtering is client-side based on currentUser and role
+      const q = query(tasksCollectionRef, orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedTasks = querySnapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        // Ensure date fields are consistently strings if stored as Timestamps
+        createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+        dueDate: (docSnap.data().dueDate as Timestamp)?.toDate().toISOString() || undefined,
+      } as Task));
+      setTasks(fetchedTasks);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+      toast({
+        title: "Error al Cargar Tareas",
+        description: "No se pudieron cargar las tareas desde la base de datos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  }, [currentUser, toast]);
 
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
@@ -47,35 +85,108 @@ export default function TasksPage() {
   }, [getAllUsers, toast]);
 
   useEffect(() => {
-    // Simulate fetching tasks and leads (can be replaced with actual API calls)
-    setTasks(INITIAL_TASKS);
-    setLeads(INITIAL_LEADS);
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleSaveTask = (task: Task) => {
-    setTasks(prevTasks => {
-      const existingTaskIndex = prevTasks.findIndex(t => t.id === task.id);
-      if (existingTaskIndex > -1) {
-        const updatedTasks = [...prevTasks];
-        updatedTasks[existingTaskIndex] = task;
-        return updatedTasks;
+  useEffect(() => {
+    if (currentUser) { // Only fetch tasks if user is loaded
+      fetchTasks();
+    } else {
+      setTasks([]); // Clear tasks if no user
+    }
+  }, [currentUser, fetchTasks]);
+
+
+  const handleSaveTask = async (taskData: Task) => {
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingTask(true);
+    const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
+    const taskId = isEditing ? taskData.id : doc(collection(db, "tasks")).id;
+
+    const taskToSave: Task = {
+      ...taskData,
+      id: taskId,
+      reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id,
+      createdAt: isEditing ? taskData.createdAt : new Date().toISOString(),
+      // Ensure dueDate is a string or undefined, not a Date object before saving
+      dueDate: taskData.dueDate ? (typeof taskData.dueDate === 'string' ? taskData.dueDate : new Date(taskData.dueDate).toISOString()) : undefined,
+    };
+    
+    try {
+      const taskDocRef = doc(db, "tasks", taskId);
+      await setDoc(taskDocRef, taskToSave); // setDoc creates or overwrites
+
+      if (isEditing) {
+        setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t));
+      } else {
+        setTasks(prevTasks => [taskToSave, ...prevTasks]);
       }
-      return [task, ...prevTasks]; // Add new tasks to the top
-    });
-    setEditingTask(null);
+      toast({
+        title: isEditing ? "Tarea Actualizada" : "Tarea Creada",
+        description: `La tarea "${taskToSave.title}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
+      });
+      setEditingTask(null);
+    } catch (error) {
+      console.error("Error saving task:", error);
+      toast({
+        title: "Error al Guardar Tarea",
+        description: "Ocurrió un error al guardar la tarea.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingTask(false);
+    }
   };
 
-  const handleToggleComplete = (taskId: string) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId ? { ...task, completed: !task.completed } : task
-      )
-    );
+  const handleToggleComplete = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const updatedTask = { ...task, completed: !task.completed };
+    try {
+      const taskDocRef = doc(db, "tasks", taskId);
+      await updateDoc(taskDocRef, { completed: updatedTask.completed });
+      setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? updatedTask : t));
+      toast({
+        title: "Tarea Actualizada",
+        description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
+      });
+    } catch (error) {
+      console.error("Error toggling task complete status:", error);
+      toast({
+        title: "Error al Actualizar Tarea",
+        description: "No se pudo actualizar el estado de la tarea.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  const handleDeleteTask = async (taskId: string) => {
+    const taskToDelete = tasks.find(t => t.id === taskId);
+    if (!taskToDelete) return;
+
+    if (window.confirm(`¿Estás seguro de que quieres eliminar la tarea "${taskToDelete.title}"?`)) {
+      try {
+        const taskDocRef = doc(db, "tasks", taskId);
+        await deleteDoc(taskDocRef);
+        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+        toast({
+          title: "Tarea Eliminada",
+          description: `La tarea "${taskToDelete.title}" ha sido eliminada.`,
+          variant: "destructive",
+        });
+      } catch (error) {
+        console.error("Error deleting task:", error);
+        toast({
+          title: "Error al Eliminar Tarea",
+          description: "Ocurrió un error al eliminar la tarea.",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const filteredTasks = useMemo(() => {
@@ -83,11 +194,9 @@ export default function TasksPage() {
 
     return tasks
       .filter(task => {
-        // Visibility filter based on user role
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
-          return true; // Admins/Supervisors see all tasks initially
+          return true; 
         }
-        // Regular users see tasks they reported or are assigned to
         return task.reporterUserId === currentUser.id || task.assigneeUserId === currentUser.id;
       })
       .filter(task => {
@@ -103,39 +212,33 @@ export default function TasksPage() {
         task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .sort((a,b) => Number(a.completed) - Number(b.completed));
-  }, [tasks, searchTerm, filterStatus, filterPriority, currentUser]); // Added currentUser
+      // Primary sort by completion status (incomplete first), then by creation date (newest first)
+      .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [tasks, searchTerm, filterStatus, filterPriority, currentUser]);
 
   const openDialogForNewTask = () => {
-    setEditingTask(null);
+    setEditingTask(null); // Ensure it's a new task
   };
 
+  const isLoading = isLoadingTasks || isLoadingUsers || (!currentUser && tasks.length === 0);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{tasksNavItem ? tasksNavItem.label : "Gestión de Tareas"}</h2>
-        <AddEditTaskDialog
+         <AddEditTaskDialog
             trigger={
-              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers}>
+              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers || isSubmittingTask}>
                 <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
-            taskToEdit={editingTask}
-            leads={leads}
-            users={users}
+            taskToEdit={editingTask} // This will be null for new tasks
+            leads={leads} // Pass leads for relation
+            users={users} // Pass users for assignment
             onSave={handleSaveTask}
+            key={editingTask ? `edit-${editingTask.id}` : 'new-task'} // Force re-mount to reset dialog state
           />
-        {editingTask && (
-          <AddEditTaskDialog
-            trigger={<span className="hidden" />}
-            taskToEdit={editingTask}
-            leads={leads}
-            users={users}
-            onSave={handleSaveTask}
-          />
-        )}
+        {/* Dialog for editing is implicitly handled by setting editingTask and re-rendering AddEditTaskDialog if its open state is managed internally or via a key */}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -173,7 +276,7 @@ export default function TasksPage() {
         </TabsList>
       </Tabs>
 
-      {isLoadingUsers || (!currentUser && tasks.length > 0) ? ( // Added loading state for when currentUser is not yet available but tasks might be
+      {isLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
