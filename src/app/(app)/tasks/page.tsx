@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -28,6 +27,7 @@ export default function TasksPage() {
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
@@ -52,9 +52,8 @@ export default function TasksPage() {
           id: docSnap.id,
           title: data.title as string,
           description: data.description as string | undefined,
-          // createdAt and dueDate are stored as ISO strings
-          createdAt: data.createdAt as string || new Date().toISOString(), // Fallback if missing
-          dueDate: data.dueDate as string | undefined, // Can be undefined
+          createdAt: data.createdAt as string || new Date().toISOString(), 
+          dueDate: data.dueDate as string | undefined, 
           completed: data.completed as boolean,
           relatedLeadId: data.relatedLeadId as string | undefined,
           priority: data.priority as Task['priority'] | undefined,
@@ -127,7 +126,7 @@ export default function TasksPage() {
     
     try {
       const taskDocRef = doc(db, "tasks", taskId);
-      await setDoc(taskDocRef, taskToSave); 
+      await setDoc(taskDocRef, taskToSave, { merge: isEditing }); 
 
       if (isEditing) {
         setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t));
@@ -139,6 +138,7 @@ export default function TasksPage() {
         description: `La tarea "${taskToSave.title}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
       });
       setEditingTask(null);
+      setIsTaskDialogOpen(false); // Close dialog after saving
     } catch (error) {
       console.error("Error al guardar tarea:", error);
       toast({
@@ -227,6 +227,12 @@ export default function TasksPage() {
 
   const openDialogForNewTask = () => {
     setEditingTask(null); 
+    setIsTaskDialogOpen(true);
+  };
+
+  const openDialogForEditTask = (task: Task) => {
+    setEditingTask(task);
+    setIsTaskDialogOpen(true);
   };
 
   const isLoading = authLoading || isLoadingTasks || isLoadingUsers;
@@ -241,11 +247,13 @@ export default function TasksPage() {
                 <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
+            isOpen={isTaskDialogOpen}
+            onOpenChange={setIsTaskDialogOpen}
             taskToEdit={editingTask} 
             leads={leads} 
             users={users} 
             onSave={handleSaveTask}
-            key={editingTask ? `edit-${editingTask.id}` : 'new-task'}
+            key={editingTask ? `edit-${editingTask.id}` : 'new-task-dialog'}
           />
       </div>
 
@@ -299,7 +307,7 @@ export default function TasksPage() {
               leads={leads}
               users={users}
               onToggleComplete={handleToggleComplete}
-              onEdit={() => setEditingTask(task)}
+              onEdit={() => openDialogForEditTask(task)}
               onDelete={handleDeleteTask}
             />
           ))}
@@ -313,4 +321,3 @@ export default function TasksPage() {
     </div>
   );
 }
-
