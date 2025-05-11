@@ -153,11 +153,13 @@ export default function TicketsPage() {
     };
     
     try {
-      const ticketDocRef = doc(db, "tickets", ticketData.id);
+      const ticketDocRef = doc(db, "tickets", ticketToSave.id);
       const firestoreSafeTicket = {
         ...ticketToSave,
         createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
         updatedAt: ticketToSave.updatedAt ? Timestamp.fromDate(new Date(ticketToSave.updatedAt)) : Timestamp.now(),
+        assigneeUserId: ticketToSave.assigneeUserId || null, // Ensure null for Firestore
+        relatedLeadId: ticketToSave.relatedLeadId || null, // Ensure null for Firestore
         comments: (ticketToSave.comments || []).map(comment => ({
           ...comment,
           createdAt: Timestamp.fromDate(new Date(comment.createdAt)),
@@ -167,8 +169,8 @@ export default function TicketsPage() {
       await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true }); 
 
       if (isEditing) {
-        setTickets(prevTickets => prevTickets.map(t => t.id === ticketData.id ? ticketToSave : t)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Consider more complex sort
+        setTickets(prevTickets => prevTickets.map(t => t.id === ticketToSave.id ? ticketToSave : t)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) 
         );
       } else {
         setTickets(prevTickets => [ticketToSave, ...prevTickets]
