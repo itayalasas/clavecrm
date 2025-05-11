@@ -5,7 +5,7 @@ import type { Ticket, Lead, User, TicketPriority, TicketStatus, Comment } from "
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase } from "lucide-react";
+import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase, X } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -179,8 +179,8 @@ export function TicketItem({
 
   const handleSaveSolution = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!solutionDescription.trim() && !solutionFile && currentSolutionAttachments.length === 0) {
-      toast({ title: "Solución Vacía", description: "Proporciona una descripción o adjunta un archivo para la solución.", variant: "destructive" });
+    if (solutionStatus !== 'En Progreso' && !solutionDescription.trim() && !solutionFile && currentSolutionAttachments.length === 0) {
+      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant: "destructive" });
       return;
     }
     if (!currentUser || !isAssignee) return;
@@ -234,7 +234,7 @@ export function TicketItem({
         const updatedAttachments = currentSolutionAttachments.filter(att => att.url !== attachmentUrlToRemove);
         setCurrentSolutionAttachments(updatedAttachments);
         // Immediately update Firestore as well if needed, or rely on next save
-        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status);
+        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status); // Use current ticket.status or solutionStatus? If this action means "save current state", then solutionStatus.
         toast({ title: "Adjunto de solución eliminado" });
     } catch (error: any) {
         console.error("Error eliminando adjunto de solución:", error);
@@ -382,7 +382,7 @@ export function TicketItem({
                                     <Paperclip className="h-3 w-3 inline mr-1" />{att.name}
                                   </a>
                                   <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveSolutionAttachment(att.url)} title="Eliminar adjunto de solución" disabled={isUploadingSolutionAttachment}>
-                                    <XCircle className="h-3 w-3 text-destructive"/>
+                                    <X className="h-3 w-3 text-destructive"/>
                                   </Button>
                                 </li>
                               ))}
