@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Ticket, Lead, User, TicketStatus, TicketPriority } from "@/lib/types";
-import { INITIAL_TICKETS, INITIAL_LEADS, INITIAL_USERS, NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
+import { INITIAL_TICKETS, INITIAL_LEADS, NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
 import { TicketItem } from "@/components/tickets/ticket-item";
 import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, Search, Filter } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -27,17 +30,36 @@ export default function TicketsPage() {
   const [filterAssignee, setFilterAssignee] = useState<"Todos" | string>("Todos");
 
   const { toast } = useToast();
+  const { getAllUsers } = useAuth();
   const ticketsNavItem = NAV_ITEMS.find(item => item.href === '/tickets');
 
+  const fetchUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
+    try {
+      const fetchedUsers = await getAllUsers();
+      setUsers(fetchedUsers);
+    } catch (error) {
+      console.error("Error fetching users for tickets page:", error);
+      toast({
+        title: "Error al Cargar Usuarios",
+        description: "No se pudieron cargar los datos de los usuarios para la asignación de tickets.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [getAllUsers, toast]);
+
+
   useEffect(() => {
-    // Simulate fetching data
+    // Simulate fetching tickets and leads
     setTickets(INITIAL_TICKETS.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     setLeads(INITIAL_LEADS);
-    setUsers(INITIAL_USERS);
-  }, []);
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleSaveTicket = (ticket: Ticket) => {
-    const isEditOperation = !!editingTicket; // Capture if it was an edit before clearing editingTicket
+    const isEditOperation = !!editingTicket;
 
     setTickets(prevTickets => {
       const existingTicketIndex = prevTickets.findIndex(t => t.id === ticket.id);
@@ -46,9 +68,8 @@ export default function TicketsPage() {
         newTickets = [...prevTickets];
         newTickets[existingTicketIndex] = ticket;
       } else {
-        newTickets = [ticket, ...prevTickets]; // Add new tickets to the top
+        newTickets = [ticket, ...prevTickets];
       }
-      // Re-sort by creation date desc, then by status (open ones first)
       return newTickets.sort((a, b) => {
         const statusOrder = (s: TicketStatus) => TICKET_STATUSES.indexOf(s);
         if (statusOrder(a.status) !== statusOrder(b.status)) {
@@ -116,11 +137,11 @@ export default function TicketsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{ticketsNavItem ? ticketsNavItem.label : "Gestión de Tickets"}</h2>
-        <Button onClick={openNewTicketDialog}>
+        <Button onClick={openNewTicketDialog} disabled={isLoadingUsers}>
           <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
         </Button>
         <AddEditTicketDialog
-          trigger={<span className="hidden" />} // Dialog is controlled by isDialogOpen state
+          trigger={<span className="hidden" />}
           isOpen={isDialogOpen}
           onOpenChange={setIsDialogOpen}
           ticketToEdit={editingTicket}
@@ -151,7 +172,7 @@ export default function TicketsPage() {
             {TICKET_PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)}>
+        <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers}>
           <SelectTrigger className="w-full">
             <Filter className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Filtrar por asignado" />
@@ -172,7 +193,13 @@ export default function TicketsPage() {
         </TabsList>
       </Tabs>
 
-      {filteredTickets.length > 0 ? (
+      {isLoadingUsers ? (
+         <div className="space-y-4">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      ) : filteredTickets.length > 0 ? (
         <div className="space-y-4">
           {filteredTickets.map(ticket => (
             <TicketItem
@@ -194,4 +221,3 @@ export default function TicketsPage() {
     </div>
   );
 }
-

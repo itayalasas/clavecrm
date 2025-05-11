@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import type { Task, Lead, User } from "@/lib/types"; // Added User
-import { INITIAL_TASKS, INITIAL_LEADS, NAV_ITEMS, INITIAL_USERS } from "@/lib/constants"; // Added INITIAL_USERS
+import { useState, useEffect, useMemo, useCallback } from "react";
+import type { Task, Lead, User } from "@/lib/types";
+import { INITIAL_TASKS, INITIAL_LEADS, NAV_ITEMS } from "@/lib/constants";
 import { TaskItem } from "@/components/tasks/task-item";
 import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
@@ -11,24 +11,47 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Search, Filter } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [users, setUsers] = useState<User[]>([]); // Added users state
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
 
   const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
+  const { getAllUsers } = useAuth();
+  const { toast } = useToast();
+
+  const fetchUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
+    try {
+      const fetchedUsers = await getAllUsers();
+      setUsers(fetchedUsers);
+    } catch (error) {
+      console.error("Error fetching users for tasks page:", error);
+      toast({
+        title: "Error al Cargar Usuarios",
+        description: "No se pudieron cargar los datos de los usuarios para la asignación de tareas.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [getAllUsers, toast]);
 
   useEffect(() => {
-    // Simulate fetching data
+    // Simulate fetching tasks and leads (can be replaced with actual API calls)
     setTasks(INITIAL_TASKS);
     setLeads(INITIAL_LEADS);
-    setUsers(INITIAL_USERS); // Initialize users
-  }, []);
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleSaveTask = (task: Task) => {
     setTasks(prevTasks => {
@@ -70,12 +93,12 @@ export default function TasksPage() {
         task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) 
-      .sort((a,b) => Number(a.completed) - Number(b.completed)); 
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a,b) => Number(a.completed) - Number(b.completed));
   }, [tasks, searchTerm, filterStatus, filterPriority]);
-  
+
   const openDialogForNewTask = () => {
-    setEditingTask(null); 
+    setEditingTask(null);
   };
 
 
@@ -85,21 +108,21 @@ export default function TasksPage() {
         <h2 className="text-2xl font-semibold">{tasksNavItem ? tasksNavItem.label : "Gestión de Tareas"}</h2>
         <AddEditTaskDialog
             trigger={
-              <Button onClick={openDialogForNewTask}>
+              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers}>
                 <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
-            taskToEdit={editingTask} 
-            leads={leads}
-            users={users} // Pass users
-            onSave={handleSaveTask}
-          />
-        {editingTask && ( 
-          <AddEditTaskDialog
-            trigger={<span className="hidden" />} 
             taskToEdit={editingTask}
             leads={leads}
-            users={users} // Pass users
+            users={users}
+            onSave={handleSaveTask}
+          />
+        {editingTask && (
+          <AddEditTaskDialog
+            trigger={<span className="hidden" />}
+            taskToEdit={editingTask}
+            leads={leads}
+            users={users}
             onSave={handleSaveTask}
           />
         )}
@@ -140,14 +163,20 @@ export default function TasksPage() {
         </TabsList>
       </Tabs>
 
-      {filteredTasks.length > 0 ? (
+      {isLoadingUsers ? (
+        <div className="space-y-4">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+      ) : filteredTasks.length > 0 ? (
         <div className="space-y-4">
           {filteredTasks.map(task => (
             <TaskItem
               key={task.id}
               task={task}
               leads={leads}
-              users={users} // Pass users
+              users={users}
               onToggleComplete={handleToggleComplete}
               onEdit={() => setEditingTask(task)}
               onDelete={handleDeleteTask}
