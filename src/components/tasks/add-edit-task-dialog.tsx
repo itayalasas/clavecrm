@@ -38,7 +38,7 @@ interface AddEditTaskDialogProps {
   leads: Lead[];
   users: User[]; 
   onSave: (task: Task) => void;
-  key?: string; // Key to force re-mount
+  // key?: string; // Key to force re-mount - Removed as key is a reserved prop
 }
 
 const defaultTaskBase: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
@@ -54,7 +54,7 @@ const defaultTaskBase: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
 const NO_USER_SELECTED_VALUE = "__no_user_selected__";
 
-export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave, key: propKey }: AddEditTaskDialogProps) {
+export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }: AddEditTaskDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { currentUser } = useAuth();
   const dialogId = useId(); // Unique ID for this instance of the dialog
@@ -83,19 +83,19 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave, k
   
   const [formData, setFormData] = useState<Partial<Task>>(getInitialFormData());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    taskToEdit && taskToEdit.dueDate ? parseISO(taskToEdit.dueDate) : undefined
+    taskToEdit && taskToEdit.dueDate && isValid(parseISO(taskToEdit.dueDate)) ? parseISO(taskToEdit.dueDate) : undefined
   );
   const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
 
   useEffect(() => {
-    // This effect runs when the dialog is opened OR when taskToEdit changes (due to propKey changing parent)
+    // This effect runs when the dialog is opened OR when taskToEdit changes (due to parent re-mounting with new key)
     if (isOpen) {
       const initialData = getInitialFormData();
       setFormData(initialData);
       setSelectedDate(initialData.dueDate && isValid(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined);
     }
-  }, [isOpen, propKey, taskToEdit, currentUser]); // Rely on propKey to reset when taskToEdit changes
+  }, [isOpen, taskToEdit, currentUser]); // taskToEdit changes will trigger this due to parent's key
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -162,7 +162,7 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave, k
   const sortedUsers = users.slice().sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen} key={propKey || dialogId}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
