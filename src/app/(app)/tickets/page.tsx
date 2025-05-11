@@ -17,17 +17,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion } from "firebase/firestore";
 import { ref as storageRef, deleteObject } from "firebase/storage";
-import { addMonths, format, parseISO, startOfMonth } from "date-fns"; // format, parseISO used in TicketItem and AddEdit...Dialog
+import { format, parseISO, startOfMonth } from "date-fns"; // format, parseISO used in TicketItem and AddEdit...Dialog
 import { es } from 'date-fns/locale';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]); // Keep using initial leads, or fetch if needed
+  const [leads, setLeads] = useState<Lead[]>([]); 
   const [users, setUsers] = useState<User[]>([]);
   
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
-  const [isLoadingLeads, setIsLoadingLeads] = useState(true); // Added for leads
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true); 
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -50,7 +50,6 @@ export default function TicketsPage() {
     setIsLoadingTickets(true);
     try {
       const ticketsCollectionRef = collection(db, "tickets");
-      // Add more complex querying if needed, e.g., based on user role for visibility
       const q = query(ticketsCollectionRef, orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedTickets = querySnapshot.docs.map(docSnap => {
@@ -70,7 +69,10 @@ export default function TicketsPage() {
           comments: (data.comments || []).map((comment: any) => ({
             ...comment,
             createdAt: (comment.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+            attachments: comment.attachments || [],
           })),
+          solutionDescription: data.solutionDescription || undefined,
+          solutionAttachments: data.solutionAttachments || [],
         } as Ticket;
       });
       setTickets(fetchedTickets);
@@ -103,10 +105,10 @@ export default function TicketsPage() {
     }
   }, [getAllUsers, toast]);
 
-  const fetchLeads = useCallback(async () => { // Added fetchLeads
+  const fetchLeads = useCallback(async () => { 
     setIsLoadingLeads(true);
     try {
-      const leadsCollectionRef = collection(db, "leads"); // Assuming 'leads' collection
+      const leadsCollectionRef = collection(db, "leads"); 
       const querySnapshot = await getDocs(leadsCollectionRef);
       const fetchedLeads = querySnapshot.docs.map(docSnap => ({
         id: docSnap.id,
@@ -128,7 +130,7 @@ export default function TicketsPage() {
   useEffect(() => {
     if (!authLoading) {
         fetchUsers();
-        fetchLeads(); // Fetch leads
+        fetchLeads(); 
         if (currentUser) {
           fetchTickets();
         } else {
@@ -145,11 +147,14 @@ export default function TicketsPage() {
       return;
     }
     setIsSubmittingTicket(true);
-    const isEditing = !!ticketData.id && tickets.some(t => t.id === ticketData.id);
+    const isEditing = tickets.some(t => t.id === ticketData.id);
     
     const ticketToSave: Ticket = {
       ...ticketData,
-      comments: ticketData.comments || [], // Ensure comments is an array
+      comments: ticketData.comments || [], 
+      solutionDescription: ticketData.solutionDescription || "",
+      solutionAttachments: ticketData.solutionAttachments || [],
+      updatedAt: new Date().toISOString(), // Always update this on save
     };
     
     try {
@@ -157,9 +162,9 @@ export default function TicketsPage() {
       const firestoreSafeTicket = {
         ...ticketToSave,
         createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
-        updatedAt: ticketToSave.updatedAt ? Timestamp.fromDate(new Date(ticketToSave.updatedAt)) : Timestamp.now(),
-        assigneeUserId: ticketToSave.assigneeUserId || null, // Ensure null for Firestore
-        relatedLeadId: ticketToSave.relatedLeadId || null, // Ensure null for Firestore
+        updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
+        assigneeUserId: ticketToSave.assigneeUserId || null, 
+        relatedLeadId: ticketToSave.relatedLeadId || null, 
         comments: (ticketToSave.comments || []).map(comment => ({
           ...comment,
           createdAt: Timestamp.fromDate(new Date(comment.createdAt)),
@@ -201,47 +206,45 @@ export default function TicketsPage() {
 
     if (window.confirm(`¿Estás seguro de que quieres eliminar el ticket "${ticketToDelete.title}"? Esta acción también eliminará los adjuntos asociados.`)) {
       try {
-        // Delete attachments from Firebase Storage
+        // Delete ticket attachments
         if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
           for (const attachment of ticketToDelete.attachments) {
             try {
-              const fileRef = storageRef(storage, attachment.url);
-              await deleteObject(fileRef);
-            } catch (storageError: any) {
-              // Log error but continue, e.g., file might not exist or permissions issue
-              console.error(`Error eliminando adjunto ${attachment.name} de Storage:`, storageError);
-              if (storageError.code !== 'storage/object-not-found') {
-                 toast({ title: "Advertencia", description: `No se pudo eliminar el adjunto ${attachment.name}. Puede que necesite ser eliminado manualmente.`, variant: "default"});
-              }
-            }
+              const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
+            } catch (e) { console.warn("Failed to delete ticket attachment", attachment.url, e); }
           }
         }
-         // Delete comments attachments if any (assuming comments are stored with tickets)
+         // Delete solution attachments
+        if (ticketToDelete.solutionAttachments && ticketToDelete.solutionAttachments.length > 0) {
+          for (const attachment of ticketToDelete.solutionAttachments) {
+             try {
+              const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
+            } catch (e) { console.warn("Failed to delete solution attachment", attachment.url, e); }
+          }
+        }
+        // Delete comment attachments
         if (ticketToDelete.comments && ticketToDelete.comments.length > 0) {
           for (const comment of ticketToDelete.comments) {
             if (comment.attachments && comment.attachments.length > 0) {
               for (const attachment of comment.attachments) {
                  try {
-                    const fileRef = storageRef(storage, attachment.url);
-                    await deleteObject(fileRef);
-                  } catch (storageError: any) {
-                    console.error(`Error eliminando adjunto de comentario ${attachment.name} de Storage:`, storageError);
-                     if (storageError.code !== 'storage/object-not-found') {
-                       toast({ title: "Advertencia", description: `No se pudo eliminar el adjunto de comentario ${attachment.name}.`, variant: "default"});
-                    }
-                  }
+                    const fileRef = storageRef(storage, attachment.url); await deleteObject(fileRef);
+                  } catch (e) { console.warn("Failed to delete comment attachment", attachment.url, e); }
               }
             }
           }
         }
 
-
         const ticketDocRef = doc(db, "tickets", ticketId);
         await deleteDoc(ticketDocRef);
+        // Note: Subcollection 'comments' is NOT automatically deleted by Firebase.
+        // This would require a Cloud Function for robust cleanup or manual deletion if many comments.
+        // For this frontend, we just remove the ticket from state.
+
         setTickets(prevTickets => prevTickets.filter(ticket => ticket.id !== ticketId));
         toast({
           title: "Ticket Eliminado",
-          description: `El ticket "${ticketToDelete.title}" ha sido eliminado.`,
+          description: `El ticket "${ticketToDelete.title}" ha sido eliminado. Es posible que los comentarios asociados necesiten ser eliminados manualmente o mediante una función de backend.`,
           variant: "destructive",
         });
       } catch (error) {
@@ -267,9 +270,9 @@ export default function TicketsPage() {
     }
 
     const newComment: Comment = {
-      id: doc(collection(db, "tickets", ticketId, "comments")).id, // Or generate client-side UUID
+      id: doc(collection(db, "tickets", ticketId, "comments")).id, 
       userId: currentUser.id,
-      userName: currentUser.name,
+      userName: currentUser.name || "Usuario Anónimo",
       userAvatarUrl: currentUser.avatarUrl,
       text: commentText,
       createdAt: new Date().toISOString(),
@@ -278,28 +281,93 @@ export default function TicketsPage() {
 
     try {
       const ticketDocRef = doc(db, "tickets", ticketId);
+      // Add comment to subcollection for better scalability
+      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments"), newComment.id);
+      await setDoc(commentDocRef, {
+        ...newComment,
+         createdAt: Timestamp.fromDate(new Date(newComment.createdAt)), // Store as Timestamp
+      });
+      
+      // Update the main ticket's 'updatedAt' and its 'comments' array (optional, can be heavy)
+      // For simplicity here, we'll update updatedAt and optimistically add to local state's comments.
+      // A more robust solution might fetch comments separately or use a count.
       await updateDoc(ticketDocRef, {
-        comments: arrayUnion({
+        updatedAt: Timestamp.now(),
+        // Optionally, store a small number of recent comments or just a count in the main ticket.
+        // For this example, we'll update the local state's comment array.
+         comments: arrayUnion({ // This is okay for a few comments, but not for hundreds.
           ...newComment,
-          createdAt: Timestamp.fromDate(new Date(newComment.createdAt)) // Store as Timestamp
-        }),
-        updatedAt: Timestamp.now() // Also update ticket's updatedAt field
+          createdAt: Timestamp.fromDate(new Date(newComment.createdAt))
+        })
       });
 
-      // Optimistically update local state
-      const updatedTickets = [...tickets];
-      const updatedTicket = { ...updatedTickets[ticketIndex] };
-      updatedTicket.comments = [...(updatedTicket.comments || []), newComment];
-      updatedTicket.updatedAt = new Date().toISOString();
-      updatedTickets[ticketIndex] = updatedTicket;
-      setTickets(updatedTickets);
+
+      setTickets(prevTickets => {
+        const updatedTickets = [...prevTickets];
+        const updatedTicket = { ...updatedTickets[ticketIndex] };
+        updatedTicket.comments = [...(updatedTicket.comments || []), newComment].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        updatedTicket.updatedAt = new Date().toISOString();
+        updatedTickets[ticketIndex] = updatedTicket;
+        return updatedTickets;
+      });
 
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
-      // TODO: Implement email notification to assignee/reporter if different from commenter
-      // This would typically be done via a Firebase Cloud Function triggered on comment creation.
     } catch (error) {
       console.error("Error al añadir comentario:", error);
       toast({title: "Error al Comentar", description: "No se pudo añadir tu comentario.", variant: "destructive"});
+    }
+  };
+
+  const handleUpdateTicketSolution = async (
+    ticketId: string, 
+    solutionDescription: string, 
+    solutionAttachments: { name: string; url: string }[],
+    status: TicketStatus
+  ) => {
+    if (!currentUser) {
+        toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+        return;
+    }
+    const ticketIndex = tickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) {
+       toast({title: "Error", description: "Ticket no encontrado.", variant: "destructive"});
+       return;
+    }
+
+    const ticketToUpdate = tickets[ticketIndex];
+    if (currentUser.id !== ticketToUpdate.assigneeUserId) {
+        toast({title: "Acción no permitida", description: "Solo el usuario asignado puede registrar la solución.", variant: "destructive"});
+        return;
+    }
+
+    const updatedTicketData = {
+        solutionDescription,
+        solutionAttachments,
+        status,
+        updatedAt: Timestamp.now(),
+    };
+
+    try {
+        const ticketDocRef = doc(db, "tickets", ticketId);
+        await updateDoc(ticketDocRef, updatedTicketData);
+
+        setTickets(prevTickets => 
+            prevTickets.map(t => 
+                t.id === ticketId 
+                ? { 
+                    ...t, 
+                    solutionDescription, 
+                    solutionAttachments, 
+                    status, 
+                    updatedAt: new Date().toISOString() 
+                  } 
+                : t
+            )
+        );
+        toast({title: "Solución Actualizada", description: `La solución para el ticket "${ticketToUpdate.title}" ha sido guardada.`});
+    } catch (error) {
+        console.error("Error al actualizar la solución del ticket:", error);
+        toast({title: "Error al Guardar Solución", description: "No se pudo guardar la solución del ticket.", variant: "destructive"});
     }
   };
 
@@ -427,9 +495,10 @@ export default function TicketsPage() {
               leads={leads}
               users={users}
               currentUser={currentUser}
-              onEdit={() => openEditTicketDialog(ticket)}
+              onEdit={openEditTicketDialog}
               onDelete={handleDeleteTicket}
               onAddComment={handleAddComment}
+              onUpdateTicketSolution={handleUpdateTicketSolution}
             />
           ))}
         </div>
@@ -442,3 +511,4 @@ export default function TicketsPage() {
     </div>
   );
 }
+

@@ -34,18 +34,20 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject }
 import { doc, collection } from "firebase/firestore";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardDescription as CardDescUi, CardHeader as CardHeaderUi, CardTitle as CardTitleUi } from "@/components/ui/card";
+
 
 interface AddEditTicketDialogProps {
   trigger: React.ReactNode;
   ticketToEdit?: Ticket | null;
   leads: Lead[];
   users: User[];
-  onSave: (ticket: Ticket) => Promise<void>; // Make onSave async
+  onSave: (ticket: Ticket) => Promise<void>; 
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
-const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'comments'> = {
+const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'comments' | 'solutionDescription' | 'solutionAttachments'> = {
   title: "",
   description: "",
   status: "Abierto",
@@ -83,6 +85,9 @@ export function AddEditTicketDialog({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentAttachments, setCurrentAttachments] = useState<{ name: string, url: string }[]>([]);
 
+  const isCreatorEditing = ticketToEdit && currentUser?.id === ticketToEdit.reporterUserId;
+  const isAdminOrSupervisorEditing = ticketToEdit && (currentUser?.role === 'admin' || currentUser?.role === 'supervisor');
+
 
   useEffect(() => {
     if (isOpen) {
@@ -96,12 +101,13 @@ export function AddEditTicketDialog({
           relatedLeadId: ticketToEdit.relatedLeadId || undefined,
           updatedAt: ticketToEdit.updatedAt,
           attachments: ticketToEdit.attachments || [],
+          // Solution fields are not directly edited here but can be displayed
         });
         setCurrentAttachments(ticketToEdit.attachments || []);
       } else {
         setFormData({
             ...defaultTicketBase,
-            assigneeUserId: currentUser?.id || undefined,
+            assigneeUserId: currentUser?.id || undefined, // Default assignee to current user for new tickets
             attachments: [],
         });
         setCurrentAttachments([]);
@@ -140,7 +146,7 @@ export function AddEditTicketDialog({
     if (!window.confirm("¿Estás seguro de que quieres eliminar este adjunto? Esta acción no se puede deshacer.")) return;
     
     try {
-      const fileStorageRef = storageRef(storage, attachmentUrlToRemove); // Firebase SDK can parse gs:// or https:// URLs
+      const fileStorageRef = storageRef(storage, attachmentUrlToRemove); 
       await deleteObject(fileStorageRef);
       const updatedAttachments = currentAttachments.filter(att => att.url !== attachmentUrlToRemove);
       setCurrentAttachments(updatedAttachments);
@@ -149,7 +155,6 @@ export function AddEditTicketDialog({
     } catch (error: any) {
       console.error("Error eliminando adjunto:", error);
       if (error.code === 'storage/object-not-found') {
-        // If file not found in storage, still remove it from local state and form data
         const updatedAttachments = currentAttachments.filter(att => att.url !== attachmentUrlToRemove);
         setCurrentAttachments(updatedAttachments);
         setFormData(prev => ({ ...prev, attachments: updatedAttachments }));
@@ -171,7 +176,7 @@ export function AddEditTicketDialog({
         return;
     }
 
-    setIsUploading(true); // General loading state for submission
+    setIsUploading(true); 
 
     let finalAttachments = [...currentAttachments];
     const ticketId = ticketToEdit ? ticketToEdit.id : doc(collection(db, "tickets")).id;
@@ -222,12 +227,13 @@ export function AddEditTicketDialog({
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
       relatedLeadId: formData.relatedLeadId === NO_LEAD_SELECTED_VALUE ? undefined : formData.relatedLeadId,
       attachments: finalAttachments,
-      comments: ticketToEdit ? ticketToEdit.comments : [], // Preserve existing comments on edit
+      comments: ticketToEdit ? ticketToEdit.comments : [], 
+      solutionDescription: ticketToEdit ? ticketToEdit.solutionDescription : undefined,
+      solutionAttachments: ticketToEdit ? ticketToEdit.solutionAttachments : [],
     };
     
     await onSave(ticketDataToSave);
     setIsUploading(false);
-    // setIsOpen(false); // Parent component (TicketsPage) will handle closing dialog
   };
   
   let assigneeNameDisplay = "Selecciona un usuario (opcional)";
@@ -244,6 +250,7 @@ export function AddEditTicketDialog({
   }
 
   const sortedUsers = users.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const canEditCoreFields = !ticketToEdit || isCreatorEditing || isAdminOrSupervisorEditing;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -258,15 +265,16 @@ export function AddEditTicketDialog({
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-title`} className="text-right">Título</Label>
-            <Input id={`${dialogId}-title`} name="title" value={formData.title || ""} onChange={handleChange} className="col-span-3" disabled={isUploading} />
+            <Input id={`${dialogId}-title`} name="title" value={formData.title || ""} onChange={handleChange} className="col-span-3" disabled={isUploading || !canEditCoreFields} />
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor={`${dialogId}-description`} className="text-right pt-2">Descripción</Label>
-            <Textarea id={`${dialogId}-description`} name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={4} disabled={isUploading} />
+            <Textarea id={`${dialogId}-description`} name="description" value={formData.description || ""} onChange={handleChange} className="col-span-3" rows={4} disabled={isUploading || !canEditCoreFields} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-status`} className="text-right">Estado</Label>
-            <Select name="status" value={formData.status || 'Abierto'} onValueChange={(value) => handleSelectChange('status', value as TicketStatus)} disabled={isUploading}>
+            <Select name="status" value={formData.status || 'Abierto'} onValueChange={(value) => handleSelectChange('status', value as TicketStatus)} disabled={isUploading || (!canEditCoreFields && ticketToEdit?.status !== 'Abierto' && ticketToEdit?.status !== 'En Progreso') } // Allow assignee to change status via solution section
+            >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un estado" />
               </SelectTrigger>
@@ -279,7 +287,7 @@ export function AddEditTicketDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-priority`} className="text-right">Prioridad</Label>
-            <Select name="priority" value={formData.priority || 'Media'} onValueChange={(value) => handleSelectChange('priority', value as TicketPriority)} disabled={isUploading}>
+            <Select name="priority" value={formData.priority || 'Media'} onValueChange={(value) => handleSelectChange('priority', value as TicketPriority)} disabled={isUploading || !canEditCoreFields}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona una prioridad" />
               </SelectTrigger>
@@ -299,7 +307,7 @@ export function AddEditTicketDialog({
                   role="combobox"
                   aria-expanded={assigneePopoverOpen}
                   className="col-span-3 justify-between font-normal"
-                  disabled={isUploading}
+                  disabled={isUploading || !canEditCoreFields}
                 >
                   {assigneeNameDisplay}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -362,7 +370,7 @@ export function AddEditTicketDialog({
               name="relatedLeadId"
               value={formData.relatedLeadId || NO_LEAD_SELECTED_VALUE}
               onValueChange={(value) => handleSelectChange('relatedLeadId', value)}
-              disabled={isUploading}
+              disabled={isUploading || !canEditCoreFields}
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un lead (opcional)" />
@@ -387,7 +395,7 @@ export function AddEditTicketDialog({
                 type="file" 
                 onChange={handleFileChange}
                 className="mb-2"
-                disabled={isUploading && uploadProgress > 0 && uploadProgress < 100}
+                disabled={isUploading && uploadProgress > 0 && uploadProgress < 100 || !canEditCoreFields}
                 accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar" 
               />
               {isUploading && uploadProgress > 0 && uploadProgress < 100 && (
@@ -408,9 +416,11 @@ export function AddEditTicketDialog({
                           <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[200px]" title={att.name}>
                             <Paperclip className="h-3 w-3 inline mr-1" />{att.name}
                           </a>
-                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveAttachment(att.url)} title="Eliminar adjunto" disabled={isUploading}>
-                            <X className="h-3 w-3 text-destructive"/>
-                          </Button>
+                          {canEditCoreFields && (
+                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveAttachment(att.url)} title="Eliminar adjunto" disabled={isUploading}>
+                                <X className="h-3 w-3 text-destructive"/>
+                            </Button>
+                          )}
                         </li>
                       ))}
                   </ul>
@@ -419,10 +429,42 @@ export function AddEditTicketDialog({
             </div>
           </div>
 
+          {ticketToEdit && (ticketToEdit.solutionDescription || (ticketToEdit.solutionAttachments && ticketToEdit.solutionAttachments.length > 0)) && (
+             <Card className="col-span-full mt-4 bg-muted/30">
+                <CardHeaderUi className="pb-2">
+                    <CardTitleUi className="text-base text-green-700">Información de la Solución</CardTitleUi>
+                    <CardDescUi className="text-xs">Esta sección es gestionada por el asignado.</CardDescUi>
+                </CardHeaderUi>
+                <CardContent>
+                    {ticketToEdit.solutionDescription && (
+                        <>
+                            <Label className="text-xs font-semibold">Descripción de la Solución:</Label>
+                            <p className="text-sm whitespace-pre-wrap p-2 bg-background rounded-md">{ticketToEdit.solutionDescription}</p>
+                        </>
+                    )}
+                    {ticketToEdit.solutionAttachments && ticketToEdit.solutionAttachments.length > 0 && (
+                         <div className="mt-2">
+                          <Label className="text-xs font-semibold">Adjuntos de la Solución:</Label>
+                          <ul className="list-none space-y-0.5 text-sm mt-1">
+                             {ticketToEdit.solutionAttachments.map((att, idx) => (
+                                <li key={idx}>
+                                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 break-all" title={att.name}>
+                                    <Paperclip className="h-3 w-3 shrink-0"/> {att.name}
+                                  </a>
+                                </li>
+                             ))}
+                          </ul>
+                        </div>
+                    )}
+                </CardContent>
+             </Card>
+          )}
+
+
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isUploading}>Cancelar</Button>
-          <Button type="submit" onClick={handleSubmit} disabled={isUploading}>
+          <Button type="submit" onClick={handleSubmit} disabled={isUploading || (!canEditCoreFields && !!ticketToEdit) }>
             {isUploading ? (
               <>
                 <UploadCloud className="mr-2 h-4 w-4 animate-pulse" /> 
@@ -435,3 +477,4 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
+

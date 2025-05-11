@@ -68,6 +68,9 @@ export interface Ticket {
   reporterUserId: string; // ID of the user who created the ticket
   assigneeUserId?: string; // ID of the user assigned to the ticket
   relatedLeadId?: string; // Optional: link ticket to a lead
-  attachments?: { name: string, url: string }[];
+  attachments?: { name: string, url: string }[]; // Attachments for the ticket itself
   comments?: Comment[];
+  solutionDescription?: string; // Description of the solution provided by assignee
+  solutionAttachments?: { name: string, url: string }[]; // Attachments for the solution
 }
+

@@ -5,7 +5,7 @@ import type { Ticket, Lead, User, TicketPriority, TicketStatus, Comment } from "
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud } from "lucide-react";
+import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,19 +16,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { storage, db } from "@/lib/firebase";
+import { storage } from "@/lib/firebase"; // db is not needed here, only storage
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { doc, collection } from "firebase/firestore";
-
+import { TICKET_STATUSES } from "@/lib/constants";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label }
+from "@/components/ui/label";
 
 interface TicketItemProps {
   ticket: Ticket;
   leads: Lead[];
   users: User[];
   currentUser: User | null;
-  onEdit: (ticket: Ticket) => void;
+  onEdit: (ticket: Ticket) => void; // For creator/admin to edit core details
   onDelete: (ticketId: string) => void; 
   onAddComment: (ticketId: string, commentText: string, attachments: {name: string, url: string}[]) => Promise<void>;
+  onUpdateTicketSolution: (ticketId: string, solutionDescription: string, solutionAttachments: { name: string; url: string }[], status: TicketStatus) => Promise<void>;
 }
 
 const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, label: string, icon?: React.ElementType }) => {
@@ -55,7 +58,16 @@ const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, l
     );
 };
 
-export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete, onAddComment }: TicketItemProps) {
+export function TicketItem({ 
+  ticket, 
+  leads, 
+  users, 
+  currentUser, 
+  onEdit, 
+  onDelete, 
+  onAddComment,
+  onUpdateTicketSolution 
+}: TicketItemProps) {
   const relatedLead = ticket.relatedLeadId ? leads.find(l => l.id === ticket.relatedLeadId) : null;
   const reporter = users.find(u => u.id === ticket.reporterUserId);
   const assignee = ticket.assigneeUserId ? users.find(u => u.id === ticket.assigneeUserId) : null;
@@ -64,7 +76,22 @@ export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete
   const [commentFile, setCommentFile] = useState<File | null>(null);
   const [isUploadingCommentAttachment, setIsUploadingCommentAttachment] = useState(false);
   const [commentUploadProgress, setCommentUploadProgress] = useState(0);
+  
+  const [solutionDescription, setSolutionDescription] = useState(ticket.solutionDescription || "");
+  const [solutionFile, setSolutionFile] = useState<File | null>(null);
+  const [isUploadingSolutionAttachment, setIsUploadingSolutionAttachment] = useState(false);
+  const [solutionUploadProgress, setSolutionUploadProgress] = useState(0);
+  const [solutionStatus, setSolutionStatus] = useState<TicketStatus>(ticket.status);
+  const [currentSolutionAttachments, setCurrentSolutionAttachments] = useState(ticket.solutionAttachments || []);
+
+
   const { toast } = useToast();
+
+  const isCreator = currentUser?.id === ticket.reporterUserId;
+  const isAssignee = currentUser?.id === ticket.assigneeUserId;
+  const canManageSolution = isAssignee && ticket.status !== 'Cerrado' && ticket.status !== 'Resuelto';
+  const canEditTicket = isCreator || currentUser?.role === 'admin' || currentUser?.role === 'supervisor';
+
 
   const getPriorityBadge = (priority: TicketPriority) => {
     switch (priority) {
@@ -120,7 +147,7 @@ export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete
             },
             (error) => {
               console.error("Error al subir adjunto de comentario:", error);
-              toast({ title: "Error al Subir Adjunto", description: error.message, variant: "destructive" });
+              toast({ title: "Error al Subir Adjunto de Comentario", description: error.message, variant: "destructive" });
               setIsUploadingCommentAttachment(false);
               reject(error);
             },
@@ -134,14 +161,85 @@ export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete
           );
         });
       } catch (error) {
-        return; // Stop submission if file upload failed
+        return; 
       }
     }
     
     await onAddComment(ticket.id, newCommentText, uploadedAttachments);
     setNewCommentText("");
-    // Note: Email notification for new comment should be handled by a backend function (e.g., Firebase Cloud Function)
-    // triggered by writes to the ticket's comments.
+  };
+
+  const handleSolutionFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSolutionFile(event.target.files[0]);
+    } else {
+      setSolutionFile(null);
+    }
+  };
+
+  const handleSaveSolution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!solutionDescription.trim() && !solutionFile && currentSolutionAttachments.length === 0) {
+      toast({ title: "Solución Vacía", description: "Proporciona una descripción o adjunta un archivo para la solución.", variant: "destructive" });
+      return;
+    }
+    if (!currentUser || !isAssignee) return;
+
+    let newSolutionAttachments = [...currentSolutionAttachments];
+
+    if (solutionFile) {
+      setIsUploadingSolutionAttachment(true);
+      setSolutionUploadProgress(0);
+      const filePath = `ticket-solutions/${ticket.id}/${currentUser.id}/${Date.now()}-${solutionFile.name}`;
+      const fileStorageRef = storageRef(storage, filePath);
+      const uploadTask = uploadBytesResumable(fileStorageRef, solutionFile);
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on(
+            "state_changed",
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setSolutionUploadProgress(progress);
+            },
+            (error) => {
+              console.error("Error al subir adjunto de solución:", error);
+              toast({ title: "Error al Subir Adjunto de Solución", description: error.message, variant: "destructive" });
+              setIsUploadingSolutionAttachment(false);
+              reject(error);
+            },
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              newSolutionAttachments.push({ name: solutionFile.name, url: downloadURL });
+              setSolutionFile(null);
+              setIsUploadingSolutionAttachment(false);
+              resolve();
+            }
+          );
+        });
+      } catch (error) {
+        return; 
+      }
+    }
+    
+    await onUpdateTicketSolution(ticket.id, solutionDescription, newSolutionAttachments, solutionStatus);
+    setCurrentSolutionAttachments(newSolutionAttachments); // Update local state for attachments
+  };
+
+  const handleRemoveSolutionAttachment = async (attachmentUrlToRemove: string) => {
+    if (!window.confirm("¿Estás seguro de que quieres eliminar este adjunto de la solución?")) return;
+    try {
+        const fileRef = storageRef(storage, attachmentUrlToRemove);
+        await deleteObject(fileRef);
+        const updatedAttachments = currentSolutionAttachments.filter(att => att.url !== attachmentUrlToRemove);
+        setCurrentSolutionAttachments(updatedAttachments);
+        // Immediately update Firestore as well if needed, or rely on next save
+        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status);
+        toast({ title: "Adjunto de solución eliminado" });
+    } catch (error: any) {
+        console.error("Error eliminando adjunto de solución:", error);
+        toast({ title: "Error al eliminar adjunto de solución", description: error.message, variant: "destructive" });
+    }
   };
 
 
@@ -155,12 +253,16 @@ export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete
                     <CardTitle className={`text-lg ${ticket.status === 'Cerrado' ? 'line-through text-muted-foreground' : ''}`}>{ticket.title}</CardTitle>
                 </AccordionTrigger>
               <div className="flex gap-1 shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => onEdit(ticket)} className="h-8 w-8" aria-label="Editar ticket">
-                  <Edit3 className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => onDelete(ticket.id)} className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Eliminar ticket">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {canEditTicket && (
+                  <Button variant="ghost" size="icon" onClick={() => onEdit(ticket)} className="h-8 w-8" aria-label="Editar ticket">
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                )}
+                {(isCreator || currentUser?.role === 'admin') && (
+                  <Button variant="ghost" size="icon" onClick={() => onDelete(ticket.id)} className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Eliminar ticket">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
             <CardDescription className="text-xs text-muted-foreground pt-1">
@@ -232,9 +334,112 @@ export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete
               </div>
             )}
 
+            {/* Solution Section */}
+            {(ticket.solutionDescription || (ticket.solutionAttachments && ticket.solutionAttachments.length > 0) || canManageSolution) && (
+              <div className="pt-3 border-t">
+                <h4 className="text-sm font-semibold text-green-600 flex items-center gap-1 mb-2">
+                  <Briefcase className="h-4 w-4"/>Solución del Ticket
+                </h4>
+                {canManageSolution ? (
+                  <form onSubmit={handleSaveSolution} className="space-y-3">
+                    <div>
+                      <Label htmlFor={`solution-desc-${ticket.id}`} className="text-xs font-medium">Descripción de la Solución</Label>
+                      <Textarea 
+                        id={`solution-desc-${ticket.id}`}
+                        value={solutionDescription}
+                        onChange={(e) => setSolutionDescription(e.target.value)}
+                        placeholder="Detalla la solución aplicada..."
+                        rows={3}
+                        disabled={isUploadingSolutionAttachment}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`solution-files-${ticket.id}`} className="text-xs font-medium">Adjuntos de la Solución</Label>
+                      <Input 
+                        id={`solution-files-${ticket.id}`}
+                        type="file" 
+                        onChange={handleSolutionFileChange} 
+                        className="text-xs mt-1"
+                        disabled={isUploadingSolutionAttachment}
+                        accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar" 
+                      />
+                      {isUploadingSolutionAttachment && (
+                        <div className="space-y-1 mt-1">
+                          <Progress value={solutionUploadProgress} className="w-full h-1.5" />
+                          <p className="text-xs text-muted-foreground text-center">Subiendo adjunto de solución... {solutionUploadProgress.toFixed(0)}%</p>
+                        </div>
+                      )}
+                      {solutionFile && !isUploadingSolutionAttachment && (
+                        <p className="text-xs text-muted-foreground mt-1">Archivo para solución: {solutionFile.name}</p>
+                      )}
+                      {currentSolutionAttachments && currentSolutionAttachments.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium">Adjuntos actuales de la solución:</p>
+                          <ul className="list-disc list-inside space-y-1">
+                            {currentSolutionAttachments.map((att, index) => (
+                                <li key={index} className="text-xs flex items-center justify-between">
+                                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[200px]" title={att.name}>
+                                    <Paperclip className="h-3 w-3 inline mr-1" />{att.name}
+                                  </a>
+                                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveSolutionAttachment(att.url)} title="Eliminar adjunto de solución" disabled={isUploadingSolutionAttachment}>
+                                    <XCircle className="h-3 w-3 text-destructive"/>
+                                  </Button>
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                        <Label htmlFor={`solution-status-${ticket.id}`} className="text-xs font-medium">Actualizar Estado del Ticket</Label>
+                        <Select 
+                            value={solutionStatus} 
+                            onValueChange={(value: TicketStatus) => setSolutionStatus(value)}
+                            disabled={isUploadingSolutionAttachment}
+                        >
+                            <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Seleccionar estado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {TICKET_STATUSES.filter(s => s === 'En Progreso' || s === 'Resuelto' || s === 'Cerrado').map(status => (
+                                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button type="submit" size="sm" disabled={isUploadingSolutionAttachment}>
+                      {isUploadingSolutionAttachment ? <><UploadCloud className="mr-2 h-4 w-4 animate-pulse" /> Subiendo...</> : "Guardar Solución"}
+                    </Button>
+                  </form>
+                ) : (
+                  <>
+                    {ticket.solutionDescription && <p className="text-sm whitespace-pre-wrap bg-green-50 p-2 rounded-md">{ticket.solutionDescription}</p>}
+                    {ticket.solutionAttachments && ticket.solutionAttachments.length > 0 && (
+                       <div className="mt-2">
+                          <p className="text-xs font-medium text-muted-foreground">Adjuntos de la solución:</p>
+                          <ul className="list-none space-y-0.5 text-xs">
+                             {ticket.solutionAttachments.map((att, idx) => (
+                                <li key={idx}>
+                                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 break-all" title={att.name}>
+                                    <Paperclip className="h-3 w-3 shrink-0"/> {att.name}
+                                  </a>
+                                </li>
+                             ))}
+                          </ul>
+                        </div>
+                    )}
+                    {!ticket.solutionDescription && (!ticket.solutionAttachments || ticket.solutionAttachments.length === 0) && (
+                      <p className="text-sm text-muted-foreground">Aún no se ha proporcionado una solución.</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+
             {/* Comments Section */}
             <div className="pt-3 border-t">
-              <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-2"><MessageSquarePlus className="h-4 w-4"/>Comentarios ({ticket.comments?.length || 0})</h4>
+              <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-2"><MessageCircle className="h-4 w-4"/>Comentarios ({ticket.comments?.length || 0})</h4>
               {ticket.comments && ticket.comments.length > 0 ? (
                 <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                   {ticket.comments.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map(comment => (
@@ -307,3 +512,4 @@ export function TicketItem({ ticket, leads, users, currentUser, onEdit, onDelete
     </Card>
   );
 }
+
