@@ -124,7 +124,7 @@ export interface Order {
   items: OrderItem[];
   subtotal: number;
   discount?: number;
-  taxAmount: number;
+  taxAmount: number; // Typically orders don't have taxAmount directly, it's on invoice. But can be stored if needed.
   total: number;
   status: OrderStatus;
   shippingAddress?: string;
