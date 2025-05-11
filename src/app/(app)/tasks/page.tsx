@@ -37,7 +37,7 @@ export default function TasksPage() {
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
-    if (!currentUser) { // currentUser might still be loading if authLoading is true
+    if (!currentUser) { 
       setIsLoadingTasks(false);
       return;
     }
@@ -46,15 +46,25 @@ export default function TasksPage() {
       const tasksCollectionRef = collection(db, "tasks");
       const q = query(tasksCollectionRef, orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
-      const fetchedTasks = querySnapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-        createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-        dueDate: (docSnap.data().dueDate as Timestamp)?.toDate().toISOString() || undefined,
-      } as Task));
+      const fetchedTasks = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          title: data.title as string,
+          description: data.description as string | undefined,
+          // createdAt and dueDate are stored as ISO strings
+          createdAt: data.createdAt as string || new Date().toISOString(), // Fallback if missing
+          dueDate: data.dueDate as string | undefined, // Can be undefined
+          completed: data.completed as boolean,
+          relatedLeadId: data.relatedLeadId as string | undefined,
+          priority: data.priority as Task['priority'] | undefined,
+          assigneeUserId: data.assigneeUserId as string | undefined,
+          reporterUserId: data.reporterUserId as string,
+        } as Task;
+      });
       setTasks(fetchedTasks);
     } catch (error) {
-      console.error("Error fetching tasks:", error);
+      console.error("Error al obtener tareas:", error);
       toast({
         title: "Error al Cargar Tareas",
         description: "No se pudieron cargar las tareas desde la base de datos.",
@@ -71,7 +81,7 @@ export default function TasksPage() {
       const fetchedUsers = await getAllUsers();
       setUsers(fetchedUsers);
     } catch (error) {
-      console.error("Error fetching users for tasks page:", error);
+      console.error("Error al obtener usuarios para la página de tareas:", error);
       toast({
         title: "Error al Cargar Usuarios",
         description: "No se pudieron cargar los datos de los usuarios para la asignación de tareas.",
@@ -83,15 +93,15 @@ export default function TasksPage() {
   }, [getAllUsers, toast]);
 
   useEffect(() => {
-    if (!authLoading) { // Wait for auth state to be resolved
+    if (!authLoading) { 
         fetchUsers();
     }
   }, [authLoading, fetchUsers]);
 
   useEffect(() => {
-    if (!authLoading && currentUser) { // Fetch tasks only if auth is resolved and user exists
+    if (!authLoading && currentUser) { 
       fetchTasks();
-    } else if (!authLoading && !currentUser) { // If auth resolved and no user, clear tasks
+    } else if (!authLoading && !currentUser) { 
       setTasks([]);
       setIsLoadingTasks(false);
     }
@@ -107,13 +117,11 @@ export default function TasksPage() {
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
     const taskId = isEditing ? taskData.id : doc(collection(db, "tasks")).id;
 
-    // Ensure taskData from dialog is used directly, as it should have correct assigneeUserId
     const taskToSave: Task = {
-      ...taskData, // This comes from AddEditTaskDialog and should have processed assigneeUserId
+      ...taskData, 
       id: taskId,
-      reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id, // Default to current user if new
+      reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id, 
       createdAt: isEditing ? taskData.createdAt : new Date().toISOString(),
-      // Ensure dueDate is a string or undefined, not a Date object before saving
       dueDate: taskData.dueDate ? (typeof taskData.dueDate === 'string' ? taskData.dueDate : new Date(taskData.dueDate).toISOString()) : undefined,
     };
     
@@ -132,7 +140,7 @@ export default function TasksPage() {
       });
       setEditingTask(null);
     } catch (error) {
-      console.error("Error saving task:", error);
+      console.error("Error al guardar tarea:", error);
       toast({
         title: "Error al Guardar Tarea",
         description: "Ocurrió un error al guardar la tarea.",
@@ -157,7 +165,7 @@ export default function TasksPage() {
         description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
       });
     } catch (error) {
-      console.error("Error toggling task complete status:", error);
+      console.error("Error al cambiar estado de tarea completa:", error);
       toast({
         title: "Error al Actualizar Tarea",
         description: "No se pudo actualizar el estado de la tarea.",
@@ -181,7 +189,7 @@ export default function TasksPage() {
           variant: "destructive",
         });
       } catch (error) {
-        console.error("Error deleting task:", error);
+        console.error("Error al eliminar tarea:", error);
         toast({
           title: "Error al Eliminar Tarea",
           description: "Ocurrió un error al eliminar la tarea.",
@@ -192,31 +200,28 @@ export default function TasksPage() {
   };
 
   const filteredTasks = useMemo(() => {
-    if (!currentUser) return []; // If no current user, no tasks.
+    if (!currentUser) return []; 
 
-    return tasks // Start with all fetched tasks
-      .filter(task => { // First filter: visibility based on role
-        // If user is admin or supervisor, they see all tasks.
+    return tasks 
+      .filter(task => { 
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
           return true;
         }
-        // Otherwise, user sees tasks they reported OR are assigned to.
         return task.reporterUserId === currentUser.id || task.assigneeUserId === currentUser.id;
       })
-      .filter(task => { // Second filter: status (pending/completed/all)
+      .filter(task => { 
         if (filterStatus === "pending") return !task.completed;
         if (filterStatus === "completed") return task.completed;
         return true;
       })
-      .filter(task => { // Third filter: priority
+      .filter(task => { 
         if (filterPriority === "all") return true;
         return task.priority === filterPriority;
       })
-      .filter(task => // Fourth filter: search term
+      .filter(task => 
         task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
-      // Primary sort by completion status (incomplete first), then by creation date (newest first)
       .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tasks, searchTerm, filterStatus, filterPriority, currentUser]);
 
