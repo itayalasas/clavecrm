@@ -1,11 +1,13 @@
+
+// src/components/layout/app-header.tsx
 "use client";
 
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, LogOut } from "lucide-react";
+import { Bell, Search, LogOut, Settings as SettingsIcon } from "lucide-react"; // Renamed Settings to SettingsIcon
 import { Input } from "@/components/ui/input";
 import { usePathname, useRouter } from "next/navigation";
-import { NAV_ITEMS, APP_NAME } from "@/lib/constants";
+import { NAV_ITEMS, APP_NAME, type NavItem } from "@/lib/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -19,14 +21,27 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 
+function findCurrentPage(items: NavItem[], pathname: string): NavItem | null {
+  for (const item of items) {
+    if (item.href && pathname.startsWith(item.href)) {
+      return item;
+    }
+    if (item.subItems) {
+      const foundInSub = findCurrentPage(item.subItems, pathname);
+      if (foundInSub) return foundInSub;
+    }
+  }
+  return null;
+}
+
 export function AppHeader() {
   const { isMobile } = useSidebar();
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, logout, firebaseUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { toast } = useToast();
   
-  const currentPage = NAV_ITEMS.find(item => pathname.startsWith(item.href));
+  const currentPage = findCurrentPage(NAV_ITEMS, pathname);
   const pageTitle = currentPage ? currentPage.label : APP_NAME;
 
   const handleLogout = async () => {
@@ -43,11 +58,14 @@ export function AppHeader() {
   const getUserInitials = (name?: string | null) => {
     if (!name) return "U";
     const nameParts = name.split(" ");
-    if (nameParts.length > 1) {
+    if (nameParts.length > 1 && nameParts[0] && nameParts[1]) {
       return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
     }
-    return name.substring(0,2).toUpperCase();
-  }
+    if (nameParts[0]) {
+        return nameParts[0].substring(0,2).toUpperCase();
+    }
+    return "U";
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
@@ -83,11 +101,15 @@ export function AppHeader() {
                     {currentUser.email}
                   </p>
                    <p className="text-xs leading-none text-muted-foreground capitalize">
-                    Rol: {currentUser.role || "user"}
+                    Rol: {currentUser.role || "usuario"}
                   </p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push('/settings')}>
+                <SettingsIcon className="mr-2 h-4 w-4" />
+                <span>Configuración</span>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Cerrar Sesión</span>

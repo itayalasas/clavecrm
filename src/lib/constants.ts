@@ -1,25 +1,64 @@
+
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings } from 'lucide-react'; // Added Settings icon
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown } from 'lucide-react'; // Added Settings icon
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
 
-export const NAV_ITEMS = [
+export type NavItem = {
+  href?: string;
+  label: string;
+  icon: LucideIcon;
+  subItems?: NavItem[];
+  disabled?: boolean; // For features not yet implemented
+  parentActiveIf?: (pathname: string) => boolean; // Optional: custom logic for parent active state
+};
+
+export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Panel de Control', icon: LayoutDashboard },
-  { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig },
-  { href: '/tasks', label: 'Tareas', icon: ListChecks },
-  { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
-  { href: '/quotes', label: 'Cotizaciones', icon: FileText },
-  { href: '/orders', label: 'Pedidos', icon: ShoppingCart },
-  { href: '/invoices', label: 'Facturas', icon: Receipt },
-  { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
-  { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
-  { href: '/email-campaigns', label: 'Campañas de Email', icon: Send },
-  { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap },
-  { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate },
-  { href: '/social-crm', label: 'Social CRM', icon: Share2 },
-  { href: '/settings', label: 'Configuración', icon: Settings },
+  {
+    label: 'Ventas',
+    icon: DollarSign,
+    subItems: [
+      { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig },
+      { href: '/quotes', label: 'Cotizaciones', icon: FileText },
+      { href: '/orders', label: 'Pedidos', icon: ShoppingCart },
+      { href: '/invoices', label: 'Facturas', icon: Receipt },
+    ],
+    parentActiveIf: (pathname) => ['/pipeline', '/quotes', '/orders', '/invoices'].some(p => pathname.startsWith(p)),
+  },
+  {
+    label: 'Marketing',
+    icon: Target,
+    subItems: [
+      { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
+      { href: '/email-campaigns', label: 'Campañas de Email', icon: Send },
+      { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap },
+      { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate },
+      { href: '/social-crm', label: 'Social CRM', icon: Share2 },
+    ],
+    parentActiveIf: (pathname) => ['/ai-email-assistant', '/email-campaigns', '/marketing-automation', '/landing-pages', '/social-crm'].some(p => pathname.startsWith(p)),
+  },
+  {
+    label: 'Soporte y Tareas',
+    icon: LifeBuoy,
+    subItems: [
+      { href: '/tasks', label: 'Tareas', icon: ListChecks },
+      { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
+    ],
+    parentActiveIf: (pathname) => ['/tasks', '/tickets'].some(p => pathname.startsWith(p)),
+  },
+  {
+    label: 'Administración',
+    icon: SlidersHorizontal,
+    subItems: [
+      { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
+      { href: '/settings', label: 'Configuración', icon: Settings },
+    ],
+    parentActiveIf: (pathname) => ['/user-management', '/settings'].some(p => pathname.startsWith(p)),
+  },
 ];
+
 
 export const USER_ROLES: UserRole[] = ['admin', 'supervisor', 'empleado', 'analista', 'desarrollador', 'vendedor', 'user'];
 export const DEFAULT_USER_ROLE: UserRole = 'user';
@@ -42,33 +81,33 @@ const addDays = (date: Date, days: number) => {
 };
 
 export const INITIAL_LEADS: Lead[] = [
-  { 
-    id: 'lead-1', name: 'Acme Corp', email: 'contact@acme.com', stageId: 'stage-1', 
-    createdAt: new Date().toISOString(), 
+  {
+    id: 'lead-1', name: 'Acme Corp', email: 'contact@acme.com', stageId: 'stage-1',
+    createdAt: new Date().toISOString(),
     details: 'Interesado en las funciones de automatización de marketing del Producto X.', value: 5000,
     score: 75, probability: 60, expectedCloseDate: addDays(today, 30)
   },
-  { 
-    id: 'lead-2', name: 'Beta Solutions', email: 'info@beta.inc', stageId: 'stage-2', 
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), 
+  {
+    id: 'lead-2', name: 'Beta Solutions', email: 'info@beta.inc', stageId: 'stage-2',
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     details: 'Seguimiento del presupuesto Q2. Necesita integración personalizada.', value: 12000,
     score: 90, probability: 75, expectedCloseDate: addDays(today, 45)
   },
-  { 
-    id: 'lead-3', name: 'Gamma Innovations LLC', email: 'sales@gamma.llc', stageId: 'stage-3', 
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), 
+  {
+    id: 'lead-3', name: 'Gamma Innovations LLC', email: 'sales@gamma.llc', stageId: 'stage-3',
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     details: 'Propuesta enviada, esperando comentarios. Contacto clave: Jane Doe.', value: 7500,
     score: 60, probability: 50, expectedCloseDate: addDays(today, 60)
   },
-  { 
-    id: 'lead-4', name: 'Delta Services', email: 'support@delta.com', stageId: 'stage-1', 
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), 
+  {
+    id: 'lead-4', name: 'Delta Services', email: 'support@delta.com', stageId: 'stage-1',
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     details: 'Buscando CRM para 10 usuarios.', value: 3000,
     score: 50, probability: 30, expectedCloseDate: addDays(today, 15)
   },
-  { 
-    id: 'lead-5', name: 'Epsilon Retail', email: 'shop@epsilon.store', stageId: 'stage-4', 
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), 
+  {
+    id: 'lead-5', name: 'Epsilon Retail', email: 'shop@epsilon.store', stageId: 'stage-4',
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     details: 'Negociando términos para el plan empresarial.', value: 25000,
     score: 85, probability: 80, expectedCloseDate: addDays(today, 10)
   },

@@ -1,5 +1,7 @@
+// src/components/layout/app-sidebar.tsx
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -11,24 +13,28 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   useSidebar,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { APP_NAME, NAV_ITEMS, APP_ICON } from "@/lib/constants";
+import { APP_NAME, NAV_ITEMS, type NavItem } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { open, setOpen, isMobile, state: sidebarState } = useSidebar();
+  const { state: sidebarState } = useSidebar();
   const { currentUser, logout } = useAuth();
   const { toast } = useToast();
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({});
 
-  const IconComponent = APP_ICON;
+  const IconComponent = APP_NAME_ICON; // Assuming APP_NAME_ICON is defined, if not replace with a valid icon
 
   const handleLogout = async () => {
     try {
@@ -48,13 +54,34 @@ export function AppSidebar() {
       return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
     }
     return name.substring(0,2).toUpperCase();
-  }
+  };
 
+  const toggleSubmenu = (label: string) => {
+    setOpenSubmenus(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  // Determine if a parent item should be active
+  const isParentActive = (item: NavItem) => {
+    if (item.parentActiveIf) return item.parentActiveIf(pathname);
+    return item.subItems?.some(subItem => subItem.href && pathname.startsWith(subItem.href)) || false;
+  };
+  
+  // Pre-calculate open states for submenus based on active child items
+  React.useEffect(() => {
+    const newOpenSubmenus: Record<string, boolean> = {};
+    NAV_ITEMS.forEach(item => {
+      if (item.subItems && isParentActive(item)) {
+        newOpenSubmenus[item.label] = true;
+      }
+    });
+    setOpenSubmenus(prev => ({...prev, ...newOpenSubmenus}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]); // Only re-run when pathname changes
 
   return (
     <Sidebar
       variant="sidebar" 
-      collapsible={isMobile ? "offcanvas" : "icon"}
+      collapsible={sidebarState === "collapsed" ? "icon" : "offcanvas"} // Adjust based on actual hook if needed
       className="border-r"
     >
       <SidebarHeader className="p-4">
@@ -69,23 +96,64 @@ export function AppSidebar() {
       <SidebarContent className="flex-grow p-2">
         <SidebarMenu>
           {NAV_ITEMS.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <Link href={item.href} passHref legacyBehavior>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(item.href)}
-                  className={cn(
-                    "justify-start",
-                    sidebarState === "collapsed" && "justify-center"
+            <SidebarMenuItem key={item.label}>
+              {item.subItems ? (
+                <>
+                  <SidebarMenuButton
+                    onClick={() => toggleSubmenu(item.label)}
+                    isActive={isParentActive(item)}
+                    className={cn(
+                      "justify-between w-full", // Ensure button takes full width for chevron
+                      sidebarState === "collapsed" && "justify-center"
+                    )}
+                    tooltip={item.label}
+                  >
+                    <div className="flex items-center gap-2">
+                      <item.icon className="h-5 w-5" />
+                      {sidebarState === "expanded" && <span>{item.label}</span>}
+                    </div>
+                    {sidebarState === "expanded" && (
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", openSubmenus[item.label] ? "rotate-180" : "")} />
+                    )}
+                  </SidebarMenuButton>
+                  {sidebarState === "expanded" && openSubmenus[item.label] && (
+                    <SidebarMenuSub>
+                      {item.subItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.href}>
+                           <Link href={subItem.href || "#"} passHref legacyBehavior>
+                            <SidebarMenuSubButton
+                                asChild
+                                isActive={subItem.href ? pathname.startsWith(subItem.href) : false}
+                            >
+                                <a>
+                                    <subItem.icon className="h-4 w-4 mr-2" />
+                                    {subItem.label}
+                                </a>
+                            </SidebarMenuSubButton>
+                           </Link>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
                   )}
-                  tooltip={item.label}
-                >
-                  <a>
-                    <item.icon className="h-5 w-5" />
-                    {sidebarState === "expanded" && <span>{item.label}</span>}
-                  </a>
-                </SidebarMenuButton>
-              </Link>
+                </>
+              ) : (
+                <Link href={item.href || "#"} passHref legacyBehavior>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={item.href ? pathname.startsWith(item.href) : false}
+                    className={cn(
+                      "justify-start",
+                      sidebarState === "collapsed" && "justify-center"
+                    )}
+                    tooltip={item.label}
+                  >
+                    <a>
+                      <item.icon className="h-5 w-5" />
+                      {sidebarState === "expanded" && <span>{item.label}</span>}
+                    </a>
+                  </SidebarMenuButton>
+                </Link>
+              )}
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
@@ -113,7 +181,7 @@ export function AppSidebar() {
                   <AvatarImage src={currentUser.avatarUrl || `https://avatar.vercel.sh/${currentUser.email}.png`} alt={currentUser.name || "Usuario"} data-ai-hint="user avatar" />
                   <AvatarFallback>{getUserInitials(currentUser.name)}</AvatarFallback>
                 </Avatar>
-              <Button variant="ghost" size="icon" title="Configuración">
+              <Button variant="ghost" size="icon" title="Configuración" onClick={() => router.push('/settings')}>
                 <Settings className="h-5 w-5" />
               </Button>
               <Button variant="ghost" size="icon" title="Cerrar Sesión" onClick={handleLogout}>
@@ -132,3 +200,8 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+
+// Helper: Define APP_NAME_ICON if not already defined. 
+// Using Briefcase as a placeholder from your constants.
+const APP_NAME_ICON = Briefcase;
+```
