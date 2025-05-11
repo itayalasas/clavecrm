@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact } from "@/lib/types";
 import { NAV_ITEMS, EMAIL_CAMPAIGN_STATUSES } from "@/lib/constants";
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, Sliders, FileSignature, LucideIcon, Eye, BarChart2, Palette, ListChecks } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,6 +19,7 @@ import { AddEditEmailTemplateDialog } from "@/components/email-campaigns/add-edi
 import { EmailTemplateItem } from "@/components/email-campaigns/email-template-item";
 import { AddEditEmailCampaignDialog } from "@/components/email-campaigns/add-edit-email-campaign-dialog";
 import { PreviewEmailTemplateDialog } from "@/components/email-campaigns/preview-email-template-dialog";
+import { EmailCampaignItem } from "@/components/email-campaigns/email-campaign-item";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function EmailCampaignsPage() {
@@ -194,8 +195,8 @@ export default function EmailCampaignsPage() {
 
   const handleSaveTemplate = async (templateData: Omit<EmailTemplate, 'id' | 'createdAt' | 'updatedAt'>, id?: string) => {
     try {
-      const docId = id || doc(collection(db, "emailTemplates")).id;
-      await setDoc(doc(db, "emailTemplates", docId), {
+      const docRefId = id || doc(collection(db, "emailTemplates")).id;
+      await setDoc(doc(db, "emailTemplates", docRefId), {
         ...templateData,
         [id ? 'updatedAt' : 'createdAt']: serverTimestamp(),
       }, { merge: !!id });
@@ -236,8 +237,8 @@ export default function EmailCampaignsPage() {
 
   const handleSaveCampaign = async (campaignData: Omit<EmailCampaign, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'analytics' | 'sentAt'>, id?: string) => {
     try {
-      const docId = id || doc(collection(db, "emailCampaigns")).id;
-      await setDoc(doc(db, "emailCampaigns", docId), {
+      const docRefId = id || doc(collection(db, "emailCampaigns")).id;
+      await setDoc(doc(db, "emailCampaigns", docRefId), {
         ...campaignData,
         status: id ? campaigns.find(c=>c.id === id)?.status || EMAIL_CAMPAIGN_STATUSES[0] : EMAIL_CAMPAIGN_STATUSES[0], 
         analytics: id ? campaigns.find(c=>c.id === id)?.analytics || {} : {},
@@ -374,12 +375,12 @@ export default function EmailCampaignsPage() {
               </CardContent>
             </Card>
           )}
-           {renderPlaceHolderContent("Analíticas y Pruebas A/B", [
-                "Creación y programación de envíos masivos (Implementado parcialmente).",
+           {renderPlaceHolderContent("Funciones Avanzadas de Campaña", [
+                "Creación y programación de envíos (Implementado, mejora con hora).",
                 "Selección de listas de contactos y plantillas (Implementado).",
                 "Analíticas de rendimiento (aperturas, clics, etc.) (Próximamente).",
                 "Pruebas A/B para asuntos y contenido (Próximamente).",
-            ], BarChart2, true)}
+            ], Send, true)}
         </TabsContent>
 
         {/* CONTACT LISTS TAB */}
@@ -433,7 +434,7 @@ export default function EmailCampaignsPage() {
           )}
            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
              {renderPlaceHolderContent("Importar/Exportar", ["Importación y exportación de contactos (CSV) (Próximamente)."], Import, false)}
-             {renderPlaceHolderContent("Segmentación", ["Gestión individual de contactos (Implementado parcialmente).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], Sliders, true)}
+             {renderPlaceHolderContent("Segmentación y Gestión", ["Gestión individual de contactos (Implementado parcialmente).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], Sliders, true)}
              {renderPlaceHolderContent("Formularios Suscripción", ["Formularios de suscripción/desuscripción (Próximamente)."], FileSignature, false)}
            </div>
         </TabsContent>
@@ -578,3 +579,5 @@ export default function EmailCampaignsPage() {
     </div>
   );
 }
+
+    

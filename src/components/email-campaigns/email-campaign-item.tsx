@@ -5,7 +5,7 @@ import type { EmailCampaign } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Edit3, Trash2, BarChart2, CalendarClock, Users, FileText as TemplateIcon } from "lucide-react";
+import { Send, Edit3, Trash2, BarChart2, CalendarClock } from "lucide-react"; // Removed unused icons
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -13,7 +13,6 @@ interface EmailCampaignItemProps {
   campaign: EmailCampaign;
   onEdit: (campaignId: string) => void;
   onDelete: (campaignId: string) => void;
-  // onViewAnalytics: (campaignId: string) => void; // Future
 }
 
 export function EmailCampaignItem({ campaign, onEdit, onDelete }: EmailCampaignItemProps) {
@@ -46,22 +45,20 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete }: EmailCampaignI
       <CardContent className="pb-3 flex-grow space-y-2 text-sm">
         <div className="flex items-center justify-between">
             {getStatusBadge(campaign.status)}
-            {/* Placeholder for recipient count or other key stat */}
-            {/* <span className="text-xs text-muted-foreground">{campaign.analytics?.totalRecipients || 0} Destinatarios</span> */}
         </div>
         
         <div className="text-xs text-muted-foreground space-y-1">
-            {campaign.scheduledAt && isValid(parseISO(campaign.scheduledAt)) && (
-                <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Programada para: {format(parseISO(campaign.scheduledAt), "PP p", { locale: es })}</p>
+            {campaign.scheduledAt && isValid(parseISO(campaign.scheduledAt)) && campaign.status === "Programada" && (
+                <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Programada para: {format(parseISO(campaign.scheduledAt), "PPp", { locale: es })}</p>
             )}
             {campaign.sentAt && isValid(parseISO(campaign.sentAt)) && (
-                <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3 text-green-500" /> Enviada el: {format(parseISO(campaign.sentAt), "PP p", { locale: es })}</p>
+                <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3 text-green-500" /> Enviada el: {format(parseISO(campaign.sentAt), "PPp", { locale: es })}</p>
             )}
              <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Creada: {format(parseISO(campaign.createdAt), "P", { locale: es })}</p>
         </div>
       </CardContent>
       <CardFooter className="flex justify-end gap-2 pt-3 border-t">
-        <Button variant="outline" size="sm" disabled> {/* onClick={() => onViewAnalytics(campaign.id)} */}
+        <Button variant="outline" size="sm" disabled> 
           <BarChart2 className="mr-2 h-4 w-4" /> Analíticas
         </Button>
         <Button variant="default" size="sm" onClick={() => onEdit(campaign.id)}>
@@ -74,3 +71,5 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete }: EmailCampaignI
     </Card>
   );
 }
+
+    
