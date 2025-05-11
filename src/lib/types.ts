@@ -171,6 +171,7 @@ export interface Contact {
   subscribed: boolean;
   createdAt: string; // ISO string
   listIds?: string[]; // IDs of ContactList this contact belongs to
+  customFields?: Record<string, any>; // For custom data
 }
 
 export interface ContactList {
@@ -178,17 +179,16 @@ export interface ContactList {
   name: string;
   description?: string;
   createdAt: string; // ISO string
-  // Contacts can be a subcollection or an array of IDs depending on scale
-  // For simplicity now, we might not store contact IDs directly in the list object
-  // but rather query contacts based on listId.
-  // contactCount?: number; // Denormalized, can be updated via triggers
+  contactCount?: number; // Denormalized, can be updated via triggers
 }
 
 export interface EmailTemplate {
   id: string;
   name: string;
   subject: string;
-  htmlContent: string; // For simple HTML, or reference to a more complex structure
+  contentHtml?: string; 
+  contentText?: string;
+  variables?: string[]; // e.g. ["{{firstName}}", "{{companyName}}"]
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
   previewImageUrl?: string; // Optional
@@ -199,6 +199,9 @@ export type EmailCampaignStatus = 'Borrador' | 'Programada' | 'Enviando' | 'Envi
 export interface EmailCampaign {
   id: string;
   name: string;
+  subject: string;
+  fromName: string;
+  fromEmail: string;
   contactListId: string;
   emailTemplateId: string;
   status: EmailCampaignStatus;
