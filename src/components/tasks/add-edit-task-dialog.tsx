@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -225,11 +226,12 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
               </PopoverTrigger>
               <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]">
                 <Command>
-                  <CommandInput placeholder="Buscar usuario..." />
+                  <CommandInput placeholder="Buscar usuario por nombre..." />
                   <CommandList>
                     <CommandEmpty>No se encontró usuario.</CommandEmpty>
                     <CommandGroup>
                       <CommandItem
+                        key={NO_USER_SELECTED_VALUE}
                         value={NO_USER_SELECTED_VALUE}
                         onSelect={() => {
                           handleSelectChange('assigneeUserId', NO_USER_SELECTED_VALUE);
@@ -247,9 +249,15 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
                       {sortedUsers.map((user) => (
                         <CommandItem
                           key={user.id}
-                          value={user.id}
-                          onSelect={() => {
-                            handleSelectChange('assigneeUserId', user.id);
+                          value={user.name} // Use user.name for filtering value
+                          onSelect={(currentValue) => {
+                            // Find user by name to get ID for handleSelectChange
+                            const selectedUserObj = sortedUsers.find(u => u.name === currentValue);
+                            if (selectedUserObj) {
+                              handleSelectChange('assigneeUserId', selectedUserObj.id);
+                            } else if (currentValue === NO_USER_SELECTED_VALUE) { // Handle re-selecting "Sin asignar" if it was typed
+                               handleSelectChange('assigneeUserId', NO_USER_SELECTED_VALUE);
+                            }
                             setAssigneePopoverOpen(false);
                           }}
                         >
@@ -297,3 +305,4 @@ export function AddEditTaskDialog({ trigger, taskToEdit, leads, users, onSave }:
     </Dialog>
   );
 }
+
