@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact } from "@/lib/types";
 import { NAV_ITEMS, EMAIL_CAMPAIGN_STATUSES } from "@/lib/constants";
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, Sliders2, FileSignature } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, Sliders, FileSignature, LucideIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -429,7 +429,7 @@ export default function EmailCampaignsPage() {
           )}
            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
              {renderPlaceHolderContent("Importar/Exportar Contactos", ["Importación y exportación de contactos (CSV)."], Import)}
-             {renderPlaceHolderContent("Segmentación Avanzada", ["Segmentación basada en etiquetas, actividad o campos personalizados."], Sliders2)}
+             {renderPlaceHolderContent("Segmentación Avanzada", ["Segmentación basada en etiquetas, actividad o campos personalizados."], Sliders)}
              {renderPlaceHolderContent("Formularios de Suscripción", ["Creación y gestión de formularios de suscripción/desuscripción integrados."], FileSignature)}
            </div>
         </TabsContent>
@@ -566,3 +566,4 @@ export default function EmailCampaignsPage() {
     </div>
   );
 }
+
