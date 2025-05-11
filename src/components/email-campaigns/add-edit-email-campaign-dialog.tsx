@@ -87,7 +87,7 @@ export function AddEditEmailCampaignDialog({
           fromEmail: campaignToEdit.fromEmail,
           contactListId: campaignToEdit.contactListId,
           emailTemplateId: campaignToEdit.emailTemplateId,
-          scheduledDate: scheduledAtDate,
+          scheduledDate: scheduledAtDate, // This is local Date object
           scheduledHour: scheduledAtDate ? format(scheduledAtDate, "HH") : "09",
           scheduledMinute: scheduledAtDate ? format(scheduledAtDate, "mm") : "00",
         });
@@ -107,14 +107,15 @@ export function AddEditEmailCampaignDialog({
     setIsSubmitting(true);
     let scheduledAtISO: string | undefined = undefined;
     if (data.scheduledDate) {
-        let finalDate = data.scheduledDate;
+        let finalDate = data.scheduledDate; // This is local date at 00:00 if from Calendar
         const hour = parseInt(data.scheduledHour || "0");
         const minute = parseInt(data.scheduledMinute || "0");
         finalDate = setHours(finalDate, hour);
         finalDate = setMinutes(finalDate, minute);
-        finalDate = setSeconds(finalDate, 0);
-        finalDate = setMilliseconds(finalDate, 0);
-        scheduledAtISO = finalDate.toISOString();
+        finalDate = setSeconds(finalDate, 0); // Ensure seconds are zero for consistency
+        finalDate = setMilliseconds(finalDate, 0); // Ensure milliseconds are zero
+        // finalDate is now the user's intended local send time.
+        scheduledAtISO = finalDate.toISOString(); // This converts it to UTC ISO string.
     }
 
     const dataToSave = {
@@ -125,7 +126,6 @@ export function AddEditEmailCampaignDialog({
         contactListId: data.contactListId,
         emailTemplateId: data.emailTemplateId,
         scheduledAt: scheduledAtISO, 
-        // Analytics will be initialized or kept by the parent onSave logic / Firestore
     };
     const success = await onSave(dataToSave, campaignToEdit?.id);
     if (success) {
