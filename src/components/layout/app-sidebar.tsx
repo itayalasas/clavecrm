@@ -18,11 +18,11 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { APP_NAME, NAV_ITEMS, type NavItem } from "@/lib/constants";
+import { APP_NAME, NAV_ITEMS, type NavItem, APP_ICON } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Settings, ChevronDown } from "lucide-react";
+import { LogOut, Settings, ChevronDown, Briefcase } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,7 +34,7 @@ export function AppSidebar() {
   const { toast } = useToast();
   const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({});
 
-  const IconComponent = APP_NAME_ICON; // Assuming APP_NAME_ICON is defined, if not replace with a valid icon
+  const IconComponent = APP_ICON; 
 
   const handleLogout = async () => {
     try {
@@ -50,10 +50,13 @@ export function AppSidebar() {
   const getUserInitials = (name?: string | null) => {
     if (!name) return "U";
     const nameParts = name.split(" ");
-    if (nameParts.length > 1) {
+    if (nameParts.length > 1 && nameParts[0] && nameParts[1]) {
       return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
     }
-    return name.substring(0,2).toUpperCase();
+    if (nameParts[0]) {
+        return nameParts[0].substring(0,2).toUpperCase();
+    }
+    return "U";
   };
 
   const toggleSubmenu = (label: string) => {
@@ -204,4 +207,3 @@ export function AppSidebar() {
 // Helper: Define APP_NAME_ICON if not already defined. 
 // Using Briefcase as a placeholder from your constants.
 const APP_NAME_ICON = Briefcase;
-```
