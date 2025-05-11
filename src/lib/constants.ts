@@ -1,5 +1,5 @@
 
-import type { Lead, PipelineStage, Task, Ticket, User, TicketStatus, TicketPriority, UserRole } from './types';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
@@ -52,62 +52,4 @@ export const INITIAL_TASKS: Task[] = [
 export const TICKET_STATUSES: TicketStatus[] = ['Abierto', 'En Progreso', 'Resuelto', 'Cerrado'];
 export const TICKET_PRIORITIES: TicketPriority[] = ['Baja', 'Media', 'Alta'];
 
-export const INITIAL_TICKETS: Ticket[] = [
-  {
-    id: 'ticket-1',
-    title: 'Problema de acceso al portal de clientes',
-    description: 'Varios clientes informan que no pueden acceder al portal de clientes desde ayer por la tarde. Parece ser un problema intermitente.',
-    status: 'Abierto',
-    priority: 'Alta',
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    reporterUserId: 'user-1',
-    assigneeUserId: 'user-2',
-    relatedLeadId: 'lead-1',
-  },
-  {
-    id: 'ticket-2',
-    title: 'Error en la generación de facturas',
-    description: 'El sistema muestra un error 500 al intentar generar facturas para clientes con suscripciones anuales.',
-    status: 'En Progreso',
-    priority: 'Alta',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-    reporterUserId: 'user-2',
-    assigneeUserId: 'user-2',
-  },
-  {
-    id: 'ticket-3',
-    title: 'Solicitud de nueva función: exportación a CSV',
-    description: 'Un cliente (Beta Solutions) ha solicitado la posibilidad de exportar la lista de contactos a formato CSV.',
-    status: 'Abierto',
-    priority: 'Media',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    reporterUserId: 'user-1', 
-    assigneeUserId: 'user-1',
-    relatedLeadId: 'lead-2',
-  },
-  {
-    id: 'ticket-4',
-    title: 'Consulta sobre integración con API externa',
-    description: 'Gamma Innovations LLC pregunta sobre las capacidades de nuestra API para integrarse con su sistema de inventario.',
-    status: 'Resuelto',
-    priority: 'Media',
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    reporterUserId: 'user-3',
-    assigneeUserId: 'user-3',
-    relatedLeadId: 'lead-3',
-  },
-  {
-    id: 'ticket-5',
-    title: 'Contraseña olvidada - Epsilon Retail',
-    description: 'El contacto principal de Epsilon Retail no puede acceder a su cuenta.',
-    status: 'Cerrado',
-    priority: 'Baja',
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    reporterUserId: 'user-1',
-    assigneeUserId: 'user-1',
-    relatedLeadId: 'lead-5',
-  }
-];
+// INITIAL_TICKETS is removed as tickets will be fetched from Firestore.

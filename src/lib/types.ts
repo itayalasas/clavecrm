@@ -32,7 +32,7 @@ export interface Task {
   assigneeUserId?: string; // ID of the user assigned to the task
   reporterUserId: string; // ID of the user who reported or created the task
   solutionDescription?: string; // Description of the solution
-  attachments?: string[]; // Array of attachment URLs or identifiers
+  attachments?: { name: string, url: string }[]; // Array of attachment objects
   isMonthlyRecurring?: boolean; // For tasks that recur monthly on the first day
 }
 
@@ -47,6 +47,16 @@ export interface User {
   role: UserRole; // Updated to use UserRole
 }
 
+export interface Comment {
+  id: string;
+  userId: string;
+  userName: string; // Denormalized for easier display
+  userAvatarUrl?: string; // Denormalized for easier display
+  text: string;
+  createdAt: string; // ISO string
+  attachments?: { name: string, url: string }[];
+}
+
 export interface Ticket {
   id: string;
   title: string;
@@ -58,5 +68,6 @@ export interface Ticket {
   reporterUserId: string; // ID of the user who created the ticket
   assigneeUserId?: string; // ID of the user assigned to the ticket
   relatedLeadId?: string; // Optional: link ticket to a lead
+  attachments?: { name: string, url: string }[];
+  comments?: Comment[];
 }
-

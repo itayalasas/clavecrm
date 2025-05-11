@@ -1,10 +1,9 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { Ticket, Lead, User, TicketStatus, TicketPriority } from "@/lib/types";
-import { INITIAL_TICKETS, INITIAL_LEADS, NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
+import type { Ticket, Lead, User, TicketStatus, TicketPriority, Comment } from "@/lib/types";
+import { NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
 import { TicketItem } from "@/components/tickets/ticket-item";
 import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,15 +14,24 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
+import { db, storage } from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion } from "firebase/firestore";
+import { ref as storageRef, deleteObject } from "firebase/storage";
+import { addMonths, format, parseISO, startOfMonth } from "date-fns"; // format, parseISO used in TicketItem and AddEdit...Dialog
+import { es } from 'date-fns/locale';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]); // Keep using initial leads, or fetch if needed
   const [users, setUsers] = useState<User[]>([]);
+  
+  const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true); // Added for leads
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"Todos" | TicketStatus>("Todos");
@@ -34,13 +42,57 @@ export default function TicketsPage() {
   const { getAllUsers, currentUser, loading: authLoading } = useAuth(); 
   const ticketsNavItem = NAV_ITEMS.find(item => item.href === '/tickets');
 
+  const fetchTickets = useCallback(async () => {
+    if (!currentUser) { 
+      setIsLoadingTickets(false);
+      return;
+    }
+    setIsLoadingTickets(true);
+    try {
+      const ticketsCollectionRef = collection(db, "tickets");
+      // Add more complex querying if needed, e.g., based on user role for visibility
+      const q = query(ticketsCollectionRef, orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedTickets = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          title: data.title,
+          description: data.description,
+          status: data.status,
+          priority: data.priority,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+          reporterUserId: data.reporterUserId,
+          assigneeUserId: data.assigneeUserId || undefined,
+          relatedLeadId: data.relatedLeadId || undefined,
+          attachments: data.attachments || [],
+          comments: (data.comments || []).map((comment: any) => ({
+            ...comment,
+            createdAt: (comment.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          })),
+        } as Ticket;
+      });
+      setTickets(fetchedTickets);
+    } catch (error) {
+      console.error("Error al obtener tickets:", error);
+      toast({
+        title: "Error al Cargar Tickets",
+        description: "No se pudieron cargar los tickets desde la base de datos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingTickets(false);
+    }
+  }, [currentUser, toast]);
+
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
       const fetchedUsers = await getAllUsers();
       setUsers(fetchedUsers);
     } catch (error) {
-      console.error("Error fetching users for tickets page:", error);
+      console.error("Error al obtener usuarios para la página de tickets:", error);
       toast({
         title: "Error al Cargar Usuarios",
         description: "No se pudieron cargar los datos de los usuarios para la asignación de tickets.",
@@ -51,68 +103,217 @@ export default function TicketsPage() {
     }
   }, [getAllUsers, toast]);
 
+  const fetchLeads = useCallback(async () => { // Added fetchLeads
+    setIsLoadingLeads(true);
+    try {
+      const leadsCollectionRef = collection(db, "leads"); // Assuming 'leads' collection
+      const querySnapshot = await getDocs(leadsCollectionRef);
+      const fetchedLeads = querySnapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as Lead));
+      setLeads(fetchedLeads);
+    } catch (error) {
+      console.error("Error al obtener leads:", error);
+      toast({
+        title: "Error al Cargar Leads",
+        description: "No se pudieron cargar los datos de los leads.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingLeads(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
-    // Simulate fetching tickets and leads
-    setTickets(INITIAL_TICKETS.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    setLeads(INITIAL_LEADS);
-    if (!authLoading) { // Fetch users once auth state is resolved
+    if (!authLoading) {
         fetchUsers();
-    }
-  }, [authLoading, fetchUsers]);
-
-  const handleSaveTicket = (ticket: Ticket) => {
-    const isEditOperation = !!editingTicket; 
-
-    setTickets(prevTickets => {
-      const existingTicketIndex = prevTickets.findIndex(t => t.id === ticket.id);
-      let newTickets;
-      if (existingTicketIndex > -1) {
-        newTickets = [...prevTickets];
-        newTickets[existingTicketIndex] = ticket;
-      } else {
-        newTickets = [ticket, ...prevTickets];
-      }
-      return newTickets.sort((a, b) => {
-        const statusOrder = (s: TicketStatus) => TICKET_STATUSES.indexOf(s);
-        if (statusOrder(a.status) !== statusOrder(b.status)) {
-          return statusOrder(a.status) - statusOrder(b.status);
+        fetchLeads(); // Fetch leads
+        if (currentUser) {
+          fetchTickets();
+        } else {
+          setTickets([]);
+          setIsLoadingTickets(false);
         }
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+  }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTickets]);
+
+
+  const handleSaveTicket = async (ticketData: Ticket) => {
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingTicket(true);
+    const isEditing = !!ticketData.id && tickets.some(t => t.id === ticketData.id);
+    
+    const ticketToSave: Ticket = {
+      ...ticketData,
+      comments: ticketData.comments || [], // Ensure comments is an array
+    };
+    
+    try {
+      const ticketDocRef = doc(db, "tickets", ticketData.id);
+      const firestoreSafeTicket = {
+        ...ticketToSave,
+        createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
+        updatedAt: ticketToSave.updatedAt ? Timestamp.fromDate(new Date(ticketToSave.updatedAt)) : Timestamp.now(),
+        comments: (ticketToSave.comments || []).map(comment => ({
+          ...comment,
+          createdAt: Timestamp.fromDate(new Date(comment.createdAt)),
+        })),
+      };
+      
+      await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true }); 
+
+      if (isEditing) {
+        setTickets(prevTickets => prevTickets.map(t => t.id === ticketData.id ? ticketToSave : t)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Consider more complex sort
+        );
+      } else {
+        setTickets(prevTickets => [ticketToSave, ...prevTickets]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        );
+      }
+      toast({
+        title: isEditing ? "Ticket Actualizado" : "Ticket Creado",
+        description: `El ticket "${ticketToSave.title}" ha sido ${isEditing ? 'actualizado' : 'creado'} exitosamente.`,
       });
-    });
-    setIsDialogOpen(false);
-    setEditingTicket(null);
-    toast({
-        title: isEditOperation ? "Ticket Actualizado" : "Ticket Creado",
-        description: `El ticket "${ticket.title}" ha sido ${isEditOperation ? 'actualizado' : 'creado'} exitosamente.`,
-    });
+      setEditingTicket(null);
+      setIsTicketDialogOpen(false);
+    } catch (error) {
+      console.error("Error al guardar ticket:", error);
+      toast({
+        title: "Error al Guardar Ticket",
+        description: "Ocurrió un error al guardar el ticket.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingTicket(false);
+    }
   };
 
-  const handleDeleteTicket = (ticketId: string) => {
+  const handleDeleteTicket = async (ticketId: string) => {
     const ticketToDelete = tickets.find(t => t.id === ticketId);
-    if (window.confirm(`¿Estás seguro de que quieres eliminar el ticket "${ticketToDelete?.title}"?`)) {
+    if (!ticketToDelete) return;
+
+    if (window.confirm(`¿Estás seguro de que quieres eliminar el ticket "${ticketToDelete.title}"? Esta acción también eliminará los adjuntos asociados.`)) {
+      try {
+        // Delete attachments from Firebase Storage
+        if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
+          for (const attachment of ticketToDelete.attachments) {
+            try {
+              const fileRef = storageRef(storage, attachment.url);
+              await deleteObject(fileRef);
+            } catch (storageError: any) {
+              // Log error but continue, e.g., file might not exist or permissions issue
+              console.error(`Error eliminando adjunto ${attachment.name} de Storage:`, storageError);
+              if (storageError.code !== 'storage/object-not-found') {
+                 toast({ title: "Advertencia", description: `No se pudo eliminar el adjunto ${attachment.name}. Puede que necesite ser eliminado manualmente.`, variant: "default"});
+              }
+            }
+          }
+        }
+         // Delete comments attachments if any (assuming comments are stored with tickets)
+        if (ticketToDelete.comments && ticketToDelete.comments.length > 0) {
+          for (const comment of ticketToDelete.comments) {
+            if (comment.attachments && comment.attachments.length > 0) {
+              for (const attachment of comment.attachments) {
+                 try {
+                    const fileRef = storageRef(storage, attachment.url);
+                    await deleteObject(fileRef);
+                  } catch (storageError: any) {
+                    console.error(`Error eliminando adjunto de comentario ${attachment.name} de Storage:`, storageError);
+                     if (storageError.code !== 'storage/object-not-found') {
+                       toast({ title: "Advertencia", description: `No se pudo eliminar el adjunto de comentario ${attachment.name}.`, variant: "default"});
+                    }
+                  }
+              }
+            }
+          }
+        }
+
+
+        const ticketDocRef = doc(db, "tickets", ticketId);
+        await deleteDoc(ticketDocRef);
         setTickets(prevTickets => prevTickets.filter(ticket => ticket.id !== ticketId));
         toast({
-            title: "Ticket Eliminado",
-            description: `El ticket "${ticketToDelete?.title}" ha sido eliminado.`,
-            variant: "destructive",
+          title: "Ticket Eliminado",
+          description: `El ticket "${ticketToDelete.title}" ha sido eliminado.`,
+          variant: "destructive",
         });
+      } catch (error) {
+        console.error("Error al eliminar ticket:", error);
+        toast({
+          title: "Error al Eliminar Ticket",
+          description: "Ocurrió un error al eliminar el ticket.",
+          variant: "destructive",
+        });
+      }
     }
   };
+
+  const handleAddComment = async (ticketId: string, commentText: string, commentAttachments: {name: string, url: string}[]) => {
+    if (!currentUser) {
+      toast({title: "Error", description: "Debes iniciar sesión para comentar.", variant: "destructive"});
+      return;
+    }
+    const ticketIndex = tickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) {
+       toast({title: "Error", description: "Ticket no encontrado.", variant: "destructive"});
+       return;
+    }
+
+    const newComment: Comment = {
+      id: doc(collection(db, "tickets", ticketId, "comments")).id, // Or generate client-side UUID
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userAvatarUrl: currentUser.avatarUrl,
+      text: commentText,
+      createdAt: new Date().toISOString(),
+      attachments: commentAttachments,
+    };
+
+    try {
+      const ticketDocRef = doc(db, "tickets", ticketId);
+      await updateDoc(ticketDocRef, {
+        comments: arrayUnion({
+          ...newComment,
+          createdAt: Timestamp.fromDate(new Date(newComment.createdAt)) // Store as Timestamp
+        }),
+        updatedAt: Timestamp.now() // Also update ticket's updatedAt field
+      });
+
+      // Optimistically update local state
+      const updatedTickets = [...tickets];
+      const updatedTicket = { ...updatedTickets[ticketIndex] };
+      updatedTicket.comments = [...(updatedTicket.comments || []), newComment];
+      updatedTicket.updatedAt = new Date().toISOString();
+      updatedTickets[ticketIndex] = updatedTicket;
+      setTickets(updatedTickets);
+
+      toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
+      // TODO: Implement email notification to assignee/reporter if different from commenter
+      // This would typically be done via a Firebase Cloud Function triggered on comment creation.
+    } catch (error) {
+      console.error("Error al añadir comentario:", error);
+      toast({title: "Error al Comentar", description: "No se pudo añadir tu comentario.", variant: "destructive"});
+    }
+  };
+
 
   const openNewTicketDialog = () => {
     setEditingTicket(null);
-    setIsDialogOpen(true);
+    setIsTicketDialogOpen(true);
   };
 
   const openEditTicketDialog = (ticket: Ticket) => {
     setEditingTicket(ticket);
-    setIsDialogOpen(true);
+    setIsTicketDialogOpen(true);
   };
 
   const filteredTickets = useMemo(() => {
-    if (!currentUser) return []; // If no current user (still loading or not logged in), show no tickets.
+    if (!currentUser) return [];
 
     return tickets
       .filter(ticket => {
@@ -143,24 +344,26 @@ export default function TicketsPage() {
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
   
-  const isLoading = authLoading || isLoadingUsers;
+  const isLoading = authLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{ticketsNavItem ? ticketsNavItem.label : "Gestión de Tickets"}</h2>
-        <Button onClick={openNewTicketDialog} disabled={isLoadingUsers}>
-          <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
-        </Button>
         <AddEditTicketDialog
-          trigger={<span className="hidden" />}
-          isOpen={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          ticketToEdit={editingTicket}
-          leads={leads}
-          users={users}
-          onSave={handleSaveTicket}
-        />
+            trigger={
+              <Button onClick={openNewTicketDialog} disabled={isLoadingUsers || isSubmittingTicket}>
+                <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
+              </Button>
+            }
+            isOpen={isTicketDialogOpen}
+            onOpenChange={setIsTicketDialogOpen}
+            ticketToEdit={editingTicket}
+            leads={leads}
+            users={users}
+            onSave={handleSaveTicket}
+            key={editingTicket ? `edit-${editingTicket.id}` : 'new-ticket-dialog'}
+          />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -221,8 +424,10 @@ export default function TicketsPage() {
               ticket={ticket}
               leads={leads}
               users={users}
+              currentUser={currentUser}
               onEdit={() => openEditTicketDialog(ticket)}
               onDelete={handleDeleteTicket}
+              onAddComment={handleAddComment}
             />
           ))}
         </div>
@@ -235,4 +440,3 @@ export default function TicketsPage() {
     </div>
   );
 }
-
