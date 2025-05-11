@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Search, Filter } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Removed TabsContent as it's not used directly here
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +20,7 @@ import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy,
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS); // Continue using initial leads for now
+  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [users, setUsers] = useState<User[]>([]);
   
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
@@ -32,25 +33,22 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
 
   const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
-  const { getAllUsers, currentUser } = useAuth();
+  const { getAllUsers, currentUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
-    if (!currentUser) {
+    if (!currentUser) { // currentUser might still be loading if authLoading is true
       setIsLoadingTasks(false);
       return;
     }
     setIsLoadingTasks(true);
     try {
       const tasksCollectionRef = collection(db, "tasks");
-      // Basic query, can be expanded with role-based filtering if needed later
-      // For now, filtering is client-side based on currentUser and role
       const q = query(tasksCollectionRef, orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedTasks = querySnapshot.docs.map(docSnap => ({
         id: docSnap.id,
         ...docSnap.data(),
-        // Ensure date fields are consistently strings if stored as Timestamps
         createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         dueDate: (docSnap.data().dueDate as Timestamp)?.toDate().toISOString() || undefined,
       } as Task));
@@ -85,16 +83,19 @@ export default function TasksPage() {
   }, [getAllUsers, toast]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    if (!authLoading) { // Wait for auth state to be resolved
+        fetchUsers();
+    }
+  }, [authLoading, fetchUsers]);
 
   useEffect(() => {
-    if (currentUser) { // Only fetch tasks if user is loaded
+    if (!authLoading && currentUser) { // Fetch tasks only if auth is resolved and user exists
       fetchTasks();
-    } else {
-      setTasks([]); // Clear tasks if no user
+    } else if (!authLoading && !currentUser) { // If auth resolved and no user, clear tasks
+      setTasks([]);
+      setIsLoadingTasks(false);
     }
-  }, [currentUser, fetchTasks]);
+  }, [authLoading, currentUser, fetchTasks]);
 
 
   const handleSaveTask = async (taskData: Task) => {
@@ -106,10 +107,11 @@ export default function TasksPage() {
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
     const taskId = isEditing ? taskData.id : doc(collection(db, "tasks")).id;
 
+    // Ensure taskData from dialog is used directly, as it should have correct assigneeUserId
     const taskToSave: Task = {
-      ...taskData,
+      ...taskData, // This comes from AddEditTaskDialog and should have processed assigneeUserId
       id: taskId,
-      reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id,
+      reporterUserId: isEditing ? taskData.reporterUserId : currentUser.id, // Default to current user if new
       createdAt: isEditing ? taskData.createdAt : new Date().toISOString(),
       // Ensure dueDate is a string or undefined, not a Date object before saving
       dueDate: taskData.dueDate ? (typeof taskData.dueDate === 'string' ? taskData.dueDate : new Date(taskData.dueDate).toISOString()) : undefined,
@@ -117,12 +119,12 @@ export default function TasksPage() {
     
     try {
       const taskDocRef = doc(db, "tasks", taskId);
-      await setDoc(taskDocRef, taskToSave); // setDoc creates or overwrites
+      await setDoc(taskDocRef, taskToSave); 
 
       if (isEditing) {
         setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t));
       } else {
-        setTasks(prevTasks => [taskToSave, ...prevTasks]);
+        setTasks(prevTasks => [taskToSave, ...prevTasks].sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       }
       toast({
         title: isEditing ? "Tarea Actualizada" : "Tarea Creada",
@@ -190,25 +192,27 @@ export default function TasksPage() {
   };
 
   const filteredTasks = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUser) return []; // If no current user, no tasks.
 
-    return tasks
-      .filter(task => {
+    return tasks // Start with all fetched tasks
+      .filter(task => { // First filter: visibility based on role
+        // If user is admin or supervisor, they see all tasks.
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
-          return true; 
+          return true;
         }
+        // Otherwise, user sees tasks they reported OR are assigned to.
         return task.reporterUserId === currentUser.id || task.assigneeUserId === currentUser.id;
       })
-      .filter(task => {
+      .filter(task => { // Second filter: status (pending/completed/all)
         if (filterStatus === "pending") return !task.completed;
         if (filterStatus === "completed") return task.completed;
         return true;
       })
-      .filter(task => {
+      .filter(task => { // Third filter: priority
         if (filterPriority === "all") return true;
         return task.priority === filterPriority;
       })
-      .filter(task =>
+      .filter(task => // Fourth filter: search term
         task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
@@ -217,10 +221,10 @@ export default function TasksPage() {
   }, [tasks, searchTerm, filterStatus, filterPriority, currentUser]);
 
   const openDialogForNewTask = () => {
-    setEditingTask(null); // Ensure it's a new task
+    setEditingTask(null); 
   };
 
-  const isLoading = isLoadingTasks || isLoadingUsers || (!currentUser && tasks.length === 0);
+  const isLoading = authLoading || isLoadingTasks || isLoadingUsers;
 
   return (
     <div className="flex flex-col gap-6">
@@ -232,13 +236,12 @@ export default function TasksPage() {
                 <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
-            taskToEdit={editingTask} // This will be null for new tasks
-            leads={leads} // Pass leads for relation
-            users={users} // Pass users for assignment
+            taskToEdit={editingTask} 
+            leads={leads} 
+            users={users} 
             onSave={handleSaveTask}
-            key={editingTask ? `edit-${editingTask.id}` : 'new-task'} // Force re-mount to reset dialog state
+            key={editingTask ? `edit-${editingTask.id}` : 'new-task'}
           />
-        {/* Dialog for editing is implicitly handled by setting editingTask and re-rendering AddEditTaskDialog if its open state is managed internally or via a key */}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -305,3 +308,4 @@ export default function TasksPage() {
     </div>
   );
 }
+

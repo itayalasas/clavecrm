@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -30,7 +31,7 @@ export default function TicketsPage() {
   const [filterAssignee, setFilterAssignee] = useState<"Todos" | string>("Todos");
 
   const { toast } = useToast();
-  const { getAllUsers, currentUser } = useAuth(); // Added currentUser
+  const { getAllUsers, currentUser, loading: authLoading } = useAuth(); 
   const ticketsNavItem = NAV_ITEMS.find(item => item.href === '/tickets');
 
   const fetchUsers = useCallback(async () => {
@@ -55,11 +56,13 @@ export default function TicketsPage() {
     // Simulate fetching tickets and leads
     setTickets(INITIAL_TICKETS.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     setLeads(INITIAL_LEADS);
-    fetchUsers();
-  }, [fetchUsers]);
+    if (!authLoading) { // Fetch users once auth state is resolved
+        fetchUsers();
+    }
+  }, [authLoading, fetchUsers]);
 
   const handleSaveTicket = (ticket: Ticket) => {
-    const isEditOperation = !!editingTicket; // Check if it was an edit before clearing editingTicket
+    const isEditOperation = !!editingTicket; 
 
     setTickets(prevTickets => {
       const existingTicketIndex = prevTickets.findIndex(t => t.id === ticket.id);
@@ -109,15 +112,13 @@ export default function TicketsPage() {
   };
 
   const filteredTickets = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUser) return []; // If no current user (still loading or not logged in), show no tickets.
 
     return tickets
       .filter(ticket => {
-        // Visibility filter based on user role
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
-          return true; // Admins/Supervisors see all tickets initially
+          return true; 
         }
-        // Regular users see tickets they reported or are assigned to
         return ticket.reporterUserId === currentUser.id || ticket.assigneeUserId === currentUser.id;
       })
       .filter(ticket => {
@@ -130,8 +131,6 @@ export default function TicketsPage() {
       })
       .filter(ticket => {
         if (filterAssignee === "Todos") return true;
-        // If current user is not admin/supervisor, this filter will apply on their already limited view.
-        // If they filter for "unassigned", they'll see their reported tickets that are unassigned.
         if (filterAssignee === "unassigned") return !ticket.assigneeUserId;
         return ticket.assigneeUserId === filterAssignee;
       })
@@ -140,10 +139,11 @@ export default function TicketsPage() {
         ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
       );
-  }, [tickets, searchTerm, filterStatus, filterPriority, filterAssignee, currentUser]); // Added currentUser
+  }, [tickets, searchTerm, filterStatus, filterPriority, filterAssignee, currentUser]); 
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
-
+  
+  const isLoading = authLoading || isLoadingUsers;
 
   return (
     <div className="flex flex-col gap-6">
@@ -184,7 +184,7 @@ export default function TicketsPage() {
             {TICKET_PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && ( // Only show assignee filter for admin/supervisor
+        {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && ( 
             <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers}>
             <SelectTrigger className="w-full">
                 <Filter className="h-4 w-4 mr-2" />
@@ -207,7 +207,7 @@ export default function TicketsPage() {
         </TabsList>
       </Tabs>
 
-      {isLoadingUsers || (!currentUser && tickets.length > 0) ? ( // Added loading state for when currentUser is not yet available but tickets might be
+      {isLoading ? ( 
          <div className="space-y-4">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
@@ -235,3 +235,4 @@ export default function TicketsPage() {
     </div>
   );
 }
+
