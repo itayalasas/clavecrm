@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon, Paperclip, MessageSquareText } from "lucide-react"; 
+import { Edit3, Trash2, CalendarDays, User as UserIcon, LinkIcon, Paperclip, MessageSquareText, Repeat } from "lucide-react"; 
 import { format, parseISO, differenceInDays, isValid } from 'date-fns';
 import { es } from 'date-fns/locale'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -81,7 +81,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
     switch (task.priority) {
       case 'high': 
         priorityText = 'Alta';
-        badgeClass += " bg-red-500 hover:bg-red-600 text-white"; // More specific red for high priority
+        badgeClass += " bg-red-500 hover:bg-red-600 text-white"; 
         break;
       case 'medium': 
         priorityText = 'Media';
@@ -89,7 +89,7 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
         break;
       case 'low': 
         priorityText = 'Baja';
-        badgeClass += " bg-gray-400 hover:bg-gray-500 text-white"; // Example: Grey for low
+        badgeClass += " bg-gray-400 hover:bg-gray-500 text-white"; 
         break;
       default: 
         return <Badge variant="outline" className="capitalize">{priorityText}</Badge>;
@@ -133,6 +133,20 @@ export function TaskItem({ task, leads, users, onToggleComplete, onEdit, onDelet
                     )}
                     {getDueDateBadge()}
                     {getPriorityBadge()}
+                    {task.isMonthlyRecurring && (
+                       <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 p-1 px-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 cursor-default">
+                              <Repeat className="h-3 w-3" /> Recurrente
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Esta tarea es recurrente (mensual, primer día del mes).</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     {relatedLead && (
                     <TooltipProvider delayDuration={100}>
                         <Tooltip>

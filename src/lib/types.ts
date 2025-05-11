@@ -33,6 +33,7 @@ export interface Task {
   reporterUserId: string; // ID of the user who reported or created the task
   solutionDescription?: string; // Description of the solution
   attachments?: string[]; // Array of attachment URLs or identifiers
+  isMonthlyRecurring?: boolean; // For tasks that recur monthly on the first day
 }
 
 export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';

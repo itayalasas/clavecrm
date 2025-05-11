@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -26,7 +27,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Check, ChevronsUpDown, Paperclip, UploadCloud, X } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, Paperclip, UploadCloud, X, Repeat } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from 'date-fns/locale'; 
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ const defaultTaskBase: Omit<Task, 'id' | 'createdAt' | 'reporterUserId'> = {
   assigneeUserId: undefined,
   solutionDescription: "",
   attachments: [],
+  isMonthlyRecurring: false,
 };
 
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
@@ -99,6 +101,7 @@ export function AddEditTaskDialog({
         reporterUserId: taskToEdit.reporterUserId,
         solutionDescription: taskToEdit.solutionDescription || "",
         attachments: taskToEdit.attachments || [],
+        isMonthlyRecurring: taskToEdit.isMonthlyRecurring || false,
       };
     }
     return {
@@ -129,6 +132,10 @@ export function AddEditTaskDialog({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCheckboxChange = (name: 'isMonthlyRecurring', checked: boolean) => {
+    setFormData((prev) => ({ ...prev, [name]: checked }));
   };
 
   const handleSelectChange = (name: 'relatedLeadId' | 'priority' | 'assigneeUserId', value: string) => {
@@ -242,6 +249,7 @@ export function AddEditTaskDialog({
       reporterUserId: taskToEdit ? formData.reporterUserId! : currentUser!.id,
       solutionDescription: formData.solutionDescription || "",
       attachments: taskAttachments,
+      isMonthlyRecurring: formData.isMonthlyRecurring || false,
     };
 
     onSave(taskToSave);
@@ -460,7 +468,23 @@ export function AddEditTaskDialog({
               )}
             </div>
           </div>
-
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor={`${dialogId}-isMonthlyRecurring`} className="text-right">Tarea Recurrente</Label>
+            <div className="col-span-3 flex items-center space-x-2">
+              <Checkbox
+                id={`${dialogId}-isMonthlyRecurring`}
+                checked={formData.isMonthlyRecurring || false}
+                onCheckedChange={(checked) => handleCheckboxChange('isMonthlyRecurring', Boolean(checked))}
+                disabled={isUploading || !!taskToEdit} // Disable if editing, recurrence set on creation
+              />
+              <label
+                htmlFor={`${dialogId}-isMonthlyRecurring`}
+                className="text-sm font-normal text-muted-foreground leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Mensual (se recreará el 1er día del mes siguiente al completarse)
+              </label>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isUploading}>Cancelar</Button>
@@ -476,3 +500,4 @@ export function AddEditTaskDialog({
     </Dialog>
   );
 }
+

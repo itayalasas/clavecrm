@@ -15,7 +15,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch } from "firebase/firestore";
+import { addMonths, setDate, startOfMonth } from "date-fns";
 
 
 export default function TasksPage() {
@@ -62,6 +63,7 @@ export default function TasksPage() {
           reporterUserId: data.reporterUserId as string,
           solutionDescription: data.solutionDescription as string | undefined,
           attachments: data.attachments as string[] | undefined,
+          isMonthlyRecurring: data.isMonthlyRecurring as boolean | undefined,
         } as Task;
       });
       setTasks(fetchedTasks);
@@ -118,15 +120,13 @@ export default function TasksPage() {
     setIsSubmittingTask(true);
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
     
-    // taskData.id is now guaranteed to be present by AddEditTaskDialog
     const taskId = taskData.id; 
 
     const taskToSave: Task = {
       ...taskData, 
-      // reporterUserId is set in AddEditTaskDialog
-      // createdAt is set in AddEditTaskDialog
       solutionDescription: taskData.solutionDescription || "",
       attachments: taskData.attachments || [],
+      isMonthlyRecurring: taskData.isMonthlyRecurring || false,
     };
     
     try {
@@ -137,7 +137,7 @@ export default function TasksPage() {
         dueDate: taskToSave.dueDate ? Timestamp.fromDate(new Date(taskToSave.dueDate)) : null,
       };
       
-      await setDoc(taskDocRef, firestoreSafeTask, { merge: true }); // Always merge to handle edits or new
+      await setDoc(taskDocRef, firestoreSafeTask, { merge: true }); 
 
       if (isEditing) {
         setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? taskToSave : t)
@@ -168,24 +168,70 @@ export default function TasksPage() {
 
   const handleToggleComplete = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task || !currentUser) return;
 
     const updatedTask = { ...task, completed: !task.completed };
+    const batch = writeBatch(db);
+
     try {
       const taskDocRef = doc(db, "tasks", taskId);
-      await updateDoc(taskDocRef, { completed: updatedTask.completed });
-      setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? updatedTask : t)
-        .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      );
+      batch.update(taskDocRef, { completed: updatedTask.completed });
+
+      let newRecurringTaskInstance: Task | null = null;
+
+      if (updatedTask.completed && task.isMonthlyRecurring) {
+        const originalDueDate = task.dueDate ? new Date(task.dueDate) : new Date();
+        
+        let nextMonthDate = addMonths(originalDueDate, 1);
+        const nextDueDate = startOfMonth(nextMonthDate);
+
+        const newTaskId = doc(collection(db, "tasks")).id;
+        newRecurringTaskInstance = {
+          ...task, // Copy most fields from the original task
+          id: newTaskId,
+          createdAt: new Date().toISOString(),
+          dueDate: nextDueDate.toISOString(),
+          completed: false,
+          solutionDescription: "", // Reset solution for new instance
+          attachments: [], // Reset attachments for new instance
+          // isMonthlyRecurring is already true from '...task'
+        };
+        
+        const newRecurringTaskDocRef = doc(db, "tasks", newRecurringTaskInstance.id);
+        const firestoreSafeNewRecurringTask = {
+            ...newRecurringTaskInstance,
+            createdAt: Timestamp.fromDate(new Date(newRecurringTaskInstance.createdAt)),
+            dueDate: newRecurringTaskInstance.dueDate ? Timestamp.fromDate(new Date(newRecurringTaskInstance.dueDate)) : null,
+        }
+        batch.set(newRecurringTaskDocRef, firestoreSafeNewRecurringTask);
+      }
+
+      await batch.commit();
+
+      setTasks(prevTasks => {
+        let newTasksList = prevTasks.map(t => t.id === taskId ? updatedTask : t);
+        if (newRecurringTaskInstance) {
+          newTasksList = [newRecurringTaskInstance, ...newTasksList];
+        }
+        return newTasksList.sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      });
+
       toast({
         title: "Tarea Actualizada",
         description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
       });
+      if (newRecurringTaskInstance) {
+        toast({
+          title: "Tarea Recurrente Creada",
+          description: `Nueva instancia de "${newRecurringTaskInstance.title}" creada para el ${format(new Date(newRecurringTaskInstance.dueDate!), "PP", {locale: es})}.`
+        });
+      }
+
     } catch (error) {
-      console.error("Error al cambiar estado de tarea completa:", error);
+      console.error("Error al cambiar estado de tarea completa y/o crear recurrencia:", error);
       toast({
         title: "Error al Actualizar Tarea",
-        description: "No se pudo actualizar el estado de la tarea.",
+        description: "No se pudo actualizar el estado de la tarea y/o crear la recurrencia.",
         variant: "destructive",
       });
     }
