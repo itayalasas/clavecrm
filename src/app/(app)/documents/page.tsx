@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -32,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { isValid, parseISO } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 
 export default function DocumentsPage() {
@@ -609,7 +611,7 @@ export default function DocumentsPage() {
             "Compartir Documentos",
             ShareIconLucide,
             "Comparte documentos de forma segura con clientes o colaboradores.",
-            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Parcialmente Implementado - UI lista, Falta lógica de control de acceso).", "Permisos de acceso por grupo (Pendiente).", "Notificaciones de acceso (Pendiente)."],
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Permisos de acceso por grupo (Pendiente).", "Notificaciones de acceso (Pendiente)."],
             false, true
         )}
          {renderFutureFeatureCard(
