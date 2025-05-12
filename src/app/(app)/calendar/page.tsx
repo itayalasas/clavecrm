@@ -16,6 +16,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge"; // Added import for Badge
 
 export default function CalendarPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/calendar');
