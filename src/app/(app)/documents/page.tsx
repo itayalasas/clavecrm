@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType } from "@/lib/types";
+import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { isValid, parseISO } from "date-fns";
 
 
 export default function DocumentsPage() {
@@ -65,13 +67,45 @@ export default function DocumentsPage() {
         const data = docSnap.data();
         return {
           id: docSnap.id,
-          ...data,
+          name: data.name as string,
+          fileNameInStorage: data.fileNameInStorage as string,
+          fileURL: data.fileURL as string,
+          fileType: data.fileType as string,
+          fileSize: data.fileSize as number,
+          description: data.description as (string | undefined),
+          tags: data.tags as (string[] | undefined),
           uploadedAt: (data.uploadedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          uploadedByUserId: data.uploadedByUserId as string,
+          uploadedByUserName: data.uploadedByUserName as string,
           lastVersionUploadedAt: (data.lastVersionUploadedAt as Timestamp)?.toDate().toISOString() || undefined,
-          versionHistory: data.versionHistory?.map((v: any) => ({
-            ...v,
-            uploadedAt: (v.uploadedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          })) || [],
+          lastVersionUploadedByUserId: data.lastVersionUploadedByUserId as (string | undefined),
+          lastVersionUploadedByUserName: data.lastVersionUploadedByUserName as (string | undefined),
+          relatedLeadId: data.relatedLeadId as (string | undefined),
+          relatedContactId: data.relatedContactId as (string | undefined),
+          relatedOpportunityId: data.relatedOpportunityId as (string | undefined),
+          relatedOrderId: data.relatedOrderId as (string | undefined),
+          relatedQuoteId: data.relatedQuoteId as (string | undefined),
+          relatedTicketId: data.relatedTicketId as (string | undefined),
+          relatedProjectId: data.relatedProjectId as (string | undefined),
+          currentVersion: data.currentVersion as number,
+          versionHistory: (data.versionHistory || []).map((v: any): DocumentVersion => ({
+            version: v.version as number,
+            fileURL: v.fileURL as string,
+            fileNameInStorage: v.fileNameInStorage as string,
+            uploadedAt: (typeof v.uploadedAt === 'string' && isValid(parseISO(v.uploadedAt)))
+              ? v.uploadedAt
+              : (v.uploadedAt instanceof Timestamp ? v.uploadedAt.toDate().toISOString() : new Date().toISOString()),
+            uploadedByUserId: v.uploadedByUserId as string,
+            uploadedByUserName: v.uploadedByUserName as string,
+            fileSize: v.fileSize as number,
+            fileType: v.fileType as string,
+            notes: v.notes as (string | undefined),
+          })),
+          isPublic: data.isPublic as (boolean | undefined),
+          sharedWithUserIds: data.sharedWithUserIds as (string[] | undefined),
+          sharedWithGroupIds: data.sharedWithGroupIds as (string[] | undefined),
+          accessLink: data.accessLink as (string | undefined),
+          linkExpiresAt: data.linkExpiresAt as (string | undefined),
         } as DocumentFile;
       });
       setDocuments(fetchedDocs);
@@ -121,15 +155,16 @@ export default function DocumentsPage() {
 
   const confirmDeleteDocument = (docId: string, storagePath: string) => {
     const docFile = documents.find(d => d.id === docId);
-    if (docFile && docFile.versionHistory && docFile.versionHistory.length > 0) {
-        toast({
-            title: "Eliminación no permitida",
-            description: "Este documento tiene historial de versiones. Elimina las versiones anteriores primero (Funcionalidad Próxima).",
-            variant: "destructive",
-            duration: 7000,
-        });
-        return;
-    }
+    // Temporarily allow deletion even with history for testing, will refine this logic.
+    // if (docFile && docFile.versionHistory && docFile.versionHistory.length > 0) {
+    //     toast({
+    //         title: "Eliminación no permitida",
+    //         description: "Este documento tiene historial de versiones. Elimina las versiones anteriores primero (Funcionalidad Próxima).",
+    //         variant: "destructive",
+    //         duration: 7000,
+    //     });
+    //     return;
+    // }
     setDocumentToDelete({ id: docId, storagePath });
   };
 
@@ -366,3 +401,6 @@ export default function DocumentsPage() {
     </div>
   );
 }
+
+
+    
