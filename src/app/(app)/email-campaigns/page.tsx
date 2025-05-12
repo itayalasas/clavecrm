@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
-import { NAV_ITEMS, EMAIL_CAMPAIGN_STATUSES } from "@/lib/constants";
+import { NAV_ITEMS } from "@/lib/constants"; // EMAIL_CAMPAIGN_STATUSES removed as it's not directly used
 import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -109,10 +109,19 @@ export default function EmailCampaignsPage() {
         const querySnapshot = await getDocs(q);
         const fetchedContacts = querySnapshot.docs.map(docSnap => {
             const data = docSnap.data();
+            const createdAtRaw = data.createdAt;
+            let createdAtISO = new Date().toISOString();
+            if (createdAtRaw instanceof Timestamp) {
+                createdAtISO = createdAtRaw.toDate().toISOString();
+            } else if (typeof createdAtRaw === 'string' && isValid(parseISO(createdAtRaw))) {
+                createdAtISO = createdAtRaw;
+            }
+            
             return {
                 id: docSnap.id,
                 ...data,
-                createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+                createdAt: createdAtISO,
+                subscribed: data.subscribed === undefined ? true : data.subscribed, // Default to true if undefined
             } as Contact;
         });
         setContacts(fetchedContacts);
@@ -151,10 +160,18 @@ export default function EmailCampaignsPage() {
       const querySnapshot = await getDocs(q);
       const fetchedCampaigns = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
+        const createdAtRaw = data.createdAt;
+        let createdAtISO = new Date().toISOString();
+        if (createdAtRaw instanceof Timestamp) {
+          createdAtISO = createdAtRaw.toDate().toISOString();
+        } else if (typeof createdAtRaw === 'string' && isValid(parseISO(createdAtRaw))) {
+          createdAtISO = createdAtRaw;
+        }
+        
         return {
         id: docSnap.id,
         ...data,
-        createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+        createdAt: createdAtISO,
         updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
         scheduledAt: (data.scheduledAt as Timestamp)?.toDate().toISOString() || undefined,
         sentAt: (data.sentAt as Timestamp)?.toDate().toISOString() || undefined,
@@ -236,7 +253,7 @@ export default function EmailCampaignsPage() {
       const docRefId = id || doc(collection(db, "emailTemplates")).id;
       await setDoc(doc(db, "emailTemplates", docRefId), {
         ...templateData,
-        [id ? 'updatedAt' : 'createdAt']: serverTimestamp(),
+        [id ? 'updatedAt' : 'createdAt']: serverTimestamp(), // Set createdAt only if new
         updatedAt: serverTimestamp() // always update this
       }, { merge: !!id });
       toast({ title: id ? "Plantilla Actualizada" : "Plantilla Creada", description: `Plantilla "${templateData.name}" guardada.` });
@@ -278,6 +295,9 @@ export default function EmailCampaignsPage() {
     campaignDataFromDialog: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string },
     id?: string
   ) => {
+    setIsCampaignDialogOpen(false); // Close dialog immediately
+    toast({ title: "Guardando Campaña...", description: "Por favor espera." });
+
     try {
       const docRefId = id || doc(collection(db, "emailCampaigns")).id;
       const existingCampaign = id ? campaigns.find(c => c.id === id) : null;
@@ -290,26 +310,28 @@ export default function EmailCampaignsPage() {
 
       let determinedStatus: EmailCampaignStatus = 'Borrador';
       let effectiveScheduledAt: Timestamp | null = null;
-      let effectiveSentAt: Timestamp | null = existingCampaign?.sentAt ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
+      let effectiveSentAt: Timestamp | null = null;
+
+      if(existingCampaign?.sentAt && isValid(parseISO(existingCampaign.sentAt))) {
+        effectiveSentAt = Timestamp.fromDate(parseISO(existingCampaign.sentAt));
+      }
+
 
       if (campaignDataFromDialog.scheduledAt) {
         const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt);
         if (isValid(scheduledDateObj)) {
           effectiveScheduledAt = Timestamp.fromDate(scheduledDateObj);
-          if (isPast(scheduledDateObj) || isEqual(scheduledDateObj, new Date())) {
-            // If scheduled for past/now and not already sent, set to 'Enviando'
-            if (existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
-                determinedStatus = 'Enviando';
-                effectiveSentAt = Timestamp.now(); // Mark as attempting to send now
-            } else if (existingCampaign?.status === 'Enviada') {
-                 determinedStatus = 'Enviada'; // Keep as sent if already sent
-            } else {
-                determinedStatus = existingCampaign?.status || 'Programada';
-            }
-
+          // If scheduled for past/now and not already sent/sending, set to 'Enviando'
+          // This will trigger the Cloud Function
+          if ((isPast(scheduledDateObj) || isEqual(scheduledDateObj, new Date())) && existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
+            determinedStatus = 'Enviando';
+            // sentAt will be set by the Cloud Function upon successful processing
           } else if (isFuture(scheduledDateObj)) {
             determinedStatus = 'Programada';
-            effectiveSentAt = null; // Clear sentAt if re-scheduling a previously sent campaign to future
+            effectiveSentAt = null; // Clear sentAt if re-scheduling
+          } else if (existingCampaign?.status) {
+            // If it was already Enviada or Enviando, and scheduled for past, keep that status.
+             determinedStatus = existingCampaign.status;
           }
         }
       } else {
@@ -325,14 +347,15 @@ export default function EmailCampaignsPage() {
         ...campaignDataFromDialog,
         analytics: existingCampaign?.analytics || initialAnalytics,
         updatedAt: serverTimestamp(),
-        createdAt: existingCampaign?.createdAt ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp(),
-        scheduledAt: effectiveScheduledAt,
-        sentAt: effectiveSentAt,
         status: determinedStatus,
+        scheduledAt: effectiveScheduledAt, // Firestore Timestamp or null
+        sentAt: effectiveSentAt, // Firestore Timestamp or null, will be updated by function if sending
       };
       
       if (!id) { // New campaign
         dataToSave.createdAt = serverTimestamp();
+      } else { // Existing campaign, preserve original creation date
+        dataToSave.createdAt = existingCampaign?.createdAt ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp();
       }
 
       await setDoc(doc(db, "emailCampaigns", docRefId), dataToSave, { merge: true });
@@ -342,7 +365,10 @@ export default function EmailCampaignsPage() {
         toastMessage += " La campaña se está procesando para su envío.";
       } else if (dataToSave.status === 'Programada' && effectiveScheduledAt) {
         toastMessage += ` Programada para: ${format(effectiveScheduledAt.toDate(), "Pp", {locale: es})}.`;
+      } else if (dataToSave.status === 'Borrador') {
+         toastMessage += " La campaña está en borrador y no se enviará hasta que se programe.";
       }
+
 
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage });
       fetchCampaigns(); // Re-fetch to update the list with the latest status
@@ -380,17 +406,17 @@ export default function EmailCampaignsPage() {
     setIsAnalyticsDialogOpen(true);
   };
 
-  const renderPlaceHolderContent = (title: string, features: string[], Icon?: LucideIcon, implemented: boolean = false) => (
+  const renderPlaceHolderContent = (title: string, features: string[], Icon?: LucideIcon, implemented: boolean = false, partiallyImplemented: boolean = false) => (
     <Card className="mt-6">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
-          {Icon ? <Icon className={`h-5 w-5 ${implemented ? 'text-green-500' : 'text-primary'}`} /> : <Construction className="h-5 w-5 text-amber-500" />}
+          {Icon ? <Icon className={`h-5 w-5 ${implemented ? 'text-green-500' : (partiallyImplemented ? 'text-yellow-500' : 'text-primary')}`} /> : <Construction className="h-5 w-5 text-amber-500" />}
           {title}
         </CardTitle>
-        <CardDescription>{implemented ? "Funcionalidad parcialmente implementada." : "Esta sección está planificada y se implementará próximamente."}</CardDescription>
+        <CardDescription>{implemented ? "Funcionalidad implementada." : (partiallyImplemented ? "Funcionalidad parcialmente implementada." : "Esta sección está planificada y se implementará próximamente.")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <h4 className="font-semibold mb-2">Funcionalidades {implemented ? 'Actuales/Planeadas' : 'Planeadas'}:</h4>
+        <h4 className="font-semibold mb-2">Funcionalidades {implemented ? 'Implementadas' : (partiallyImplemented ? 'Actuales/Planeadas' : 'Planeadas')}:</h4>
         <ul className="list-disc list-inside space-y-1 text-muted-foreground text-sm">
           {features.map(feature => <li key={feature}>{feature}</li>)}
         </ul>
@@ -484,9 +510,10 @@ export default function EmailCampaignsPage() {
            {renderPlaceHolderContent("Funciones Avanzadas de Campaña", [
                 "Creación y programación de envíos (Mejorado, envío por Cloud Functions).",
                 "Selección de listas de contactos y plantillas (Implementado).",
-                "Analíticas de rendimiento básicas (Recuento de envíos por Cloud Function, detalles próximamente).",
+                "Analíticas de rendimiento básicas (Recuento de envíos por Cloud Function).",
+                "Detalles de analíticas de apertura/clics (Próximamente, requiere webhooks).",
                 "Pruebas A/B para asuntos y contenido (Próximamente).",
-            ], Send, true)}
+            ], Send, false, true)}
         </TabsContent>
 
         {/* CONTACT LISTS TAB */}
@@ -600,7 +627,7 @@ export default function EmailCampaignsPage() {
           {renderPlaceHolderContent("Editor Avanzado y Previsualización", [
                 "Editor visual (arrastrar y soltar) (Próximamente).",
                 "Opción para importar/editar HTML directamente (Implementado).",
-                "Biblioteca de plantillas pre-diseñadas (Implementado parcialmente).",
+                "Biblioteca de plantillas pre-diseñadas (Implementado).",
                 "Personalización con variables (ej. {{nombre_contacto}}) (Implementado, se aplica en Cloud Function).",
                 "Previsualización en escritorio y móvil (Implementado).",
              ], Palette, true)}
