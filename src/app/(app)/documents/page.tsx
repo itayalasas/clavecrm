@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -7,12 +6,12 @@ import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIconLucide } from "lucide-react";
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIconLucide, RotateCcw } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, where, updateDoc, arrayUnion } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, where, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form"; 
@@ -100,6 +99,7 @@ export default function DocumentsPage() {
             fileSize: v.fileSize as number,
             fileType: v.fileType as string,
             notes: v.notes as (string | undefined),
+            versionNotes: v.versionNotes as (string | undefined),
           })),
           isPublic: data.isPublic as (boolean | undefined),
           sharedWithUserIds: data.sharedWithUserIds as (string[] | undefined),
@@ -209,6 +209,57 @@ export default function DocumentsPage() {
   const openVersionHistoryDialog = (docFile: DocumentFile) => {
     setDocumentForVersionHistory(docFile);
     setIsVersionHistoryDialogOpen(true);
+  };
+
+  const handleRestoreVersion = async (documentId: string, versionToRestore: DocumentVersion) => {
+    if (!currentUser) {
+      toast({ title: "Error de autenticación", variant: "destructive"});
+      return;
+    }
+    try {
+      const docRef = doc(db, "documents", documentId);
+      const currentDocSnap = await getDoc(docRef);
+
+      if (!currentDocSnap.exists()) {
+        toast({ title: "Error", description: "Documento no encontrado.", variant: "destructive" });
+        return;
+      }
+      const currentDocData = currentDocSnap.data() as DocumentFile;
+
+      const versionBeingReplaced: DocumentVersion = {
+        version: currentDocData.currentVersion,
+        fileURL: currentDocData.fileURL,
+        fileNameInStorage: currentDocData.fileNameInStorage,
+        uploadedAt: currentDocData.lastVersionUploadedAt || currentDocData.uploadedAt,
+        uploadedByUserId: currentDocData.lastVersionUploadedByUserId || currentDocData.uploadedByUserId,
+        uploadedByUserName: currentDocData.lastVersionUploadedByUserName || currentDocData.uploadedByUserName,
+        fileSize: currentDocData.fileSize,
+        fileType: currentDocData.fileType,
+        notes: currentDocData.description, // Using current description as notes for the replaced version.
+        versionNotes: currentDocData.description,
+      };
+
+      const updatedVersionHistory = [...(currentDocData.versionHistory || []), versionBeingReplaced];
+
+      await updateDoc(docRef, {
+        fileURL: versionToRestore.fileURL,
+        fileNameInStorage: versionToRestore.fileNameInStorage,
+        fileType: versionToRestore.fileType,
+        fileSize: versionToRestore.fileSize,
+        description: versionToRestore.notes || versionToRestore.versionNotes, // Use the notes from the version being restored
+        lastVersionUploadedAt: serverTimestamp(),
+        lastVersionUploadedByUserId: currentUser.id,
+        lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
+        currentVersion: currentDocData.currentVersion + 1,
+        versionHistory: updatedVersionHistory,
+      });
+
+      toast({ title: "Versión Restaurada", description: `El documento ha sido restaurado a la versión ${versionToRestore.version}.` });
+      fetchDocuments();
+    } catch (error) {
+      console.error("Error restaurando versión:", error);
+      toast({ title: "Error al Restaurar Versión", description: String(error), variant: "destructive" });
+    }
   };
 
 
@@ -331,9 +382,8 @@ export default function DocumentsPage() {
             "Control de Versiones",
             History,
             "Mantén un historial de cambios y accede a versiones anteriores.",
-            ["Estructura básica para versionamiento implementada (v1 inicial).", "Subir nueva versión de un documento existente (Implementado).", "Ver historial de versiones (Implementado).", "Restaurar versión anterior (Pendiente)."],
-            false, 
-            true 
+            ["Estructura básica para versionamiento implementada (v1 inicial).", "Subir nueva versión de un documento existente (Implementado).", "Ver historial de versiones (Implementado).", "Restaurar versión anterior (Implementado)."],
+            true
         )}
         {renderFutureFeatureCard(
             "Plantillas de Documentos",
@@ -396,11 +446,9 @@ export default function DocumentsPage() {
           isOpen={isVersionHistoryDialogOpen}
           onOpenChange={setIsVersionHistoryDialogOpen}
           documentFile={documentForVersionHistory}
+          onRestoreVersion={handleRestoreVersion}
         />
       )}
     </div>
   );
 }
-
-
-    

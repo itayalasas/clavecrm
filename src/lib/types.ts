@@ -324,10 +324,10 @@ export interface DocumentVersion {
   uploadedAt: string; // ISO string
   uploadedByUserId: string;
   uploadedByUserName: string; // Denormalized for display
-  notes?: string; // Optional notes for this specific version
+  notes?: string; // Optional notes for this specific version (general description of changes)
   fileSize: number;
   fileType: string;
-  versionNotes?: string; // Notes specific to this version upload
+  versionNotes?: string; // Specific notes for the upload event of this version
 }
 
 export interface DocumentFile {

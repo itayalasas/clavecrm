@@ -6,14 +6,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, UserCircle, CalendarDays, MessageSquareText, FileText } from "lucide-react";
+import { Download, UserCircle, CalendarDays, MessageSquareText, FileText, RotateCcw } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface VersionHistoryDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   documentFile: DocumentFile;
+  onRestoreVersion: (documentId: string, versionToRestore: DocumentVersion) => Promise<void>;
 }
 
 function formatFileSize(bytes: number): string {
@@ -28,9 +35,9 @@ export function VersionHistoryDialog({
   isOpen,
   onOpenChange,
   documentFile,
+  onRestoreVersion,
 }: VersionHistoryDialogProps) {
 
-  // Combine current version and history for display, sorted by version number descending
   const allVersions: (DocumentVersion & { isCurrent?: boolean })[] = [
     {
       version: documentFile.currentVersion,
@@ -39,13 +46,20 @@ export function VersionHistoryDialog({
       uploadedAt: documentFile.lastVersionUploadedAt || documentFile.uploadedAt,
       uploadedByUserId: documentFile.lastVersionUploadedByUserId || documentFile.uploadedByUserId,
       uploadedByUserName: documentFile.lastVersionUploadedByUserName || documentFile.uploadedByUserName,
-      notes: `Versión actual. ${documentFile.description || ''}`, // Could be improved if version notes are separate
+      notes: documentFile.description || `Versión actual.`, 
       fileSize: documentFile.fileSize,
       fileType: documentFile.fileType,
       isCurrent: true,
     },
-    ...(documentFile.versionHistory || []),
+    ...(documentFile.versionHistory || []).map(v => ({...v, notes: v.versionNotes || v.notes})), // Ensure notes field is consistent
   ].sort((a, b) => b.version - a.version);
+
+  const handleRestoreClick = async (version: DocumentVersion) => {
+    if (window.confirm(`¿Estás seguro de que quieres restaurar la versión ${version.version} de este documento? La versión actual se guardará en el historial.`)) {
+      await onRestoreVersion(documentFile.id, version);
+      onOpenChange(false); // Close dialog after restore attempt
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -92,21 +106,36 @@ export function VersionHistoryDialog({
                     </div>
                   </TableCell>
                   <TableCell className="text-xs">{formatFileSize(version.fileSize)}</TableCell>
-                  <TableCell className="text-xs max-w-xs truncate" title={version.notes || version.versionNotes}>
-                    {version.notes || version.versionNotes || "Sin notas"}
+                  <TableCell className="text-xs max-w-xs truncate" title={version.notes}>
+                    {version.notes || "Sin notas"}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={version.fileURL} target="_blank" rel="noopener noreferrer" download={`${documentFile.name} (v${version.version})`}>
-                        <Download className="mr-2 h-3 w-3" /> Descargar
-                      </a>
-                    </Button>
-                    {/* Placeholder for Restore button */}
-                    {/* {!version.isCurrent && (
-                      <Button variant="ghost" size="sm" className="ml-2" onClick={() => alert('Restaurar - Próximamente')}>
-                        Restaurar
-                      </Button>
-                    )} */}
+                  <TableCell className="text-right space-x-1">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button variant="outline" size="sm" asChild>
+                            <a href={version.fileURL} target="_blank" rel="noopener noreferrer" download={`${documentFile.name} (v${version.version})`}>
+                                <Download className="h-3 w-3" />
+                                <span className="sr-only sm:not-sr-only sm:ml-1">Descargar</span>
+                            </a>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Descargar v{version.version}</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    {!version.isCurrent && (
+                      <TooltipProvider>
+                        <Tooltip>
+                           <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={() => handleRestoreClick(version)}>
+                                <RotateCcw className="h-3 w-3" />
+                                <span className="sr-only sm:not-sr-only sm:ml-1">Restaurar</span>
+                            </Button>
+                            </TooltipTrigger>
+                           <TooltipContent><p>Restaurar a v{version.version}</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </TableCell>
                 </TableRow>
               )) : (
