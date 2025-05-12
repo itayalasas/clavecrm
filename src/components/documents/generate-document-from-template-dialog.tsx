@@ -212,14 +212,15 @@ export function GenerateDocumentFromTemplateDialog({
         currentVersion: 1,
         basedOnTemplateId: template.id,
         templateVariablesFilled,
-        relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? undefined : data.relatedLeadId,
-        relatedContactId: data.relatedContactId === NO_SELECTION_VALUE ? undefined : data.relatedContactId,
+        relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? null : data.relatedLeadId,
+        relatedContactId: data.relatedContactId === NO_SELECTION_VALUE ? null : data.relatedContactId,
       };
 
       const docRef = await addDoc(collection(db, "documents"), newDocumentData);
       onGenerateSuccess({ ...newDocumentData, id: docRef.id, createdAt: new Date().toISOString() } as DocumentFile); // Pass full new document
       onOpenChange(false);
     } catch (error) {
+      console.error("Error al generar documento:", error)
       toast({ title: "Error al Generar Documento", description: String(error), variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -395,3 +396,4 @@ export function GenerateDocumentFromTemplateDialog({
     </Dialog>
   );
 }
+
