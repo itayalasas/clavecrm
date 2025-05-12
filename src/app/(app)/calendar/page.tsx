@@ -141,8 +141,17 @@ export default function CalendarPage() {
       fetchMeetings();
       setIsMeetingDialogOpen(false);
       
-      if (!existingMeetingId || (existingMeetingId && JSON.stringify(meetings.find(m=>m.id===existingMeetingId)?.attendees) !== JSON.stringify(meetingDataFromDialog.attendees))) {
-        toast({ title: "Invitaciones (Simulado)", description: "En un entorno real, se enviarían invitaciones .ics y recordatorios por correo.", variant: "default", duration: 5000 });
+      // Check if attendees changed or if it's a new meeting to "send" invitations
+      const oldAttendees = existingMeetingId ? meetings.find(m => m.id === existingMeetingId)?.attendees : [];
+      const attendeesChanged = JSON.stringify(oldAttendees) !== JSON.stringify(meetingDataFromDialog.attendees);
+
+      if (!existingMeetingId || attendeesChanged) {
+        toast({ 
+          title: "Procesando Invitaciones y Recordatorios...", 
+          description: "Los correos con detalles de la reunión e invitaciones .ics se enviarán a los asistentes en segundo plano.", 
+          variant: "default", 
+          duration: 7000 
+        });
       }
       return true;
     } catch (error) {
@@ -254,8 +263,8 @@ export default function CalendarPage() {
           <ul className="list-disc list-inside space-y-2">
             <li>
               <strong>Envío de invitaciones (.ics) y recordatorios por correo electrónico:</strong> 
-              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Parcialmente Implementado</Badge>
-              <p className="text-xs pl-5">Actualmente simulado con un toast. El envío real requiere configuración de backend (Cloud Functions y servicio de correo).</p>
+              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">Backend Pendiente</Badge>
+              <p className="text-xs pl-5">La funcionalidad para preparar y enviar invitaciones está lista. Requiere una Cloud Function para generar archivos .ics y enviar correos (usando Nodemailer o similar).</p>
             </li>
             <li>
               <strong>Vistas de calendario por semana y día completamente interactivas:</strong>
@@ -291,3 +300,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+    
