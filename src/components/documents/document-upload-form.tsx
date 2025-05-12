@@ -2,19 +2,19 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import type { User, Lead, Contact, Order, Quote, Ticket } from "@/lib/types"; 
+import type { User, Lead, Contact } from "@/lib/types"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescriptionUI } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { UploadCloud, Loader2 } from "lucide-react";
+import { UploadCloud, Loader2, Link as LinkIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { db, storage } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
@@ -29,12 +29,19 @@ const ALLOWED_FILE_TYPES = [
   "text/plain", "text/csv"
 ];
 
+const NO_SELECTION_VALUE = "__NONE__";
+
 const formSchema = z.object({
   file: z.custom<File>((val) => val instanceof File, "Se requiere un archivo.")
     .refine((file) => file.size <= MAX_FILE_SIZE, `El tamaño máximo del archivo es ${MAX_FILE_SIZE / (1024*1024)}MB.`)
     .refine((file) => ALLOWED_FILE_TYPES.includes(file.type), "Tipo de archivo no permitido."),
   description: z.string().optional(),
-  tags: z.string().optional(), 
+  tags: z.string().optional(),
+  relatedLeadId: z.string().optional(),
+  relatedContactId: z.string().optional(),
+}).refine(data => !(data.relatedLeadId && data.relatedContactId), {
+  message: "Asocia el documento a un Lead o a un Contacto, no a ambos.",
+  path: ["relatedLeadId"], // Path to display error, can be either
 });
 
 type DocumentUploadFormValues = z.infer<typeof formSchema>;
@@ -46,13 +53,17 @@ interface DocumentUploadFormProps {
   contacts?: Contact[];
 }
 
-export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contacts }: DocumentUploadFormProps) {
+export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], contacts = [] }: DocumentUploadFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const { toast } = useToast();
 
   const form = useForm<DocumentUploadFormValues>({
     resolver: zodResolver(formSchema),
+    defaultValues: {
+      relatedLeadId: NO_SELECTION_VALUE,
+      relatedContactId: NO_SELECTION_VALUE,
+    }
   });
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -100,7 +111,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
         try {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
           
-          const docData = {
+          const docData: any = {
             name: fileToUpload.name,
             fileNameInStorage: fileNameInStorage, 
             fileURL: downloadURL,
@@ -114,6 +125,14 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
             currentVersion: 1, 
           };
 
+          if (data.relatedLeadId && data.relatedLeadId !== NO_SELECTION_VALUE) {
+            docData.relatedLeadId = data.relatedLeadId;
+          }
+          if (data.relatedContactId && data.relatedContactId !== NO_SELECTION_VALUE) {
+            docData.relatedContactId = data.relatedContactId;
+          }
+
+
           await addDoc(collection(db, "documents"), docData);
 
           toast({
@@ -121,7 +140,12 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
             description: `El archivo "${fileToUpload.name}" ha sido subido exitosamente.`,
           });
           onUploadSuccess();
-          form.reset({ description: "", tags: "" }); 
+          form.reset({ 
+            description: "", 
+            tags: "",
+            relatedLeadId: NO_SELECTION_VALUE,
+            relatedContactId: NO_SELECTION_VALUE,
+          }); 
           // Reset file input field
           const fileInput = document.getElementById('document-file-input') as HTMLInputElement | null;
           if (fileInput) {
@@ -198,6 +222,49 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
                 </FormItem>
               )}
             />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                control={form.control}
+                name="relatedLeadId"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel className="flex items-center gap-1">
+                        <LinkIcon className="h-4 w-4 text-muted-foreground" /> Asociar a Lead (Opcional)
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_VALUE} disabled={isUploading || !!form.watch("relatedContactId") && form.watch("relatedContactId") !== NO_SELECTION_VALUE}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un Lead" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                        <SelectItem value={NO_SELECTION_VALUE}>Ninguno</SelectItem>
+                        {leads.map(lead => <SelectItem key={lead.id} value={lead.id}>{lead.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+                <FormField
+                control={form.control}
+                name="relatedContactId"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel className="flex items-center gap-1">
+                        <LinkIcon className="h-4 w-4 text-muted-foreground" /> Asociar a Contacto (Opcional)
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_VALUE} disabled={isUploading || !!form.watch("relatedLeadId") && form.watch("relatedLeadId") !== NO_SELECTION_VALUE}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un Contacto" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                        <SelectItem value={NO_SELECTION_VALUE}>Ninguno</SelectItem>
+                        {contacts.map(contact => <SelectItem key={contact.id} value={contact.id}>{contact.firstName || ''} {contact.lastName || ''} ({contact.email})</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+            </div>
+             {form.formState.errors.relatedLeadId && <FormMessage>{form.formState.errors.relatedLeadId.message}</FormMessage>}
+
+
             {isUploading && (
               <div className="space-y-1">
                 <Progress value={uploadProgress} className="w-full h-2" />
@@ -216,3 +283,4 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
     </Card>
   );
 }
+

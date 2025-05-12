@@ -33,7 +33,11 @@ export default function DocumentsPage() {
   const PageIcon = navItem?.icon || FolderKanban;
 
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSupportData, setIsLoadingSupportData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string} | null>(null);
@@ -73,9 +77,30 @@ export default function DocumentsPage() {
     }
   }, [currentUser, toast]);
 
+  const fetchSupportData = useCallback(async () => {
+    setIsLoadingSupportData(true);
+    try {
+      const [leadsSnapshot, contactsSnapshot] = await Promise.all([
+        getDocs(collection(db, "leads")),
+        getDocs(collection(db, "contacts")),
+      ]);
+
+      setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
+      setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
+      
+    } catch (error) {
+      console.error("Error al obtener datos de soporte (leads, contactos):", error);
+      toast({ title: "Error al Cargar Datos de Soporte", variant: "destructive"});
+    } finally {
+      setIsLoadingSupportData(false);
+    }
+  }, [toast]);
+
+
   useEffect(() => {
     fetchDocuments();
-  }, [fetchDocuments]);
+    fetchSupportData();
+  }, [fetchDocuments, fetchSupportData]);
 
   const handleUploadSuccess = () => {
     fetchDocuments(); // Refresh the list after a successful upload
@@ -125,12 +150,12 @@ export default function DocumentsPage() {
     (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
   
-  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[]) => (
-    <Card className="bg-muted/30">
+  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false) => (
+    <Card className={implemented ? "bg-green-50 border-green-200" : "bg-muted/30"}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Icon className="h-5 w-5 text-amber-500" />
-          {title} (Próximamente)
+        <CardTitle className={`flex items-center gap-2 text-lg ${implemented ? 'text-green-700' : 'text-amber-500'}`}>
+          <Icon className="h-5 w-5" />
+          {title} {implemented ? "" : "(Próximamente)"}
         </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
@@ -157,14 +182,23 @@ export default function DocumentsPage() {
                 Organiza y gestiona todos los documentos relacionados con tus clientes, ventas y proyectos.
                 </CardDescription>
             </div>
-            <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled={!currentUser}>
+            <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled={!currentUser || isLoadingSupportData}>
                 <PlusCircle className="mr-2 h-4 w-4" /> {isUploadFormVisible ? "Cancelar Subida" : "Subir Documento"}
             </Button>
           </div>
         </CardHeader>
         {isUploadFormVisible && (
             <CardContent>
-                <DocumentUploadForm currentUser={currentUser} onUploadSuccess={handleUploadSuccess} />
+                {isLoadingSupportData ? (
+                    <Skeleton className="h-60 w-full max-w-lg" />
+                ) : (
+                    <DocumentUploadForm 
+                        currentUser={currentUser} 
+                        onUploadSuccess={handleUploadSuccess}
+                        leads={leads}
+                        contacts={contacts}
+                    />
+                )}
             </CardContent>
         )}
       </Card>
@@ -200,6 +234,8 @@ export default function DocumentsPage() {
                   key={docFile.id} 
                   documentFile={docFile} 
                   onDelete={confirmDeleteDocument}
+                  leads={leads}
+                  contacts={contacts}
                 />
               ))}
             </div>
@@ -218,7 +254,8 @@ export default function DocumentsPage() {
             "Asociación de Documentos",
             LinkIconLucide,
             "Vincula documentos a leads, contactos, oportunidades, etc.",
-            ["Seleccionar lead/contacto al subir.", "Ver documentos desde la ficha del lead/contacto."]
+            ["Seleccionar lead/contacto al subir (Implementado).", "Ver documentos desde la ficha del lead/contacto (Pendiente)."],
+            true
         )}
         {renderFutureFeatureCard(
             "Control de Versiones",

@@ -1,11 +1,11 @@
 
 "use client";
 
-import type { DocumentFile } from "@/lib/types";
+import type { DocumentFile, Lead, Contact } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -18,6 +18,8 @@ import {
 interface DocumentListItemProps {
   documentFile: DocumentFile;
   onDelete: (documentId: string, storagePath: string) => void;
+  leads?: Lead[];
+  contacts?: Contact[];
 }
 
 function getFileIcon(fileType: string): LucideIcon {
@@ -42,10 +44,13 @@ function formatFileSize(bytes: number): string {
 }
 
 
-export function DocumentListItem({ documentFile, onDelete }: DocumentListItemProps) {
+export function DocumentListItem({ documentFile, onDelete, leads = [], contacts = [] }: DocumentListItemProps) {
   const FileIcon = getFileIcon(documentFile.fileType);
   // Construct the full storage path for deletion
   const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
+
+  const relatedLead = documentFile.relatedLeadId ? leads.find(l => l.id === documentFile.relatedLeadId) : null;
+  const relatedContact = documentFile.relatedContactId ? contacts.find(c => c.id === documentFile.relatedContactId) : null;
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -98,6 +103,18 @@ export function DocumentListItem({ documentFile, onDelete }: DocumentListItemPro
           <CalendarDays className="h-3 w-3" />
           Subido el: {isValid(parseISO(documentFile.uploadedAt)) ? format(parseISO(documentFile.uploadedAt), "PPp", { locale: es }) : 'Fecha inválida'}
         </div>
+         {relatedLead && (
+            <div className="flex items-center gap-1 text-primary" title={`Asociado al Lead: ${relatedLead.name}`}>
+                <LinkIcon className="h-3 w-3"/>
+                Lead: <span className="font-medium truncate">{relatedLead.name}</span>
+            </div>
+        )}
+        {relatedContact && (
+            <div className="flex items-center gap-1 text-primary" title={`Asociado al Contacto: ${relatedContact.firstName || ''} ${relatedContact.lastName || ''}`}>
+                <LinkIcon className="h-3 w-3"/>
+                Contacto: <span className="font-medium truncate">{relatedContact.firstName || ''} {relatedContact.lastName || ''} ({relatedContact.email})</span>
+            </div>
+        )}
       </CardContent>
       {(documentFile.tags && documentFile.tags.length > 0) && (
         <CardFooter className="pt-2 pb-3 border-t flex flex-wrap gap-1">
@@ -110,3 +127,4 @@ export function DocumentListItem({ documentFile, onDelete }: DocumentListItemPro
     </Card>
   );
 }
+
