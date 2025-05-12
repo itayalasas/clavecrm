@@ -15,6 +15,7 @@ import { collection, addDoc, getDocs, query, orderBy, Timestamp, serverTimestamp
 import { AddEditActivityLogDialog } from "@/components/activity-log/add-edit-activity-log-dialog";
 import { ActivityLogListItem } from "@/components/activity-log/activity-log-list-item";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge"; // Added import
 
 export default function ActivityLogPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/activity-log');
@@ -244,3 +245,4 @@ export default function ActivityLogPage() {
     </div>
   );
 }
+
