@@ -46,14 +46,15 @@ export function DocumentViewerDialog({
         } catch (error: any) {
           console.error("Error fetching text content:", error);
           let description = "No se pudo cargar el contenido del archivo de texto.";
-          if (error.message?.includes("Failed to fetch")) {
+          // Check if the error message indicates a network error, which is common for CORS issues
+          if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError")) {
             description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles.";
           }
           toast({
             title: "Error al Cargar Contenido",
             description: description,
             variant: "destructive",
-            duration: 9000, 
+            duration: 15000, 
           });
           setTextContent("Error al cargar el contenido. Revisa la consola para más detalles y verifica la configuración CORS de Firebase Storage si el error es 'Failed to fetch'.");
         } finally {
@@ -87,7 +88,7 @@ export function DocumentViewerDialog({
         <div className="flex-grow overflow-hidden border rounded-md bg-muted flex items-center justify-center p-1">
           {isPdf ? (
             <iframe
-              src={documentFile.fileURL}
+              src={`${documentFile.fileURL}#toolbar=0&navpanes=0&scrollbar=0`} // Basic controls removal
               title={`Vista previa de ${documentFile.name}`}
               className="w-full h-full border-0"
               allowFullScreen
@@ -128,3 +129,4 @@ export function DocumentViewerDialog({
     </Dialog>
   );
 }
+
