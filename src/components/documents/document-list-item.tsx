@@ -5,7 +5,7 @@ import type { DocumentFile, Lead, Contact, User } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIconLucide, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe, Users, View } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIconLucide, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe, Users, View, Users2 } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -127,7 +127,7 @@ export function DocumentListItem({
                 )}
                 {!documentFile.isPublic && sharedGroupCount > 0 && (
                     <Badge variant="outline" className="ml-1 border-purple-500 text-purple-600 text-[10px] px-1 py-0 flex items-center gap-0.5">
-                        <Users className="h-2.5 w-2.5"/> Grupos: {sharedGroupCount}
+                        <Users2 className="h-2.5 w-2.5"/> {sharedGroupCount}
                     </Badge>
                 )}
               </CardDescription>
@@ -264,3 +264,4 @@ export function DocumentListItem({
   );
 }
 
+    

@@ -40,14 +40,15 @@ export function DocumentViewerDialog({
         // you MUST configure CORS on your Firebase Storage bucket.
         // Go to Firebase Console -> Storage -> Rules, and add a CORS configuration
         // that allows GET requests from your application's origin.
-        // Example CORS config:
+        // Example CORS config in cors.json (Firebase CLI deployment):
         // [
         //   {
-        //     "origin": ["http://localhost:3000", "https://your-app-domain.com"],
+        //     "origin": ["http://localhost:3000", "https://your-app-domain.com"], // Add your actual domains
         //     "method": ["GET"],
         //     "maxAgeSeconds": 3600
         //   }
         // ]
+        // Then deploy with `firebase deploy --only storage` (or include storage in full deploy)
         if (mounted) {
           setIsLoadingText(true);
           setTextContent(null);
@@ -65,7 +66,7 @@ export function DocumentViewerDialog({
           console.error("Error fetching text content:", error);
           let description = "No se pudo cargar el contenido del archivo de texto.";
           if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError") || error.message?.toLowerCase().includes("cors")) {
-            description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles.";
+            description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles y configura tu archivo cors.json.";
           }
           if (mounted) {
             toast({
@@ -140,12 +141,13 @@ export function DocumentViewerDialog({
             <div className="flex flex-col items-center justify-center h-full text-center p-6">
               <FileText className="h-16 w-16 text-blue-500 mb-4" />
               <h3 className="text-lg font-semibold mb-2">Visualización Avanzada Pendiente</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                La visualización en la aplicación para archivos {isDocx ? "DOCX" : "XLSX"} está en desarrollo y es compleja.
+              <p className="text-sm text-muted-foreground mb-1">
+                La visualización en la aplicación para archivos <strong className="text-foreground">{isDocx ? "DOCX" : "XLSX"}</strong> es una funcionalidad avanzada que requiere bibliotecas o servicios externos.
               </p>
+              <p className="text-sm text-muted-foreground mb-4">Esta característica está planeada para futuras versiones. Por ahora, puedes descargar el documento para verlo.</p>
               <Button asChild>
                 <a href={documentFile.fileURL} download={documentFile.name} target="_blank" rel="noopener noreferrer">
-                  <Download className="mr-2 h-4 w-4" /> Descargar Documento para Ver
+                  <Download className="mr-2 h-4 w-4" /> Descargar Documento
                 </a>
               </Button>
             </div>
@@ -176,3 +178,4 @@ export function DocumentViewerDialog({
   );
 }
 
+    
