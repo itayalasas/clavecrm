@@ -226,6 +226,7 @@ export default function DocumentsPage() {
       }
       const currentDocData = currentDocSnap.data() as DocumentFile;
 
+      // This is the version that was active *before* restoration. It will be added to history.
       const versionBeingReplaced: DocumentVersion = {
         version: currentDocData.currentVersion,
         fileURL: currentDocData.fileURL,
@@ -235,26 +236,36 @@ export default function DocumentsPage() {
         uploadedByUserName: currentDocData.lastVersionUploadedByUserName || currentDocData.uploadedByUserName,
         fileSize: currentDocData.fileSize,
         fileType: currentDocData.fileType,
-        notes: currentDocData.description, // Using current description as notes for the replaced version.
-        versionNotes: currentDocData.description,
+        notes: currentDocData.description, 
+        versionNotes: currentDocData.description, 
       };
+      
+      const filteredOldHistory = (currentDocData.versionHistory || []).filter(
+        (v) => v.version !== versionBeingReplaced.version 
+      );
 
-      const updatedVersionHistory = [...(currentDocData.versionHistory || []), versionBeingReplaced];
+      const updatedVersionHistory = [...filteredOldHistory, versionBeingReplaced]
+        .sort((a, b) => a.version - b.version); 
+
+      const newCurrentVersionNumber = currentDocData.currentVersion + 1;
 
       await updateDoc(docRef, {
+        // Fields from the version being restored
         fileURL: versionToRestore.fileURL,
         fileNameInStorage: versionToRestore.fileNameInStorage,
         fileType: versionToRestore.fileType,
         fileSize: versionToRestore.fileSize,
-        description: versionToRestore.notes || versionToRestore.versionNotes, // Use the notes from the version being restored
+        description: versionToRestore.notes || versionToRestore.versionNotes || "", 
+
+        // Meta fields for this restoration event
         lastVersionUploadedAt: serverTimestamp(),
         lastVersionUploadedByUserId: currentUser.id,
         lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
-        currentVersion: currentDocData.currentVersion + 1,
+        currentVersion: newCurrentVersionNumber, 
         versionHistory: updatedVersionHistory,
       });
 
-      toast({ title: "Versión Restaurada", description: `El documento ha sido restaurado a la versión ${versionToRestore.version}.` });
+      toast({ title: "Versión Restaurada", description: `El contenido de la versión ${versionToRestore.version} es ahora la versión actual ${newCurrentVersionNumber}.` });
       fetchDocuments();
     } catch (error) {
       console.error("Error restaurando versión:", error);
@@ -376,13 +387,13 @@ export default function DocumentsPage() {
             LinkIconLucide,
             "Vincula documentos a leads, contactos, oportunidades, etc.",
             ["Seleccionar lead/contacto al subir (Implementado).", "Ver documentos desde la ficha del lead/contacto (Pendiente)."],
-            true
+            true 
         )}
         {renderFutureFeatureCard(
             "Control de Versiones",
             History,
             "Mantén un historial de cambios y accede a versiones anteriores.",
-            ["Estructura básica para versionamiento implementada (v1 inicial).", "Subir nueva versión de un documento existente (Implementado).", "Ver historial de versiones (Implementado).", "Restaurar versión anterior (Implementado)."],
+            ["Subir nueva versión de un documento existente (Implementado).", "Ver historial de versiones (Implementado).", "Restaurar versión anterior (Implementado).", "Comparación IA entre versiones (Beta Implementada)."],
             true
         )}
         {renderFutureFeatureCard(
@@ -452,3 +463,6 @@ export default function DocumentsPage() {
     </div>
   );
 }
+
+
+    
