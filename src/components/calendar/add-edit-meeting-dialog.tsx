@@ -28,12 +28,14 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card } from "@/components/ui/card"; // Added import for Card
+import { Card } from "@/components/ui/card";
+
+const NO_SELECTION_VALUE = "__NONE__"; // Constant for no selection
 
 const attendeeSchema = z.object({
-  id: z.string().min(1), // Could be userId, contactId, or a temporary ID for external
+  id: z.string().min(1), 
   type: z.enum(["user", "contact", "external"]),
-  name: z.string().min(1, "Nombre del asistente es requerido."),
+  name: z.string().min(1, "El nombre del asistente es requerido."),
   email: z.string().email("Email inválido."),
   status: z.enum(["Aceptada", "Rechazada", "Pendiente", "Tentativa"]).default("Pendiente"),
 });
@@ -48,7 +50,7 @@ const meetingFormSchema = z.object({
   attendees: z.array(attendeeSchema).min(0),
   location: z.string().optional(),
   conferenceLink: z.string().url("Enlace de conferencia inválido.").optional().or(z.literal('')),
-  relatedLeadId: z.string().optional(),
+  relatedLeadId: z.string().optional(), // Can be undefined if NO_SELECTION_VALUE
   status: z.enum(MEETING_STATUSES as [string, ...string[]], { errorMap: () => ({ message: "Estado inválido."}) }),
 }).refine(data => {
     const startDateTime = setMinutes(setHours(data.startDate, parseInt(data.startTime.split(':')[0])), parseInt(data.startTime.split(':')[1]));
@@ -56,7 +58,7 @@ const meetingFormSchema = z.object({
     return endDateTime > startDateTime;
 }, {
     message: "La fecha/hora de fin debe ser posterior a la de inicio.",
-    path: ["endDate"], // You can also set path to ["endTime"] or a general path
+    path: ["endDate"], 
 });
 
 type MeetingFormValues = z.infer<typeof meetingFormSchema>;
@@ -94,11 +96,11 @@ export function AddEditMeetingDialog({
       startDate: new Date(),
       startTime: format(new Date(), "HH:mm"),
       endDate: new Date(),
-      endTime: format(new Date(new Date().getTime() + 60 * 60 * 1000), "HH:mm"), // 1 hour later
+      endTime: format(new Date(new Date().getTime() + 60 * 60 * 1000), "HH:mm"), 
       attendees: [],
       location: "",
       conferenceLink: "",
-      relatedLeadId: "",
+      relatedLeadId: NO_SELECTION_VALUE,
       status: "Programada",
     },
   });
@@ -120,10 +122,10 @@ export function AddEditMeetingDialog({
           startTime: format(startDate, "HH:mm"),
           endDate: endDate,
           endTime: format(endDate, "HH:mm"),
-          attendees: meetingToEdit.attendees.map(att => ({...att, id: att.id || `ext-${Math.random()}`})), // ensure ID for key
+          attendees: meetingToEdit.attendees.map(att => ({...att, id: att.id || `ext-${Math.random()}`})),
           location: meetingToEdit.location || "",
           conferenceLink: meetingToEdit.conferenceLink || "",
-          relatedLeadId: meetingToEdit.relatedLeadId || "",
+          relatedLeadId: meetingToEdit.relatedLeadId || NO_SELECTION_VALUE,
           status: meetingToEdit.status,
         });
       } else {
@@ -134,7 +136,9 @@ export function AddEditMeetingDialog({
           startDate: now, startTime: format(now, "HH:mm"),
           endDate: oneHourLater, endTime: format(oneHourLater, "HH:mm"),
           attendees: currentUser ? [{ id: currentUser.id, type: 'user', name: currentUser.name, email: currentUser.email, status: 'Aceptada' }] : [],
-          location: "", conferenceLink: "", relatedLeadId: "", status: "Programada",
+          location: "", conferenceLink: "", 
+          relatedLeadId: NO_SELECTION_VALUE, 
+          status: "Programada",
         });
       }
       setIsSubmitting(false);
@@ -154,7 +158,7 @@ export function AddEditMeetingDialog({
       attendees: data.attendees,
       location: data.location,
       conferenceLink: data.conferenceLink,
-      relatedLeadId: data.relatedLeadId,
+      relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? undefined : data.relatedLeadId,
       status: data.status,
     };
 
@@ -247,9 +251,15 @@ export function AddEditMeetingDialog({
                 )} />
                 <FormField control={form.control} name="relatedLeadId" render={({ field }) => (
                   <FormItem><FormLabel>Lead Relacionado (Opcional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === NO_SELECTION_VALUE ? undefined : value)} 
+                      value={field.value || NO_SELECTION_VALUE}
+                    >
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un lead" /></SelectTrigger></FormControl>
-                      <SelectContent><SelectItem value="">Ninguno</SelectItem>{leads.map(lead => <SelectItem key={lead.id} value={lead.id}>{lead.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>
+                        <SelectItem value={NO_SELECTION_VALUE}>Ninguno</SelectItem>
+                        {leads.map(lead => <SelectItem key={lead.id} value={lead.id}>{lead.name}</SelectItem>)}
+                      </SelectContent>
                     </Select><FormMessage />
                   </FormItem>
                 )} />
