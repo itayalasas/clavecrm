@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -16,7 +15,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge"; // Imported Badge
+import { Badge } from "@/components/ui/badge";
 
 export default function CalendarPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/calendar');
@@ -38,7 +37,7 @@ export default function CalendarPage() {
     if (!currentUser) return;
     setIsLoading(true);
     try {
-      const q = query(collection(db, "meetings"), orderBy("startTime", "desc"));
+      const q = query(collection(db, "meetings"), orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedMeetings = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
@@ -91,36 +90,53 @@ export default function CalendarPage() {
     fetchUsers();
   }, [fetchMeetings, fetchLeadsAndContacts, fetchUsers]);
 
-  const handleSaveMeeting = async (meetingData: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, id?: string) => {
+  const handleSaveMeeting = async (meetingDataFromDialog: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, existingMeetingId?: string) => {
     if (!currentUser) {
       toast({ title: "Error", description: "Debe iniciar sesión para guardar reuniones.", variant: "destructive" });
       return false;
     }
     setIsLoading(true);
-    const meetingId = id || doc(collection(db, "meetings")).id;
+    const meetingIdToUse = existingMeetingId || doc(collection(db, "meetings")).id;
+
     try {
-      const dataToSave = {
-        ...meetingData,
-        id: meetingId,
-        createdByUserId: id ? meetings.find(m=>m.id===id)?.createdByUserId || currentUser.id : currentUser.id,
-        createdAt: id ? meetings.find(m=>m.id===id)?.createdAt || new Date().toISOString() : new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        startTime: Timestamp.fromDate(new Date(meetingData.startTime)),
-        endTime: Timestamp.fromDate(new Date(meetingData.endTime)),
+      // Construct the object to save to Firestore
+      // Ensure optional fields that might be 'undefined' are converted to 'null'
+      const dataForFirestore: { [key: string]: any } = {
+        title: meetingDataFromDialog.title,
+        description: meetingDataFromDialog.description !== undefined ? meetingDataFromDialog.description : null,
+        startTime: Timestamp.fromDate(new Date(meetingDataFromDialog.startTime)),
+        endTime: Timestamp.fromDate(new Date(meetingDataFromDialog.endTime)),
+        attendees: meetingDataFromDialog.attendees,
+        location: meetingDataFromDialog.location !== undefined ? meetingDataFromDialog.location : null,
+        conferenceLink: meetingDataFromDialog.conferenceLink !== undefined ? meetingDataFromDialog.conferenceLink : null,
+        relatedLeadId: meetingDataFromDialog.relatedLeadId !== undefined ? meetingDataFromDialog.relatedLeadId : null,
+        status: meetingDataFromDialog.status,
+        resources: meetingDataFromDialog.resources !== undefined ? meetingDataFromDialog.resources : null,
+        updatedAt: Timestamp.now(), // Always set/update this
       };
 
-      await setDoc(doc(db, "meetings", meetingId), dataToSave, { merge: true });
-      toast({ title: id ? "Reunión Actualizada" : "Reunión Creada", description: `La reunión "${meetingData.title}" ha sido guardada.` });
+      if (!existingMeetingId) { // This is a new meeting
+        dataForFirestore.createdByUserId = currentUser.id;
+        dataForFirestore.createdAt = Timestamp.now(); // Firestore Timestamp for creation
+      }
+      // For existing meetings, createdByUserId and createdAt are preserved by `merge: true`
+      // as they are not part of `dataForFirestore` if existingMeetingId is present.
+      // Firestore uses the `meetingIdToUse` as the document ID.
+      
+      await setDoc(doc(db, "meetings", meetingIdToUse), dataForFirestore, { merge: true });
+
+      toast({ title: existingMeetingId ? "Reunión Actualizada" : "Reunión Creada", description: `La reunión "${meetingDataFromDialog.title}" ha sido guardada.` });
       fetchMeetings();
       setIsMeetingDialogOpen(false);
-      // Placeholder: Aquí se dispararía el envío de .ics si es una nueva reunión o hay cambios relevantes
-      if (!id || (id && JSON.stringify(meetings.find(m=>m.id===id)?.attendees) !== JSON.stringify(meetingData.attendees))) {
+      
+      // Placeholder for ICS invitation
+      if (!existingMeetingId || (existingMeetingId && JSON.stringify(meetings.find(m=>m.id===existingMeetingId)?.attendees) !== JSON.stringify(meetingDataFromDialog.attendees))) {
         toast({ title: "Invitaciones (Simulado)", description: "En un entorno real, se enviarían invitaciones .ics y recordatorios por correo.", variant: "default", duration: 5000 });
       }
       return true;
     } catch (error) {
       console.error("Error guardando reunión:", error);
-      toast({ title: "Error al Guardar Reunión", variant: "destructive" });
+      toast({ title: "Error al Guardar Reunión", variant: "destructive", description: String(error) });
       return false;
     } finally {
       setIsLoading(false);
@@ -261,4 +277,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
