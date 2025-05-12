@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -99,8 +100,6 @@ export default function CalendarPage() {
     const meetingIdToUse = existingMeetingId || doc(collection(db, "meetings")).id;
 
     try {
-      // Construct the object to save to Firestore
-      // Ensure optional fields that might be 'undefined' are converted to 'null'
       const dataForFirestore: { [key: string]: any } = {
         title: meetingDataFromDialog.title,
         description: meetingDataFromDialog.description !== undefined ? meetingDataFromDialog.description : null,
@@ -109,19 +108,16 @@ export default function CalendarPage() {
         attendees: meetingDataFromDialog.attendees,
         location: meetingDataFromDialog.location !== undefined ? meetingDataFromDialog.location : null,
         conferenceLink: meetingDataFromDialog.conferenceLink !== undefined ? meetingDataFromDialog.conferenceLink : null,
-        relatedLeadId: meetingDataFromDialog.relatedLeadId !== undefined ? meetingDataFromDialog.relatedLeadId : null,
+        relatedLeadId: meetingDataFromDialog.relatedLeadId === "" || meetingDataFromDialog.relatedLeadId === undefined ? null : meetingDataFromDialog.relatedLeadId,
         status: meetingDataFromDialog.status,
         resources: meetingDataFromDialog.resources !== undefined ? meetingDataFromDialog.resources : null,
-        updatedAt: Timestamp.now(), // Always set/update this
+        updatedAt: Timestamp.now(),
       };
 
-      if (!existingMeetingId) { // This is a new meeting
+      if (!existingMeetingId) {
         dataForFirestore.createdByUserId = currentUser.id;
-        dataForFirestore.createdAt = Timestamp.now(); // Firestore Timestamp for creation
+        dataForFirestore.createdAt = Timestamp.now();
       }
-      // For existing meetings, createdByUserId and createdAt are preserved by `merge: true`
-      // as they are not part of `dataForFirestore` if existingMeetingId is present.
-      // Firestore uses the `meetingIdToUse` as the document ID.
       
       await setDoc(doc(db, "meetings", meetingIdToUse), dataForFirestore, { merge: true });
 
@@ -129,7 +125,6 @@ export default function CalendarPage() {
       fetchMeetings();
       setIsMeetingDialogOpen(false);
       
-      // Placeholder for ICS invitation
       if (!existingMeetingId || (existingMeetingId && JSON.stringify(meetings.find(m=>m.id===existingMeetingId)?.attendees) !== JSON.stringify(meetingDataFromDialog.attendees))) {
         toast({ title: "Invitaciones (Simulado)", description: "En un entorno real, se enviarían invitaciones .ics y recordatorios por correo.", variant: "default", duration: 5000 });
       }
@@ -241,7 +236,7 @@ export default function CalendarPage() {
           <ul className="list-disc list-inside space-y-2">
             <li>
               <strong>Envío de invitaciones (.ics) y recordatorios por correo electrónico:</strong> 
-              <Badge variant="default" className="ml-2 bg-green-500 text-white">Parcialmente Implementado</Badge>
+              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">Parcialmente Implementado</Badge>
               <p className="text-xs pl-5">Actualmente simulado con un toast. El envío real requiere configuración de backend (Cloud Functions y servicio de correo).</p>
             </li>
             <li>
@@ -251,7 +246,7 @@ export default function CalendarPage() {
             </li>
              <li>
               <strong>Asignación de salas o recursos para reuniones:</strong>
-              <Badge variant="default" className="ml-2 bg-yellow-500 text-black">Parcialmente Implementado</Badge>
+              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">Parcialmente Implementado</Badge>
               <p className="text-xs pl-5">Se añadió campo para recursos/sala en el formulario. La gestión y disponibilidad de recursos está en desarrollo.</p>
             </li>
             <li>
@@ -277,3 +272,6 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+
+    
