@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent, useEffect } from "react";
 import type { User, DocumentFile, DocumentVersion } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,7 +188,7 @@ export function UploadNewVersionDialog({
             uploadedByUserName: documentToUpdate.lastVersionUploadedByUserName || documentToUpdate.uploadedByUserName,
             fileSize: documentToUpdate.fileSize,
             fileType: documentToUpdate.fileType,
-            versionNotes: documentToUpdate.description, // Using main description as notes for old version for simplicity.
+            notes: documentToUpdate.description, // Using main description as notes for old version for simplicity.
           };
 
           const docRef = doc(db, "documents", documentToUpdate.id);
