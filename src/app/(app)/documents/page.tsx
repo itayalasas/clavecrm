@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -8,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users } from "lucide-react";
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users, Eye } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,12 +15,13 @@ import { db, storage } from "@/lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, where, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { DocumentListItem } from "@/components/documents/document-list-item";
-import { DocumentUploadForm } from "@/components/documents/document-upload-form"; 
+import { DocumentUploadForm } from "@/components/documents/document-upload-form";
 import { UploadNewVersionDialog } from "@/components/documents/upload-new-version-dialog";
 import { VersionHistoryDialog } from "@/components/documents/version-history-dialog";
 import { AddEditDocumentTemplateDialog } from "@/components/documents/add-edit-document-template-dialog";
 import { DocumentTemplateListItem } from "@/components/documents/document-template-list-item";
 import { GenerateDocumentFromTemplateDialog } from "@/components/documents/generate-document-from-template-dialog";
+import { DocumentViewerDialog } from "@/components/documents/document-viewer-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +68,9 @@ export default function DocumentsPage() {
   const [isGenerateDocumentDialogOpen, setIsGenerateDocumentDialogOpen] = useState(false);
   const [templateForGeneration, setTemplateForGeneration] = useState<DocumentTemplate | null>(null);
 
+  const [isDocumentViewerOpen, setIsDocumentViewerOpen] = useState(false);
+  const [documentToView, setDocumentToView] = useState<DocumentFile | null>(null);
+
 
   const { currentUser, getAllUsers } = useAuth();
   const { toast } = useToast();
@@ -75,10 +78,13 @@ export default function DocumentsPage() {
   const fetchDocuments = useCallback(async () => {
     if (!currentUser) {
       setIsLoading(false);
+      setDocuments([]);
       return;
     }
     setIsLoading(true);
     try {
+      // Fetch all documents and filter client-side.
+      // For larger datasets, server-side filtering or more complex queries (e.g. using multiple queries and combining results) would be needed.
       const q = query(collection(db, "documents"), orderBy("uploadedAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedDocs = querySnapshot.docs.map(docSnap => {
@@ -127,7 +133,15 @@ export default function DocumentsPage() {
           templateVariablesFilled: data.templateVariablesFilled as (Record<string, string> | undefined),
         } as DocumentFile;
       });
-      setDocuments(fetchedDocs);
+
+      // Client-side filtering for ownership and sharing
+      const userVisibleDocuments = fetchedDocs.filter(docFile =>
+        docFile.uploadedByUserId === currentUser.id || // User owns the document
+        docFile.permissions?.users?.some(p => p.userId === currentUser.id) || // Document is shared with the user
+        docFile.isPublic // Document is public
+      );
+
+      setDocuments(userVisibleDocuments);
     } catch (error) {
       console.error("Error al obtener documentos:", error);
       toast({ title: "Error al Cargar Documentos", variant: "destructive" });
@@ -176,7 +190,7 @@ export default function DocumentsPage() {
       setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
       setAllUsers(usersData);
-      
+
     } catch (error) {
       console.error("Error al obtener datos de soporte (leads, contactos, usuarios):", error);
       toast({ title: "Error al Cargar Datos de Soporte", variant: "destructive"});
@@ -193,8 +207,8 @@ export default function DocumentsPage() {
   }, [fetchDocuments, fetchDocumentTemplates, fetchSupportData]);
 
   const handleUploadSuccess = () => {
-    fetchDocuments(); 
-    setIsUploadFormVisible(false); 
+    fetchDocuments();
+    setIsUploadFormVisible(false);
   };
 
   const handleUploadNewVersionSuccess = () => {
@@ -202,7 +216,7 @@ export default function DocumentsPage() {
     setIsUploadNewVersionDialogOpen(false);
     setDocumentForNewVersion(null);
   }
-  
+
   const handleSaveTemplateSuccess = () => {
     fetchDocumentTemplates();
     setIsTemplateDialogOpen(false);
@@ -230,7 +244,8 @@ export default function DocumentsPage() {
         if (docData.versionHistory && docData.versionHistory.length > 0) {
           for (const version of docData.versionHistory) {
             if (version.fileNameInStorage) {
-              const versionUploaderId = version.uploadedByUserId || docData.uploadedByUserId; // Fallback to original uploader if version specific is missing
+              // Construct path based on the uploader of that specific version
+              const versionUploaderId = version.uploadedByUserId;
               const versionStoragePath = `documents/${versionUploaderId}/${version.fileNameInStorage}`;
               const versionFileRef = storageRef(storage, versionStoragePath);
               await deleteObject(versionFileRef).catch(err => console.warn(`Error eliminando archivo de versión ${version.version} de storage:`, err));
@@ -239,13 +254,14 @@ export default function DocumentsPage() {
         }
       }
       // Then, delete the current version file from storage
-      const currentFileRef = storageRef(storage, documentToDelete.storagePath); 
+      // The storagePath provided to confirmDeleteDocument already contains the correct uploader ID for the current version
+      const currentFileRef = storageRef(storage, documentToDelete.storagePath);
       await deleteObject(currentFileRef).catch(err => console.warn(`Error eliminando archivo actual de storage:`, err));
 
       // Finally, delete the document record from Firestore
       await deleteDoc(doc(db, "documents", documentToDelete.id));
       toast({ title: "Documento Eliminado", description: "El documento y todas sus versiones han sido eliminados exitosamente." });
-      fetchDocuments(); 
+      fetchDocuments();
     } catch (error: any) {
       console.error("Error al eliminar documento:", error);
       toast({ title: "Error al Eliminar Documento", description: String(error.message || error), variant: "destructive" });
@@ -253,7 +269,7 @@ export default function DocumentsPage() {
       setDocumentToDelete(null);
     }
   };
-  
+
   const confirmDeleteTemplate = (template: DocumentTemplate) => {
     setTemplateToDelete(template);
   };
@@ -285,7 +301,7 @@ export default function DocumentsPage() {
     setDocumentForVersionHistory(docFile);
     setIsVersionHistoryDialogOpen(true);
   };
-  
+
   const openNewTemplateDialog = () => {
     setEditingTemplate(null);
     setIsTemplateDialogOpen(true);
@@ -312,7 +328,7 @@ export default function DocumentsPage() {
         title: "Visibilidad Actualizada",
         description: `El documento es ahora ${!currentIsPublic ? "público" : "privado"}.`,
       });
-      fetchDocuments(); 
+      fetchDocuments();
     } catch (error) {
       console.error("Error actualizando visibilidad del documento:", error);
       toast({ title: "Error al Actualizar Visibilidad", variant: "destructive" });
@@ -323,7 +339,7 @@ export default function DocumentsPage() {
     try {
       const docRef = doc(db, "documents", documentId);
       await updateDoc(docRef, {
-        permissions: newPermissions || { users: [] }, // Ensure it's not undefined
+        permissions: newPermissions || { users: [] },
         updatedAt: serverTimestamp(),
       });
       toast({
@@ -337,6 +353,10 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleViewDocument = (docFile: DocumentFile) => {
+    setDocumentToView(docFile);
+    setIsDocumentViewerOpen(true);
+  };
 
   const handleRestoreVersion = async (documentId: string, versionToRestore: DocumentVersion) => {
     if (!currentUser) {
@@ -352,7 +372,7 @@ export default function DocumentsPage() {
         return;
       }
       const currentDocData = currentDocSnap.data() as DocumentFile;
-      
+
       const versionBeingReplaced: DocumentVersion = {
         version: currentDocData.currentVersion,
         fileURL: currentDocData.fileURL,
@@ -365,13 +385,13 @@ export default function DocumentsPage() {
         notes: currentDocData.description,
         versionNotes: `Restaurado desde v${versionToRestore.version}. Versión anterior era v${currentDocData.currentVersion}.`,
       };
-      
+
       const filteredOldHistory = (currentDocData.versionHistory || []).filter(
-        (v) => v.version !== versionToRestore.version 
+        (v) => v.version !== versionToRestore.version
       );
 
       const updatedVersionHistory = [...filteredOldHistory, versionBeingReplaced]
-        .sort((a, b) => a.version - b.version); 
+        .sort((a, b) => a.version - b.version);
 
       const newCurrentVersionNumber = currentDocData.currentVersion + 1;
 
@@ -381,18 +401,18 @@ export default function DocumentsPage() {
         fileNameInStorage: versionToRestore.fileNameInStorage,
         fileType: versionToRestore.fileType,
         fileSize: versionToRestore.fileSize,
-        description: versionToRestore.notes || versionToRestore.versionNotes || "", 
+        description: versionToRestore.notes || versionToRestore.versionNotes || "",
         lastVersionUploadedAt: serverTimestamp(),
         lastVersionUploadedByUserId: currentUser.id,
         lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
-        currentVersion: newCurrentVersionNumber, 
+        currentVersion: newCurrentVersionNumber,
         versionHistory: updatedVersionHistory,
         updatedAt: serverTimestamp(),
       });
 
       toast({ title: "Versión Restaurada", description: `El contenido de la versión ${versionToRestore.version} es ahora la versión actual ${newCurrentVersionNumber}.` });
       fetchDocuments();
-      setIsVersionHistoryDialogOpen(false); 
+      setIsVersionHistoryDialogOpen(false);
     } catch (error) {
       console.error("Error restaurando versión:", error);
       toast({ title: "Error al Restaurar Versión", description: String(error), variant: "destructive" });
@@ -400,24 +420,24 @@ export default function DocumentsPage() {
   };
 
 
-  const filteredDocuments = documents.filter(docFile => 
+  const filteredDocuments = documents.filter(docFile =>
     docFile.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (docFile.description && docFile.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (docFile.tags && docFile.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
-  
+
   const filteredDocumentTemplates = documentTemplates.filter(template =>
     template.name.toLowerCase().includes(templateSearchTerm.toLowerCase()) ||
     (template.description && template.description.toLowerCase().includes(templateSearchTerm.toLowerCase())) ||
     (template.category && template.category.toLowerCase().includes(templateSearchTerm.toLowerCase()))
   );
-  
+
   const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false, partiallyImplemented: boolean = false, inProgress: boolean = false) => (
     <Card className={implemented ? "bg-green-50 border-green-200" : (partiallyImplemented || inProgress ? "bg-yellow-50 border-yellow-200" : "bg-muted/30")}>
       <CardHeader>
         <CardTitle className={`flex items-center gap-2 text-lg ${implemented ? 'text-green-700' : (partiallyImplemented || inProgress ? 'text-yellow-700' : 'text-amber-500')}`}>
           <Icon className="h-5 w-5" />
-          {title} 
+          {title}
           {implemented && <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white text-xs">Implementado</Badge>}
           {partiallyImplemented && <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-black text-xs">Parcial</Badge>}
           {inProgress && !implemented && !partiallyImplemented && <Badge variant="outline" className="border-blue-500 text-blue-600 text-xs">En Progreso</Badge>}
@@ -445,7 +465,7 @@ export default function DocumentsPage() {
                 {navItem?.label || "Gestión de Documentos"}
                 </CardTitle>
                 <CardDescription>
-                Organiza, gestiona y versiona documentos y plantillas.
+                Organiza, versiona, comparte y visualiza documentos y plantillas.
                 </CardDescription>
             </div>
           </div>
@@ -457,7 +477,7 @@ export default function DocumentsPage() {
           <TabsTrigger value="documents"><FolderKanban className="mr-2 h-4 w-4" />Documentos</TabsTrigger>
           <TabsTrigger value="templates"><Library className="mr-2 h-4 w-4" />Plantillas</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="documents">
             <Card className="mt-4">
                 <CardHeader>
@@ -472,8 +492,8 @@ export default function DocumentsPage() {
                             {isLoadingSupportData ? (
                                 <Skeleton className="h-60 w-full max-w-lg" />
                             ) : (
-                                <DocumentUploadForm 
-                                    currentUser={currentUser} 
+                                <DocumentUploadForm
+                                    currentUser={currentUser}
                                     onUploadSuccess={handleUploadSuccess}
                                     leads={leads}
                                     contacts={contacts}
@@ -484,9 +504,9 @@ export default function DocumentsPage() {
                     <div className="flex gap-2 mt-4">
                         <div className="relative flex-grow">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                type="search" 
-                                placeholder="Buscar por nombre, descripción o etiqueta..." 
+                            <Input
+                                type="search"
+                                placeholder="Buscar por nombre, descripción o etiqueta..."
                                 className="pl-8 w-full"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -505,14 +525,15 @@ export default function DocumentsPage() {
                 ) : filteredDocuments.length > 0 && currentUser ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredDocuments.map(docFile => (
-                        <DocumentListItem 
-                        key={docFile.id} 
-                        documentFile={docFile} 
+                        <DocumentListItem
+                        key={docFile.id}
+                        documentFile={docFile}
                         onDelete={confirmDeleteDocument}
                         onUploadNewVersion={openUploadNewVersionDialog}
                         onViewHistory={openVersionHistoryDialog}
                         onTogglePublic={handleTogglePublic}
                         onUpdateSharingSettings={handleUpdateSharingSettings}
+                        onViewDocument={handleViewDocument}
                         leads={leads}
                         contacts={contacts}
                         allUsers={allUsers}
@@ -543,9 +564,9 @@ export default function DocumentsPage() {
                     <div className="flex gap-2 mt-4">
                         <div className="relative flex-grow">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                type="search" 
-                                placeholder="Buscar por nombre, descripción o categoría..." 
+                            <Input
+                                type="search"
+                                placeholder="Buscar por nombre, descripción o categoría..."
                                 className="pl-8 w-full"
                                 value={templateSearchTerm}
                                 onChange={(e) => setTemplateSearchTerm(e.target.value)}
@@ -584,14 +605,14 @@ export default function DocumentsPage() {
            </Card>
         </TabsContent>
       </Tabs>
-      
+
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
          {renderFutureFeatureCard(
             "Asociación de Documentos",
             LinkIconLucideReal,
             "Vincula documentos a leads, contactos, oportunidades, etc.",
             ["Seleccionar lead/contacto al subir (Implementado).", "Ver documentos desde la ficha del lead/contacto (Pendiente)."],
-            true 
+            true
         )}
         {renderFutureFeatureCard(
             "Control de Versiones",
@@ -608,15 +629,15 @@ export default function DocumentsPage() {
             true
         )}
          {renderFutureFeatureCard(
-            "Compartir Documentos",
+            "Compartir y Visualizar Documentos",
             ShareIconLucide,
-            "Comparte documentos de forma segura con clientes o colaboradores.",
-            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Permisos de acceso por grupo (Pendiente).", "Notificaciones de acceso (Pendiente)."],
+            "Comparte y visualiza documentos de forma segura.",
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Visualización en-app de PDFs (Implementado).", "Visualización en-app de archivos de texto (.txt, .md) (Básico Implementado).", "Permisos de acceso por grupo (Pendiente).", "Notificaciones de acceso (Pendiente).", "Visualización en-app avanzada para DOCX, XLSX (Pendiente, complejo)."],
             false, true
         )}
          {renderFutureFeatureCard(
             "Integración con Almacenamiento en la Nube",
-            Settings2, 
+            Settings2,
             "Conecta con servicios como Google Drive o Dropbox (Funcionalidad Avanzada).",
             ["Sincronizar documentos desde/hacia almacenamientos externos.", "Autenticación con servicios de terceros."]
         )}
@@ -703,6 +724,13 @@ export default function DocumentsPage() {
             onGenerateSuccess={handleGenerateDocumentSuccess}
             leads={leads}
             contacts={contacts}
+        />
+      )}
+      {documentToView && (
+        <DocumentViewerDialog
+            isOpen={isDocumentViewerOpen}
+            onOpenChange={setIsDocumentViewerOpen}
+            documentFile={documentToView}
         />
       )}
     </div>

@@ -4,7 +4,7 @@ import type { DocumentFile, Lead, Contact, User } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIconLucide, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe, Users } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIconLucide, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe, Users, View } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -38,9 +38,10 @@ interface DocumentListItemProps {
   onViewHistory: (document: DocumentFile) => void;
   onTogglePublic: (documentId: string, currentIsPublic: boolean) => Promise<void>;
   onUpdateSharingSettings: (documentId: string, newPermissions: DocumentFile['permissions']) => Promise<void>;
+  onViewDocument: (document: DocumentFile) => void; // New prop for viewing
   leads?: Lead[];
   contacts?: Contact[];
-  allUsers: User[]; // For sharing dialog
+  allUsers: User[];
   currentUser: User;
 }
 
@@ -48,13 +49,13 @@ function getFileIcon(fileType: string): LucideIcon {
   if (fileType.startsWith("image/")) return FileImage;
   if (fileType.startsWith("audio/")) return FileAudio;
   if (fileType.startsWith("video/")) return FileVideo;
-  if (fileType.startsWith("application/pdf")) return FileType; 
+  if (fileType.startsWith("application/pdf")) return FileType;
   if (fileType.startsWith("application/zip") || fileType.startsWith("application/x-rar-compressed")) return FileArchive;
   if (fileType.startsWith("text/")) return FileText;
-  if (fileType.includes("word")) return FileText; 
-  if (fileType.includes("excel") || fileType.includes("spreadsheet")) return FileText; 
-  if (fileType.includes("powerpoint") || fileType.includes("presentation")) return FileText; 
-  return FileQuestion; 
+  if (fileType.includes("word")) return FileText;
+  if (fileType.includes("excel") || fileType.includes("spreadsheet")) return FileText;
+  if (fileType.includes("powerpoint") || fileType.includes("presentation")) return FileText;
+  return FileQuestion;
 }
 
 function formatFileSize(bytes: number): string {
@@ -66,21 +67,25 @@ function formatFileSize(bytes: number): string {
 }
 
 
-export function DocumentListItem({ 
-    documentFile, 
-    onDelete, 
-    onUploadNewVersion, 
-    onViewHistory, 
-    onTogglePublic, 
+export function DocumentListItem({
+    documentFile,
+    onDelete,
+    onUploadNewVersion,
+    onViewHistory,
+    onTogglePublic,
     onUpdateSharingSettings,
-    leads = [], 
+    onViewDocument, // New prop
+    leads = [],
     contacts = [],
     allUsers,
     currentUser
 }: DocumentListItemProps) {
   const { toast } = useToast();
   const FileIcon = getFileIcon(documentFile.fileType);
-  const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
+  // Construct storagePath using the uploader of the current version.
+  // If lastVersionUploadedByUserId exists, use it, otherwise fall back to the original uploadedByUserId.
+  const uploaderIdForCurrentVersion = documentFile.lastVersionUploadedByUserId || documentFile.uploadedByUserId;
+  const storagePath = `documents/${uploaderIdForCurrentVersion}/${documentFile.fileNameInStorage}`;
   const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
 
   const relatedLead = documentFile.relatedLeadId ? leads.find(l => l.id === documentFile.relatedLeadId) : null;
@@ -92,6 +97,8 @@ export function DocumentListItem({
   const hasHistory = documentFile.versionHistory && documentFile.versionHistory.length > 0;
 
   const sharedUserCount = documentFile.permissions?.users?.length || 0;
+
+  const canViewInApp = documentFile.fileType === "application/pdf" || documentFile.fileType.startsWith("text/");
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -119,6 +126,18 @@ export function DocumentListItem({
             </div>
           </div>
           <div className="flex gap-1 items-center">
+            {canViewInApp && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={() => onViewDocument(documentFile)} className="h-8 w-8">
+                      <View className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Ver Documento</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <AlertDialog open={isSharingDialogOpen} onOpenChange={setIsSharingDialogOpen}>
               <TooltipProvider>
                 <Tooltip>
@@ -145,12 +164,10 @@ export function DocumentListItem({
                     currentUser={currentUser}
                     onSaveSharing={async (docId, perms) => {
                         await onUpdateSharingSettings(docId, perms);
-                        // No need to close here, onSaveSharing in page will trigger re-fetch and DocumentSharingDialogContent calls onClose
                     }}
                     onTogglePublic={onTogglePublic}
                     onClose={() => setIsSharingDialogOpen(false)}
                 />
-                {/* Footer is handled within DocumentSharingDialogContent */}
               </AlertDialogContent>
             </AlertDialog>
 
@@ -166,7 +183,7 @@ export function DocumentListItem({
                     <TooltipContent><p>Descargar v{documentFile.currentVersion}</p></TooltipContent>
                 </Tooltip>
              </TooltipProvider>
-             <TooltipProvider> 
+             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" onClick={() => onUploadNewVersion(documentFile)} className="h-8 w-8">
@@ -176,7 +193,7 @@ export function DocumentListItem({
                     <TooltipContent><p>Subir Nueva Versión</p></TooltipContent>
                 </Tooltip>
              </TooltipProvider>
-             <TooltipProvider> 
+             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" onClick={() => onViewHistory(documentFile)} className="h-8 w-8" disabled={!hasHistory && documentFile.currentVersion <= 1}>
@@ -189,17 +206,16 @@ export function DocumentListItem({
             <TooltipProvider>
                  <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => onDelete(documentFile.id, storagePath)} 
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDelete(documentFile.id, storagePath)}
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          disabled={hasHistory} 
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>{hasHistory ? "Eliminar versiones individuales desde historial (Próx.)" : "Eliminar Documento"}</p></TooltipContent>
+                    <TooltipContent><p>Eliminar Documento</p></TooltipContent>
                 </Tooltip>
             </TooltipProvider>
           </div>

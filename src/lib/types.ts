@@ -1,3 +1,4 @@
+
 import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
@@ -47,7 +48,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  avatarUrl?: string; 
+  avatarUrl?: string;
   role: UserRole; // Updated to use UserRole
 }
 
@@ -188,7 +189,7 @@ export interface EmailTemplate {
   id: string;
   name: string;
   subject: string;
-  contentHtml?: string; 
+  contentHtml?: string;
   contentText?: string;
   variables?: string[]; // e.g. ["{{firstName}}", "{{companyName}}"]
   createdAt: string; // ISO string
@@ -201,7 +202,7 @@ export type EmailCampaignStatus = 'Borrador' | 'Programada' | 'Enviando' | 'Envi
 export interface EmailCampaignAnalytics {
   totalRecipients: number;
   emailsSent: number;
-  emailsDelivered?: number; 
+  emailsDelivered?: number;
   emailsOpened?: number;
   uniqueOpens?: number;
   emailsClicked?: number;
@@ -230,7 +231,7 @@ export interface EmailCampaign {
   sentAt?: string; // ISO string
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
-  analytics: EmailCampaignAnalytics; 
+  analytics: EmailCampaignAnalytics;
 }
 
 // Types for new email template features
@@ -252,8 +253,8 @@ export type SMTPSecurity = 'None' | 'SSL' | 'TLS';
 export interface EmailSettings {
   smtpHost: string;
   smtpPort: number;
-  smtpUser?: string; 
-  smtpPass?: string; 
+  smtpUser?: string;
+  smtpPass?: string;
   smtpSecurity: SMTPSecurity;
   defaultSenderEmail: string;
   defaultSenderName: string;
@@ -280,8 +281,8 @@ export interface Resource {
   name: string;
   type: 'Sala de Reuniones' | 'Proyector' | 'Pizarra Digital' | 'Otro';
   description?: string;
-  location?: string; 
-  capacity?: number; 
+  location?: string;
+  capacity?: number;
   isAvailable?: boolean; // Basic availability flag
 }
 
@@ -314,17 +315,17 @@ export interface Opportunity { // Added Opportunity type for relatedOpportunityI
 export interface ActivityLog {
   id: string;
   type: ActivityType;
-  subject?: string; 
-  details: string; 
+  subject?: string;
+  details: string;
   timestamp: string; // ISO string - when the activity occurred or was logged
-  loggedByUserId: string; 
+  loggedByUserId: string;
   relatedLeadId?: string;
-  relatedContactId?: string; 
+  relatedContactId?: string;
   relatedOpportunityId?: string; // Added relatedOpportunityId
   relatedTicketId?: string;
   relatedOrderId?: string;
   durationMinutes?: number; // For calls/meetings
-  outcome?: string; 
+  outcome?: string;
   createdAt: string; // ISO string - when the log entry was created
 }
 
@@ -341,11 +342,11 @@ export interface DocumentVersion {
   versionNotes?: string; // Specific notes for the upload event of this version
 }
 
-export type DocumentPermissionLevel = 'view' | 'edit'; 
+export type DocumentPermissionLevel = 'view' | 'edit';
 
 export interface DocumentUserPermission {
   userId: string;
-  userName: string; 
+  userName: string;
   email: string; // For display and avatar generation
   level: DocumentPermissionLevel;
 }
@@ -356,10 +357,10 @@ export interface DocumentFile {
   fileNameInStorage: string; // Name used in Firebase Storage (e.g., with UUID/timestamp)
   fileURL: string; // Download URL from Firebase Storage for the current version
   fileType: string; // MIME type of the current version
-  fileSize: number; // in bytes of the current version 
+  fileSize: number; // in bytes of the current version
   description?: string;
   tags?: string[];
-  
+
   uploadedAt: string; // ISO string - upload date of the *first* version
   uploadedByUserId: string; // User who uploaded the *first* version
   uploadedByUserName: string; // Denormalized for display - user who uploaded *first* version
@@ -368,27 +369,27 @@ export interface DocumentFile {
   lastVersionUploadedByUserId?: string; // User who uploaded the *current* version
   lastVersionUploadedByUserName?: string; // Denormalized - user who uploaded *current* version
 
-  relatedLeadId?: string;
-  relatedContactId?: string;
-  relatedOpportunityId?: string; 
-  relatedOrderId?: string;
-  relatedQuoteId?: string;
-  relatedTicketId?: string;
-  relatedProjectId?: string; 
+  relatedLeadId?: string | null; // Allow null for Firestore
+  relatedContactId?: string | null; // Allow null for Firestore
+  relatedOpportunityId?: string | null;
+  relatedOrderId?: string | null;
+  relatedQuoteId?: string | null;
+  relatedTicketId?: string | null;
+  relatedProjectId?: string | null;
 
   currentVersion: number;
-  versionHistory?: DocumentVersion[]; 
+  versionHistory?: DocumentVersion[];
 
   isPublic?: boolean; // If true, fileURL can be considered a public share link
   accessKey?: string; // A unique key for more controlled sharing (future)
-  
+
   permissions?: {
     users?: DocumentUserPermission[];
     // groups?: { [groupId: string]: DocumentPermissionLevel[] }; // Future placeholder
-  };
-  
-  basedOnTemplateId?: string; // ID of the DocumentTemplate used to generate this document
-  templateVariablesFilled?: Record<string, string>; // Values used for template variables during generation
+  } | null; // Allow null for Firestore initially
+
+  basedOnTemplateId?: string | null; // ID of the DocumentTemplate used to generate this document
+  templateVariablesFilled?: Record<string, string> | null; // Values used for template variables during generation
 }
 
 export interface DocumentTemplate {
@@ -401,9 +402,9 @@ export interface DocumentTemplate {
   createdAt: string; // ISO string
   createdByUserId: string;
   updatedAt?: string; // ISO string
-  fileNameInStorage?: string; // If the template is a file
-  fileURL?: string; // If the template is a file
-  fileType?: string; // MIME type if template is a file
+  fileNameInStorage?: string | null; // If the template is a file
+  fileURL?: string | null; // If the template is a file
+  fileType?: string | null; // MIME type if template is a file
 }
 
 // LucideIcon type definition, using the renamed import
