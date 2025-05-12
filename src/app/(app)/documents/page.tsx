@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -150,7 +149,7 @@ export default function DocumentsPage() {
       const userVisibleDocuments = fetchedDocs.filter(docFile =>
         docFile.uploadedByUserId === currentUser.id || // User owns the document
         docFile.permissions?.users?.some(p => p.userId === currentUser.id) || // Document is shared with the user
-        (docFile.permissions?.groups?.some(pg => currentUser.groups?.includes(pg.groupId))) || // User is part of a group that has access
+        (docFile.permissions?.groups?.some(pg => currentUser.role === 'admin' || (currentUser.groups?.includes(pg.groupId)))) || // User is part of a group that has access, or is admin
         docFile.isPublic // Document is public
       );
 
@@ -649,8 +648,8 @@ export default function DocumentsPage() {
             "Compartir y Visualizar Documentos",
             ShareIconLucide,
             "Comparte y visualiza documentos de forma segura.",
-            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Gestión de permisos por grupo (En Desarrollo).", "Visualización en-app de PDFs y archivos de texto (.txt, .md) (Implementado).", "Visualización en-app para DOCX, XLSX (Complejo; actualmente se ofrece descarga directa)."],
-            false, true, true 
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Gestión de permisos por grupo (En Desarrollo).", "Visualización en-app de PDFs y archivos de texto (.txt, .md) (Implementado).", "Visualización en-app para DOCX, XLSX (Se abre diálogo con opción de descarga; edición vía nueva versión)."],
+            false, true, true
         )}
          {renderFutureFeatureCard(
             "Notificaciones",
@@ -755,4 +754,3 @@ export default function DocumentsPage() {
     </div>
   );
 }
-    

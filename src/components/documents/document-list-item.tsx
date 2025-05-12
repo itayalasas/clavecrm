@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { DocumentFile, Lead, Contact, User } from "@/lib/types";
@@ -39,7 +38,7 @@ interface DocumentListItemProps {
   onViewHistory: (document: DocumentFile) => void;
   onTogglePublic: (documentId: string, currentIsPublic: boolean) => Promise<void>;
   onUpdateSharingSettings: (documentId: string, newPermissions: DocumentFile['permissions']) => Promise<void>;
-  onViewDocument: (document: DocumentFile) => void; // New prop for viewing
+  onViewDocument: (document: DocumentFile) => void; 
   leads?: Lead[];
   contacts?: Contact[];
   allUsers: User[];
@@ -50,12 +49,11 @@ function getFileIcon(fileType: string): LucideIcon {
   if (fileType.startsWith("image/")) return FileImage;
   if (fileType.startsWith("audio/")) return FileAudio;
   if (fileType.startsWith("video/")) return FileVideo;
-  if (fileType.startsWith("application/pdf")) return FileType;
+  if (fileType.startsWith("application/pdf")) return FileType; // Specific for PDF
+  if (fileType.includes("word")) return FileText; // DOCX
+  if (fileType.includes("sheet") || fileType.includes("excel")) return FileText; // XLSX
   if (fileType.startsWith("application/zip") || fileType.startsWith("application/x-rar-compressed")) return FileArchive;
   if (fileType.startsWith("text/")) return FileText;
-  if (fileType.includes("word")) return FileText;
-  if (fileType.includes("excel") || fileType.includes("spreadsheet")) return FileText;
-  if (fileType.includes("powerpoint") || fileType.includes("presentation")) return FileText;
   return FileQuestion;
 }
 
@@ -75,7 +73,7 @@ export function DocumentListItem({
     onViewHistory,
     onTogglePublic,
     onUpdateSharingSettings,
-    onViewDocument, // New prop
+    onViewDocument, 
     leads = [],
     contacts = [],
     allUsers,
@@ -83,8 +81,6 @@ export function DocumentListItem({
 }: DocumentListItemProps) {
   const { toast } = useToast();
   const FileIcon = getFileIcon(documentFile.fileType);
-  // Construct storagePath using the uploader of the current version.
-  // If lastVersionUploadedByUserId exists, use it, otherwise fall back to the original uploadedByUserId.
   const uploaderIdForCurrentVersion = documentFile.lastVersionUploadedByUserId || documentFile.uploadedByUserId;
   const storagePath = `documents/${uploaderIdForCurrentVersion}/${documentFile.fileNameInStorage}`;
   const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
@@ -99,9 +95,6 @@ export function DocumentListItem({
 
   const sharedUserCount = documentFile.permissions?.users?.length || 0;
   const sharedGroupCount = documentFile.permissions?.groups?.length || 0;
-
-
-  const canViewInApp = documentFile.fileType === "application/pdf" || documentFile.fileType.startsWith("text/");
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -134,18 +127,16 @@ export function DocumentListItem({
             </div>
           </div>
           <div className="flex gap-1 items-center">
-            {canViewInApp && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={() => onViewDocument(documentFile)} className="h-8 w-8">
-                      <View className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Ver Documento</p></TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={() => onViewDocument(documentFile)} className="h-8 w-8">
+                    <View className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Ver Documento</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <AlertDialog open={isSharingDialogOpen} onOpenChange={setIsSharingDialogOpen}>
               <TooltipProvider>
                 <Tooltip>
@@ -263,5 +254,3 @@ export function DocumentListItem({
     </Card>
   );
 }
-
-    

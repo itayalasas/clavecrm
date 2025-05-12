@@ -31,7 +31,7 @@ export function DocumentViewerDialog({
   const { toast } = useToast();
 
   useEffect(() => {
-    let mounted = true; // Flag to track mount status
+    let mounted = true; 
 
     const fetchTextContent = async () => {
       if (isOpen && documentFile && documentFile.fileType.startsWith("text/")) {
@@ -40,6 +40,17 @@ export function DocumentViewerDialog({
           setTextContent(null);
         }
         try {
+          // IMPORTANT: This fetch request might be blocked by CORS if Firebase Storage rules are not configured correctly.
+          // Ensure your Firebase Storage bucket has CORS rules allowing GET requests from your app's domain.
+          // Example cors.json:
+          // [
+          //   {
+          //     "origin": ["http://localhost:3000", "https://your-production-domain.com"], // Add your domains
+          //     "method": ["GET"],
+          //     "maxAgeSeconds": 3600
+          //   }
+          // ]
+          // Upload this to your bucket using gsutil: gsutil cors set cors.json gs://your-bucket-name
           const response = await fetch(documentFile.fileURL);
           if (!response.ok) {
             throw new Error(`Error al cargar el archivo: ${response.statusText}`);
@@ -73,7 +84,7 @@ export function DocumentViewerDialog({
               title: "Error al Cargar Contenido",
               description: detailedDescription,
               variant: "destructive",
-              duration: 20000, // Increased duration for the detailed message
+              duration: 20000, 
             });
             setTextContent("Error al cargar el contenido. Revisa la consola del navegador para más detalles y verifica la configuración CORS de Firebase Storage.");
           }
@@ -91,7 +102,7 @@ export function DocumentViewerDialog({
 
 
     return () => {
-      mounted = false; // Set to false on unmount
+      mounted = false; 
     };
   }, [isOpen, documentFile, toast]);
 
@@ -100,13 +111,9 @@ export function DocumentViewerDialog({
   }
 
   const isPdf = documentFile.fileType === "application/pdf";
-  const isPlainText = documentFile.fileType === "text/plain" || documentFile.fileType === "text/markdown";
-  const isCsv = documentFile.fileType === "text/csv";
-  const isTextRenderable = isPlainText || isCsv; 
-
-  const isDocx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || documentFile.name.endsWith(".docx");
-  const isXlsx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || documentFile.name.endsWith(".xlsx");
-
+  const isTextRenderable = documentFile.fileType.startsWith("text/");
+  const isDocx = documentFile.fileType.includes("word") || documentFile.name.endsWith(".docx") || documentFile.name.endsWith(".doc");
+  const isXlsx = documentFile.fileType.includes("sheet") || documentFile.fileType.includes("excel") || documentFile.name.endsWith(".xlsx") || documentFile.name.endsWith(".xls") || documentFile.fileType === "text/csv";
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -142,11 +149,14 @@ export function DocumentViewerDialog({
           ) : (isDocx || isXlsx) ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-6">
               <FileText className="h-16 w-16 text-blue-500 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Visualización Avanzada Pendiente</h3>
+              <h3 className="text-lg font-semibold mb-2">Visualización Directa Limitada</h3>
               <p className="text-sm text-muted-foreground mb-1">
-                La visualización en la aplicación para archivos <strong className="text-foreground">{isDocx ? "DOCX" : "XLSX"}</strong> es una funcionalidad avanzada.
+                La visualización directa en la aplicación para archivos <strong className="text-foreground">{isDocx ? "DOCX" : "XLSX/CSV"}</strong> no está disponible con todas las funcionalidades.
               </p>
-              <p className="text-sm text-muted-foreground mb-4">Esta característica está planeada para futuras versiones. Por ahora, puedes descargar el documento para verlo.</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Para una experiencia completa de visualización y edición, por favor descarga el archivo.
+                Para editar, descárgalo, realiza los cambios y luego sube el archivo modificado como una <strong className="text-foreground">nueva versión</strong>.
+              </p>
               <Button asChild>
                 <a href={documentFile.fileURL} download={documentFile.name} target="_blank" rel="noopener noreferrer">
                   <Download className="mr-2 h-4 w-4" /> Descargar Documento
