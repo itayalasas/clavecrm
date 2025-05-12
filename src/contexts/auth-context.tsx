@@ -1,4 +1,3 @@
-
 // src/contexts/auth-context.tsx
 'use client';
 
@@ -13,12 +12,12 @@ import {
   sendPasswordResetEmail,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'; // Added updateDoc
 import { auth, db } from '@/lib/firebase';
 import type { User, UserRole } from '@/lib/types';
 import { DEFAULT_USER_ROLE } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
-import { logSystemEvent } from '@/lib/auditLogger'; // Import the audit logger
+import { logSystemEvent } from '@/lib/auditLogger'; 
 
 interface AuthContextType {
   currentUser: User | null;
@@ -28,6 +27,7 @@ interface AuthContextType {
   signup: (email: string, pass: string, name: string, role?: UserRole) => Promise<FirebaseUser | null>;
   logout: () => Promise<void>;
   getAllUsers: () => Promise<User[]>;
+  updateUserInFirestore: (userId: string, data: Partial<Pick<User, 'name' | 'role'>>, adminUser: User) => Promise<void>; // Added updateUserInFirestore
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,26 +49,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (userDocSnap.exists()) {
             const userData = { id: user.uid, ...userDocSnap.data() } as User;
             setCurrentUser(userData);
-            // Store admin user if signup process was initiated
             if (adminUserForSignup && adminUserForSignup.id === user.uid) {
-              // This means admin logged back in after new user creation
-              setAdminUserForSignup(null); // Clear the stored admin
-            } else if (!adminUserForSignup) {
-                // This is a normal login, not part of signup flow
+              setAdminUserForSignup(null); 
             }
-
           } else {
-            console.warn(`Firestore document for user UID ${user.uid} not found during auth state change. This might happen if a new user was just created and the admin hasn't signed back in yet.`);
-            // Don't auto-logout here as it might interfere with the signup flow's admin re-login
+            // This case is problematic if a user exists in Auth but not Firestore
+            // For signup flow, we expect this temp state before admin re-login if signup logic signs out admin.
+            // If signup keeps admin logged in, this branch shouldn't be hit for the new user immediately.
+             console.warn(`Firestore document for user UID ${user.uid} not found. If this is a new user created by an admin, this might be expected until admin re-authenticates or if user data isn't written yet.`);
+             // setCurrentUser(null); // Potentially clear CRM user if no Firestore doc
           }
         } catch (dbError) {
             console.error("Error fetching user document from Firestore:", dbError);
-            // Potentially logout if this is a critical error not related to signup flow
-            // await signOut(auth);
+            // Consider logging out if Firestore access fails critically, outside of signup flow.
+            // await signOut(auth); 
         }
       } else {
         setCurrentUser(null);
-        setAdminUserForSignup(null); // Clear admin user if logged out
+        setAdminUserForSignup(null); 
       }
       setLoading(false);
     });
@@ -80,11 +78,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // User data will be set by onAuthStateChanged
-      // Log login event after user data is potentially available from onAuthStateChanged
-      // To get the full User object for logging, we might need to fetch it again here or rely on onAuthStateChanged to set it
-      // For simplicity, we'll log with basic info first, onAuthStateChanged will provide the full User object later.
-      const tempUserForLog = { id: userCredential.user.uid, name: userCredential.user.displayName || email, email: email, role: 'user' as UserRole }; // Temporary
+      const tempUserForLog = { id: userCredential.user.uid, name: userCredential.user.displayName || email, email: email, role: 'user' as UserRole }; 
       await logSystemEvent(tempUserForLog, 'login', 'User', userCredential.user.uid, `Usuario ${email} inició sesión.`);
     } catch (error: any) {
       console.error("Error en login:", error);
@@ -100,18 +94,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false); 
       throw error;
     }
-    // setLoading(false) is handled by onAuthStateChanged
   };
 
   const signup = async (email: string, pass: string, name: string, role?: UserRole): Promise<FirebaseUser | null> => {
-    if (!auth.currentUser) {
-        toast({ title: "Error de Administrador", description: "El administrador debe estar autenticado para crear nuevos usuarios.", variant: "destructive"});
+    const adminPerformingSignup = currentUser; 
+    if (!adminPerformingSignup) {
+        toast({ title: "Error de Permisos", description: "Solo un administrador autenticado puede crear nuevos usuarios.", variant: "destructive"});
         return null;
     }
-    const adminPerformingSignup = currentUser; // Capture admin user *before* potential auth state change
-    setAdminUserForSignup(adminPerformingSignup); // Store admin to re-login
 
     try {
+      // Note: Firebase SDK doesn't support creating users without signing them in client-side.
+      // This will sign in the new user temporarily. The admin will need to sign back in.
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const newUser = userCredential.user;
 
@@ -126,35 +120,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       await setDoc(userDocRef, newUserFirestoreData);
 
-      await sendEmailVerification(newUser);
-      // Password reset email is typically sent if user forgets, not usually on signup.
-      // If you want to force a password change, you'd guide them to reset after first login.
-      // await sendPasswordResetEmail(auth, email); 
-
-      toast({
-        title: "Usuario Creado Exitosamente",
-        description: `Se ha creado el usuario ${name}. Se ha enviado un correo de verificación.`,
-      });
-      
-      if (adminPerformingSignup) {
-        await logSystemEvent(adminPerformingSignup, 'create', 'User', newUser.uid, `Usuario ${name} (${email}) creado con rol ${role || DEFAULT_USER_ROLE}.`);
+      try {
+        await sendEmailVerification(newUser);
+         toast({
+            title: "Usuario Creado Exitosamente",
+            description: `Se ha creado el usuario ${name}. Se ha enviado un correo de verificación.`,
+        });
+      } catch (emailError) {
+        console.warn("Error enviando email de verificación:", emailError);
+        toast({
+            title: "Usuario Creado (Sin Email de Verificación)",
+            description: `Se creó ${name}, pero falló el envío del correo de verificación. Contacta soporte.`,
+            variant: "default",
+            duration: 7000,
+        });
       }
-
-      // Sign out the newly created user (who was automatically signed in)
-      await signOut(auth); 
       
-      // The admin is now signed out. They need to log back in.
-      // onAuthStateChanged will handle setting firebaseUser to null and then currentUser to null.
-      // The UI should redirect to login or handle this state appropriately.
-      toast({
-        title: "Acción Requerida",
-        description: "El nuevo usuario ha sido creado. El administrador debe iniciar sesión nuevamente.",
-        duration: 7000,
-      });
+      await logSystemEvent(adminPerformingSignup, 'create', 'User', newUser.uid, `Usuario ${name} (${email}) creado con rol ${role || DEFAULT_USER_ROLE}.`);
+      
+      // Important: Sign out the newly created user to allow admin to continue
+      // This must happen *before* attempting to sign the admin back in if that was the flow.
+      // For now, we assume the admin will manually log back in if their session was affected.
+      if (auth.currentUser?.uid === newUser.uid) {
+         await signOut(auth);
+         // Trigger a re-fetch or UI update to reflect admin needs to log in again.
+         // This will make currentUser null and loading false, AppLayout should redirect to /login.
+         toast({
+            title: "Administrador Desconectado",
+            description: "El nuevo usuario fue creado. Por favor, inicia sesión nuevamente como administrador.",
+            duration: 10000,
+         });
+      }
       
       return newUser;
     } catch (error: any) {
-      setAdminUserForSignup(null); // Clear if signup failed
       console.error("Error en signup (admin):", error);
       let errorMessage = "Ocurrió un error al crear el usuario.";
       if (error.code === 'auth/email-already-in-use') {
@@ -167,19 +166,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      throw error;
+      throw error; 
+    }
+  };
+  
+  const updateUserInFirestore = async (userId: string, data: Partial<Pick<User, 'name' | 'role'>>, adminUser: User) => {
+    if (!userId) {
+        throw new Error("Se requiere ID de usuario para actualizar.");
+    }
+    const userDocRef = doc(db, "users", userId);
+    try {
+        await updateDoc(userDocRef, {
+            ...data,
+            updatedAt: serverTimestamp() // Optional: track updates
+        });
+        // Log audit event for successful update
+        const changes = Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(', ');
+        await logSystemEvent(adminUser, 'update', 'User', userId, `Datos de usuario actualizados. Cambios: ${changes}.`);
+
+    } catch (error) {
+        console.error("Error actualizando usuario en Firestore:", error);
+        throw error; // Re-throw to be caught by the dialog
     }
   };
 
+
   const logout = async () => {
-    const userLoggingOut = currentUser; // Capture user before logout
-    // setLoading(true); // onAuthStateChanged will set loading to false
+    const userLoggingOut = currentUser; 
     try {
       await signOut(auth);
       if (userLoggingOut) {
         await logSystemEvent(userLoggingOut, 'logout', 'User', userLoggingOut.id, `Usuario ${userLoggingOut.name} cerró sesión.`);
       }
-      // setCurrentUser(null) and setFirebaseUser(null) will be handled by onAuthStateChanged
     } catch (error: any) {
       console.error("Error en logout:", error);
        toast({
@@ -187,7 +205,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: "Ocurrió un error inesperado.",
         variant: "destructive",
       });
-      // setLoading(false); 
       throw error;
     }
   };
@@ -201,7 +218,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return {
             id: docSnap.id,
             ...data,
-            // Ensure createdAt is a string if it's a Timestamp
             createdAt: data.createdAt instanceof Date ? data.createdAt.toISOString() : 
                        (typeof data.createdAt?.toDate === 'function' ? data.createdAt.toDate().toISOString() : String(data.createdAt || '')),
         } as User;
@@ -219,7 +235,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, firebaseUser, loading, login, signup, logout, getAllUsers }}>
+    <AuthContext.Provider value={{ currentUser, firebaseUser, loading, login, signup, logout, getAllUsers, updateUserInFirestore }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -16,7 +15,8 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingUser, setEditingUser] = useState<User | null>(null); // For future edit functionality
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   
   const { getAllUsers, currentUser } = useAuth();
   const { toast } = useToast();
@@ -46,15 +46,21 @@ export default function UserManagementPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleUserAdded = (newUser: User) => {
-    setUsers(prevUsers => [newUser, ...prevUsers]); // Add to the top for immediate visibility
-    // or fetchUsers(); // To re-fetch and ensure sorting/consistency from backend
+  const handleSaveSuccess = (savedUser: User) => {
+    // If editingUser was set, it means it was an update.
+    if (editingUser) {
+      setUsers(prevUsers => prevUsers.map(u => u.id === savedUser.id ? savedUser : u));
+    } else { // Otherwise, it was an add operation.
+      setUsers(prevUsers => [savedUser, ...prevUsers]);
+    }
+    fetchUsers(); // Re-fetch to ensure data consistency, especially after signup might re-login admin
+    setIsUserDialogOpen(false);
+    setEditingUser(null);
   };
 
   const handleEditUser = (user: User) => {
-    // setEditingUser(user);
-    // Open AddEditUserDialog with userToEdit prop
-    toast({ title: "Funcionalidad no implementada", description: "La edición de usuarios aún no está disponible." });
+    setEditingUser(user);
+    setIsUserDialogOpen(true);
   };
 
   const handleDeleteUser = (userId: string) => {
@@ -62,6 +68,11 @@ export default function UserManagementPage() {
     toast({ title: "Funcionalidad no implementada", description: "La eliminación de usuarios aún no está disponible." });
     // Example: Optimistic update or re-fetch
     // setUsers(prevUsers => prevUsers.filter(u => u.id !== userId)); 
+  };
+  
+  const openNewUserDialog = () => {
+    setEditingUser(null);
+    setIsUserDialogOpen(true);
   };
   
   // Basic role check - in a real app, this would be more robust
@@ -84,15 +95,9 @@ export default function UserManagementPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{userManagementNavItem?.label || "Gestión de Usuarios"}</h2>
-        <AddEditUserDialog
-            trigger={
-              <Button>
-                <PlusCircle className="mr-2 h-5 w-5" /> Añadir Nuevo Usuario
-              </Button>
-            }
-            userToEdit={editingUser}
-            onUserAdded={handleUserAdded}
-          />
+        <Button onClick={openNewUserDialog}>
+            <PlusCircle className="mr-2 h-5 w-5" /> Añadir Nuevo Usuario
+        </Button>
       </div>
       
       {error && (
@@ -121,6 +126,18 @@ export default function UserManagementPage() {
           />
         </CardContent>
       </Card>
+      
+      <AddEditUserDialog
+        isOpen={isUserDialogOpen}
+        onOpenChange={(open) => {
+          setIsUserDialogOpen(open);
+          if (!open) {
+            setEditingUser(null); // Clear editingUser when dialog closes
+          }
+        }}
+        userToEdit={editingUser}
+        onSaveSuccess={handleSaveSuccess}
+      />
     </div>
   );
 }

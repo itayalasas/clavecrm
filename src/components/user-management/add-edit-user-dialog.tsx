@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,8 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"; // DialogTrigger removed as it's handled by parent
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,44 +27,49 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { USER_ROLES, DEFAULT_USER_ROLE } from "@/lib/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
-const formSchema = z.object({
+const addUserFormSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio."),
   email: z.string().email("Correo electrónico inválido."),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
-  role: z.enum(USER_ROLES, { errorMap: () => ({ message: "Rol inválido."}) }),
+  role: z.enum(USER_ROLES as [string, ...string[]], { errorMap: () => ({ message: "Rol inválido."}) }),
 });
 
-type UserFormValues = z.infer<typeof formSchema>;
+const editUserFormSchema = z.object({
+  name: z.string().min(1, "El nombre es obligatorio."),
+  email: z.string().email("Correo electrónico inválido."), // Will be read-only
+  role: z.enum(USER_ROLES as [string, ...string[]], { errorMap: () => ({ message: "Rol inválido."}) }),
+});
+
+type UserFormValues = z.infer<typeof addUserFormSchema> | z.infer<typeof editUserFormSchema>;
 
 interface AddEditUserDialogProps {
-  trigger: React.ReactNode;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
   userToEdit?: User | null; 
-  onUserAdded?: (user: User) => void;
+  onSaveSuccess: (user: User) => void; // Generalized callback
 }
 
-export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditUserDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const { signup } = useAuth();
+export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSuccess }: AddEditUserDialogProps) {
+  const { signup, updateUserInFirestore, currentUser: adminUser } = useAuth();
   const { toast } = useToast();
+  
+  const formSchema = userToEdit ? editUserFormSchema : addUserFormSchema;
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      password: "",
-      role: DEFAULT_USER_ROLE,
-    },
+    defaultValues: userToEdit 
+      ? { name: userToEdit.name, email: userToEdit.email, role: userToEdit.role }
+      : { name: "", email: "", password: "", role: DEFAULT_USER_ROLE },
   });
 
   useEffect(() => {
-    if (isOpen) { // Reset form when dialog opens or userToEdit changes
+    if (isOpen) {
       if (userToEdit) {
         form.reset({
           name: userToEdit.name,
           email: userToEdit.email,
-          password: "", 
           role: userToEdit.role,
         });
       } else {
@@ -81,35 +84,47 @@ export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditU
   }, [userToEdit, isOpen, form]);
 
   const onSubmitHandler: SubmitHandler<UserFormValues> = async (data) => {
-    if (userToEdit) {
-      toast({ title: "Funcionalidad no implementada", description: "La edición de usuarios aún no está disponible.", variant: "destructive" });
+    if (!adminUser) {
+      toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive"});
       return;
     }
 
-    try {
-      const userCredential = await signup(data.email, data.password, data.name, data.role);
-      // Toast for user creation success is handled within the signup function in AuthContext.
-      if (onUserAdded && userCredential?.uid) { // Check uid on userCredential which is FirebaseUser
-        onUserAdded({
-            id: userCredential.uid,
+    if (userToEdit) { // Editing existing user
+      try {
+        const updatedUserData: Partial<User> = {
             name: data.name,
-            email: data.email,
-            role: data.role,
-        });
+            role: (data as z.infer<typeof editUserFormSchema>).role, // Type assertion
+        };
+        await updateUserInFirestore(userToEdit.id, updatedUserData, adminUser);
+        onSaveSuccess({ ...userToEdit, ...updatedUserData });
+        toast({ title: "Usuario Actualizado", description: `Los datos de ${data.name} han sido actualizados.` });
+        onOpenChange(false);
+      } catch (error: any) {
+        console.error("Error updating user:", error);
+        toast({ title: "Error al Actualizar", description: error.message || "No se pudo actualizar el usuario.", variant: "destructive"});
       }
-      setIsOpen(false); // Close the modal
-      // form.reset(); // Form is reset by useEffect when isOpen changes or on next open
-    } catch (error: any) {
-      console.error("Error creating user (dialog):", error);
-      // Error toast is handled within the signup function in AuthContext.
-      // If signup throws, this catch block will execute. Ensure no double-toasting.
-      // The toast from AuthContext is usually more specific.
+    } else { // Adding new user
+      const addData = data as z.infer<typeof addUserFormSchema>; // Type assertion
+      try {
+        const firebaseUser = await signup(addData.email, addData.password, addData.name, addData.role);
+        if (firebaseUser?.uid) {
+          onSaveSuccess({
+              id: firebaseUser.uid,
+              name: addData.name,
+              email: addData.email,
+              role: addData.role,
+          });
+        }
+        onOpenChange(false);
+      } catch (error: any) {
+        console.error("Error creating user (dialog):", error);
+        // Toast is handled in signup
+      }
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{userToEdit ? "Editar Usuario" : "Añadir Nuevo Usuario"}</DialogTitle>
@@ -139,8 +154,9 @@ export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditU
                 <FormItem>
                   <FormLabel>Correo Electrónico</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="Ej. juan.perez@ejemplo.com" {...field} />
+                    <Input type="email" placeholder="Ej. juan.perez@ejemplo.com" {...field} readOnly={!!userToEdit} />
                   </FormControl>
+                   {!!userToEdit && <FormDescription className="text-xs">El correo electrónico no se puede cambiar después de la creación.</FormDescription>}
                   <FormMessage />
                 </FormItem>
               )}
@@ -160,13 +176,21 @@ export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditU
                 )}
               />
             )}
+            {userToEdit && (
+                <div className="text-sm p-3 bg-muted/50 rounded-md">
+                    <p className="font-medium">Gestión de Contraseña:</p>
+                    <p className="text-xs text-muted-foreground">
+                        Los cambios de contraseña para usuarios existentes se realizan a través del proceso de "Olvidé mi contraseña" por el propio usuario, o por un administrador mediante herramientas específicas (no disponible en este formulario).
+                    </p>
+                </div>
+            )}
             <FormField
               control={form.control}
               name="role"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Rol / Cargo</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona un rol" />
@@ -185,8 +209,9 @@ export function AddEditUserDialog({ trigger, userToEdit, onUserAdded }: AddEditU
               )}
             />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={form.formState.isSubmitting}>Cancelar</Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {form.formState.isSubmitting ? "Guardando..." : (userToEdit ? "Guardar Cambios" : "Crear Usuario")}
               </Button>
             </DialogFooter>
