@@ -308,5 +308,3 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
     </Card>
   );
 }
-
-```

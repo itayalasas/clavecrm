@@ -237,5 +237,3 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
     </Card>
   );
 }
-
-```
