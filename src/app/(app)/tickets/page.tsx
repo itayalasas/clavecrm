@@ -9,7 +9,7 @@ import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Filter } from "lucide-react";
+import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList } from "lucide-react"; // Added icons
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -20,6 +20,9 @@ import { ref as storageRef, deleteObject } from "firebase/storage";
 import { format, parseISO, startOfMonth } from "date-fns"; 
 import { es } from 'date-fns/locale';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -44,7 +47,8 @@ export default function TicketsPage() {
 
   const { toast } = useToast();
   const { getAllUsers, currentUser, loading: authLoading } = useAuth(); 
-  const ticketsNavItem = NAV_ITEMS.find(item => item.href === '/tickets');
+  const ticketsNavItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/tickets');
+  const PageIcon = ticketsNavItem?.icon || ClipboardList;
 
   const fetchTickets = useCallback(async () => {
     if (!currentUser) { 
@@ -376,13 +380,9 @@ export default function TicketsPage() {
         if (filterAssignee === "Todos") return true;
         if (filterAssignee === "unassigned") return !ticket.assigneeUserId;
         return ticket.assigneeUserId === filterAssignee;
-      })
-      .filter(ticket =>
-        ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-  }, [tickets, searchTerm, filterStatus, filterPriority, filterAssignee, currentUser]); 
+      });
+      // Search term filtering is now handled by TicketItem's visibility logic or can be added here if global search is preferred
+  }, [tickets, filterStatus, filterPriority, filterAssignee, currentUser]); 
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
   
@@ -390,96 +390,147 @@ export default function TicketsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h2 className="text-2xl font-semibold">{ticketsNavItem ? ticketsNavItem.label : "Gestión de Tickets"}</h2>
-        <AddEditTicketDialog
-            trigger={
-              <Button onClick={openNewTicketDialog} disabled={isLoadingUsers || isSubmittingTicket}>
-                <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
-              </Button>
-            }
-            isOpen={isTicketDialogOpen}
-            onOpenChange={setIsTicketDialogOpen}
-            ticketToEdit={editingTicket}
-            leads={leads}
-            users={users}
-            onSave={handleSaveTicket}
-            key={editingTicket ? `edit-${editingTicket.id}` : 'new-ticket-dialog'}
-          />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="relative md:col-span-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar por título, descripción o ID..."
-            className="pl-8 w-full"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <Select value={filterPriority} onValueChange={(value: TicketPriority | "Todas") => setFilterPriority(value)}>
-          <SelectTrigger className="w-full">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filtrar por prioridad" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Todas">Todas las Prioridades</SelectItem>
-            {TICKET_PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && ( 
-            <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers}>
-            <SelectTrigger className="w-full">
+      <Card className="shadow-lg">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-2xl">
+                <PageIcon className="h-6 w-6 text-primary" />
+                {ticketsNavItem?.label || "Gestión de Tickets"}
+              </CardTitle>
+              <CardDescription>
+                Gestiona solicitudes de soporte, asigna responsables y haz seguimiento hasta la resolución.
+              </CardDescription>
+            </div>
+            <AddEditTicketDialog
+                trigger={
+                  <Button onClick={openNewTicketDialog} disabled={isLoadingUsers || isSubmittingTicket}>
+                    <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
+                  </Button>
+                }
+                isOpen={isTicketDialogOpen}
+                onOpenChange={setIsTicketDialogOpen}
+                ticketToEdit={editingTicket}
+                leads={leads}
+                users={users}
+                onSave={handleSaveTicket}
+                key={editingTicket ? `edit-${editingTicket.id}` : 'new-ticket-dialog'}
+              />
+          </div>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div className="relative md:col-span-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Buscar por título, descripción o ID..."
+                className="pl-8 w-full"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <Select value={filterPriority} onValueChange={(value: TicketPriority | "Todas") => setFilterPriority(value)} disabled={isLoading}>
+              <SelectTrigger className="w-full">
                 <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtrar por asignado" />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value="Todos">Todos los Asignados</SelectItem>
-                <SelectItem value="unassigned">Sin asignar</SelectItem>
-                {users.map(user => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
-            </SelectContent>
+                <SelectValue placeholder="Filtrar por prioridad" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todas">Todas las Prioridades</SelectItem>
+                {TICKET_PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
             </Select>
-        )}
-      </div>
+            {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && ( 
+                <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers || isLoading}>
+                <SelectTrigger className="w-full">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Filtrar por asignado" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="Todos">Todos los Asignados</SelectItem>
+                    <SelectItem value="unassigned">Sin asignar</SelectItem>
+                    {users.map(user => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
+                </SelectContent>
+                </Select>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | TicketStatus)}>
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
+              {allTicketStatusesForTabs.map(status => (
+                <TabsTrigger key={status} value={status} disabled={isLoading}>{status}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
-      <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as "Todos" | TicketStatus)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
-          {allTicketStatusesForTabs.map(status => (
-            <TabsTrigger key={status} value={status}>{status}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+          {isLoading && tickets.length === 0 ? ( 
+            <div className="space-y-4 mt-4">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : filteredTickets.filter(ticket => // Apply search term filter here
+                ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
+            ).length > 0 ? (
+            <div className="space-y-4 mt-4">
+              {filteredTickets.filter(ticket => 
+                ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
+              ).map(ticket => (
+                <TicketItem
+                  key={ticket.id}
+                  ticket={ticket}
+                  leads={leads}
+                  users={users}
+                  currentUser={currentUser}
+                  onEdit={openEditTicketDialog}
+                  onDelete={() => confirmDeleteTicket(ticket)}
+                  onAddComment={handleAddComment}
+                  onUpdateTicketSolution={handleUpdateTicketSolution}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10 text-muted-foreground">
+              <p className="text-lg">No se encontraron tickets.</p>
+              <p>Intenta ajustar tus filtros o abre un nuevo ticket.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {isLoading && tickets.length === 0 ? ( 
-         <div className="space-y-4">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : filteredTickets.length > 0 ? (
-        <div className="space-y-4">
-          {filteredTickets.map(ticket => (
-            <TicketItem
-              key={ticket.id}
-              ticket={ticket}
-              leads={leads}
-              users={users}
-              currentUser={currentUser}
-              onEdit={openEditTicketDialog}
-              onDelete={() => confirmDeleteTicket(ticket)}
-              onAddComment={handleAddComment}
-              onUpdateTicketSolution={handleUpdateTicketSolution}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-10 text-muted-foreground">
-          <p className="text-lg">No se encontraron tickets.</p>
-          <p>Intenta ajustar tus filtros o abre un nuevo ticket.</p>
-        </div>
-      )}
+      <Card className="mt-4 bg-amber-50 border-amber-200">
+        <CardHeader>
+          <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Estado de Desarrollo de Funcionalidades Avanzadas de Tickets
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-amber-600">
+          <ul className="list-disc list-inside space-y-2">
+            <li>
+              <strong>Acuerdos de Nivel de Servicio (SLA):</strong>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
+              <p className="text-xs pl-5">Definir tiempos de respuesta y resolución, y generar alertas.</p>
+            </li>
+            <li>
+              <strong>Colas de Soporte:</strong>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
+              <p className="text-xs pl-5">Organizar tickets en colas personalizadas para diferentes equipos o tipos de problemas.</p>
+            </li>
+            <li>
+              <strong>Escalados Automáticos:</strong>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
+              <p className="text-xs pl-5">Reglas para escalar tickets automáticamente si no se cumplen los SLA.</p>
+            </li>
+          </ul>
+          <p className="mt-4 font-semibold">Estas funcionalidades se implementarán progresivamente para mejorar la gestión avanzada de tickets.</p>
+        </CardContent>
+      </Card>
+
 
       {ticketToDelete && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
