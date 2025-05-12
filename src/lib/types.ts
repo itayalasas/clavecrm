@@ -371,12 +371,14 @@ export interface DocumentTemplate {
   name: string;
   description?: string;
   category?: string; // e.g., "Contratos", "Propuestas de Venta", "Informes"
-  content?: string; // For simple text/markdown templates. For complex, might be a link or reference.
-  storagePath?: string; // If the template itself is a file (e.g. .docx, .pdf template)
+  content?: string; // For simple text/markdown templates. For complex, might be a link or reference to a file in storage.
   variables?: string[]; // e.g. {{lead_name}}, {{company_name}}
   createdAt: string; // ISO string
   createdByUserId: string;
   updatedAt?: string; // ISO string
+  fileNameInStorage?: string; // If the template is a file
+  fileURL?: string; // If the template is a file
+  fileType?: string; // MIME type if template is a file
 }
 
 // LucideIcon type definition, using the renamed import

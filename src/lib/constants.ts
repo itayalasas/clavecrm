@@ -1,5 +1,5 @@
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityType, Resource } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban } from 'lucide-react';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -44,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
     subItems: [
       { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays },
       { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, disabled: true },
-      { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban, disabled: true },
+      { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban },
       { href: '/tasks', label: 'Tareas', icon: ListChecks },
     ],
     parentActiveIf: (pathname) => ['/calendar', '/activity-log', '/documents', '/tasks'].some(p => pathname.startsWith(p)),
@@ -215,4 +215,14 @@ export const INITIAL_RESOURCES: Resource[] = [
   { id: 'projector-1', name: 'Proyector HD (P1)', type: 'Proyector', location: 'Almacén Equipos', isAvailable: true },
   { id: 'whiteboard-1', name: 'Pizarra Digital Interactiva', type: 'Pizarra Digital', location: 'Sala de Colaboración', isAvailable: false },
   { id: 'other-1', name: 'Catering Café Mañana', type: 'Otro', description: 'Servicio de café y bollería para reuniones matutinas.', isAvailable: true },
+];
+
+export const DOCUMENT_TEMPLATE_CATEGORIES: string[] = [
+  "Propuestas de Venta",
+  "Contratos de Servicio",
+  "Acuerdos de Confidencialidad (NDA)",
+  "Facturas Proforma",
+  "Cartas de Presentación",
+  "Informes de Progreso",
+  "Otros",
 ];

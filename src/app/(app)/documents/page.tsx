@@ -1,12 +1,14 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion } from "@/lib/types";
-import { NAV_ITEMS } from "@/lib/constants";
+import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion, DocumentTemplate } from "@/lib/types";
+import { NAV_ITEMS, DOCUMENT_TEMPLATE_CATEGORIES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIconLucide, RotateCcw } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIconLucide, RotateCcw, Library } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +19,8 @@ import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form"; 
 import { UploadNewVersionDialog } from "@/components/documents/upload-new-version-dialog";
 import { VersionHistoryDialog } from "@/components/documents/version-history-dialog";
+import { AddEditDocumentTemplateDialog } from "@/components/documents/add-edit-document-template-dialog";
+import { DocumentTemplateListItem } from "@/components/documents/document-template-list-item";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,12 +39,16 @@ export default function DocumentsPage() {
   const PageIcon = navItem?.icon || FolderKanban;
 
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // For documents
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true); // For templates
   const [isLoadingSupportData, setIsLoadingSupportData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [templateSearchTerm, setTemplateSearchTerm] = useState("");
+
   const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string} | null>(null);
 
@@ -48,6 +56,10 @@ export default function DocumentsPage() {
   const [documentForNewVersion, setDocumentForNewVersion] = useState<DocumentFile | null>(null);
   const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = useState(false);
   const [documentForVersionHistory, setDocumentForVersionHistory] = useState<DocumentFile | null>(null);
+
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
+  const [templateToDelete, setTemplateToDelete] = useState<DocumentTemplate | null>(null);
 
 
   const { currentUser } = useAuth();
@@ -117,6 +129,34 @@ export default function DocumentsPage() {
     }
   }, [currentUser, toast]);
 
+  const fetchDocumentTemplates = useCallback(async () => {
+    if (!currentUser) {
+      setIsLoadingTemplates(false);
+      return;
+    }
+    setIsLoadingTemplates(true);
+    try {
+      const q = query(collection(db, "documentTemplates"), orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedTemplates = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+        } as DocumentTemplate;
+      });
+      setDocumentTemplates(fetchedTemplates);
+    } catch (error) {
+      console.error("Error al obtener plantillas de documentos:", error);
+      toast({ title: "Error al Cargar Plantillas", variant: "destructive" });
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  }, [currentUser, toast]);
+
+
   const fetchSupportData = useCallback(async () => {
     setIsLoadingSupportData(true);
     try {
@@ -139,8 +179,9 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     fetchDocuments();
+    fetchDocumentTemplates();
     fetchSupportData();
-  }, [fetchDocuments, fetchSupportData]);
+  }, [fetchDocuments, fetchDocumentTemplates, fetchSupportData]);
 
   const handleUploadSuccess = () => {
     fetchDocuments(); 
@@ -152,37 +193,25 @@ export default function DocumentsPage() {
     setIsUploadNewVersionDialogOpen(false);
     setDocumentForNewVersion(null);
   }
+  
+  const handleSaveTemplateSuccess = () => {
+    fetchDocumentTemplates();
+    setIsTemplateDialogOpen(false);
+    setEditingTemplate(null);
+  }
 
   const confirmDeleteDocument = (docId: string, storagePath: string) => {
-    const docFile = documents.find(d => d.id === docId);
-    // Temporarily allow deletion even with history for testing, will refine this logic.
-    // if (docFile && docFile.versionHistory && docFile.versionHistory.length > 0) {
-    //     toast({
-    //         title: "Eliminación no permitida",
-    //         description: "Este documento tiene historial de versiones. Elimina las versiones anteriores primero (Funcionalidad Próxima).",
-    //         variant: "destructive",
-    //         duration: 7000,
-    //     });
-    //     return;
-    // }
     setDocumentToDelete({ id: docId, storagePath });
   };
 
   const handleDeleteDocument = async () => {
     if (!documentToDelete || !currentUser) return;
-
-    // TODO: In a full versioning system, this would iterate through versionHistory
-    // and delete all associated files from storage. For now, it only deletes the current version's file.
     try {
-      // 1. Delete current version from Firebase Storage
       const fileRef = storageRef(storage, documentToDelete.storagePath); 
       await deleteObject(fileRef);
-
-      // 2. Delete metadata from Firestore
       await deleteDoc(doc(db, "documents", documentToDelete.id));
-
       toast({ title: "Documento Eliminado", description: "El documento ha sido eliminado exitosamente." });
-      fetchDocuments(); // Refresh list
+      fetchDocuments(); 
     } catch (error: any) {
       console.error("Error al eliminar documento:", error);
       if (error.code === 'storage/object-not-found') {
@@ -200,6 +229,28 @@ export default function DocumentsPage() {
       setDocumentToDelete(null);
     }
   };
+  
+  const confirmDeleteTemplate = (template: DocumentTemplate) => {
+    setTemplateToDelete(template);
+  };
+
+  const handleDeleteTemplate = async () => {
+    if (!templateToDelete || !currentUser) return;
+    try {
+      if (templateToDelete.fileURL && templateToDelete.fileNameInStorage) {
+        const templateFileRef = storageRef(storage, `documentTemplates/${templateToDelete.createdByUserId}/${templateToDelete.fileNameInStorage}`);
+        await deleteObject(templateFileRef).catch(err => console.warn("Error eliminando archivo de plantilla de storage:", err));
+      }
+      await deleteDoc(doc(db, "documentTemplates", templateToDelete.id));
+      toast({ title: "Plantilla Eliminada", description: "La plantilla de documento ha sido eliminada." });
+      fetchDocumentTemplates();
+    } catch (error) {
+      console.error("Error al eliminar plantilla:", error);
+      toast({ title: "Error al Eliminar Plantilla", variant: "destructive" });
+    } finally {
+      setTemplateToDelete(null);
+    }
+  };
 
   const openUploadNewVersionDialog = (docFile: DocumentFile) => {
     setDocumentForNewVersion(docFile);
@@ -210,6 +261,17 @@ export default function DocumentsPage() {
     setDocumentForVersionHistory(docFile);
     setIsVersionHistoryDialogOpen(true);
   };
+  
+  const openNewTemplateDialog = () => {
+    setEditingTemplate(null);
+    setIsTemplateDialogOpen(true);
+  };
+
+  const openEditTemplateDialog = (template: DocumentTemplate) => {
+    setEditingTemplate(template);
+    setIsTemplateDialogOpen(true);
+  };
+
 
   const handleRestoreVersion = async (documentId: string, versionToRestore: DocumentVersion) => {
     if (!currentUser) {
@@ -225,8 +287,6 @@ export default function DocumentsPage() {
         return;
       }
       const currentDocData = currentDocSnap.data() as DocumentFile;
-
-      // This is the version that was active *before* restoration. It will be added to history.
       const versionBeingReplaced: DocumentVersion = {
         version: currentDocData.currentVersion,
         fileURL: currentDocData.fileURL,
@@ -250,14 +310,11 @@ export default function DocumentsPage() {
       const newCurrentVersionNumber = currentDocData.currentVersion + 1;
 
       await updateDoc(docRef, {
-        // Fields from the version being restored
         fileURL: versionToRestore.fileURL,
         fileNameInStorage: versionToRestore.fileNameInStorage,
         fileType: versionToRestore.fileType,
         fileSize: versionToRestore.fileSize,
         description: versionToRestore.notes || versionToRestore.versionNotes || "", 
-
-        // Meta fields for this restoration event
         lastVersionUploadedAt: serverTimestamp(),
         lastVersionUploadedByUserId: currentUser.id,
         lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
@@ -278,6 +335,12 @@ export default function DocumentsPage() {
     docFile.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (docFile.description && docFile.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (docFile.tags && docFile.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
+  );
+  
+  const filteredDocumentTemplates = documentTemplates.filter(template =>
+    template.name.toLowerCase().includes(templateSearchTerm.toLowerCase()) ||
+    (template.description && template.description.toLowerCase().includes(templateSearchTerm.toLowerCase())) ||
+    (template.category && template.category.toLowerCase().includes(templateSearchTerm.toLowerCase()))
   );
   
   const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false, partiallyImplemented: boolean = false) => (
@@ -309,78 +372,141 @@ export default function DocumentsPage() {
                 {navItem?.label || "Gestión de Documentos"}
                 </CardTitle>
                 <CardDescription>
-                Organiza y gestiona todos los documentos relacionados con tus clientes, ventas y proyectos.
+                Organiza, gestiona y versiona documentos y plantillas.
                 </CardDescription>
             </div>
-            <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled={!currentUser || isLoadingSupportData}>
-                <PlusCircle className="mr-2 h-4 w-4" /> {isUploadFormVisible ? "Cancelar Subida" : "Subir Documento"}
-            </Button>
           </div>
         </CardHeader>
-        {isUploadFormVisible && (
-            <CardContent>
-                {isLoadingSupportData ? (
-                    <Skeleton className="h-60 w-full max-w-lg" />
-                ) : (
-                    <DocumentUploadForm 
-                        currentUser={currentUser} 
-                        onUploadSuccess={handleUploadSuccess}
-                        leads={leads}
-                        contacts={contacts}
-                    />
-                )}
-            </CardContent>
-        )}
-      </Card>
-      
-      <Card>
-        <CardHeader>
-          <CardTitle>Documentos Almacenados</CardTitle>
-          <div className="flex gap-2 mt-2">
-            <div className="relative flex-grow">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                    type="search" 
-                    placeholder="Buscar por nombre, descripción o etiqueta..." 
-                    className="pl-8 w-full"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-            </div>
-            <Button variant="outline" disabled>
-                <Filter className="mr-2 h-4 w-4" /> Filtrar
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
-            </div>
-          ) : filteredDocuments.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredDocuments.map(docFile => (
-                <DocumentListItem 
-                  key={docFile.id} 
-                  documentFile={docFile} 
-                  onDelete={confirmDeleteDocument}
-                  onUploadNewVersion={openUploadNewVersionDialog}
-                  onViewHistory={openVersionHistoryDialog}
-                  leads={leads}
-                  contacts={contacts}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 text-muted-foreground">
-              <FolderKanban className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <p className="text-lg">No hay documentos.</p>
-               {searchTerm ? <p>Intenta con otro término de búsqueda.</p> : <p>Empieza subiendo tu primer documento.</p>}
-            </div>
-          )}
-        </CardContent>
       </Card>
 
+      <Tabs defaultValue="documents" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="documents"><FolderKanban className="mr-2 h-4 w-4" />Documentos</TabsTrigger>
+          <TabsTrigger value="templates"><Library className="mr-2 h-4 w-4" />Plantillas</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="documents">
+            <Card className="mt-4">
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <CardTitle>Documentos Almacenados</CardTitle>
+                        <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled={!currentUser || isLoadingSupportData}>
+                            <PlusCircle className="mr-2 h-4 w-4" /> {isUploadFormVisible ? "Cancelar Subida" : "Subir Documento"}
+                        </Button>
+                    </div>
+                    {isUploadFormVisible && (
+                        <CardContent className="p-0 pt-4">
+                            {isLoadingSupportData ? (
+                                <Skeleton className="h-60 w-full max-w-lg" />
+                            ) : (
+                                <DocumentUploadForm 
+                                    currentUser={currentUser} 
+                                    onUploadSuccess={handleUploadSuccess}
+                                    leads={leads}
+                                    contacts={contacts}
+                                />
+                            )}
+                        </CardContent>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                        <div className="relative flex-grow">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                                type="search" 
+                                placeholder="Buscar por nombre, descripción o etiqueta..." 
+                                className="pl-8 w-full"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <Button variant="outline" disabled>
+                            <Filter className="mr-2 h-4 w-4" /> Filtrar
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                {isLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
+                    </div>
+                ) : filteredDocuments.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredDocuments.map(docFile => (
+                        <DocumentListItem 
+                        key={docFile.id} 
+                        documentFile={docFile} 
+                        onDelete={confirmDeleteDocument}
+                        onUploadNewVersion={openUploadNewVersionDialog}
+                        onViewHistory={openVersionHistoryDialog}
+                        leads={leads}
+                        contacts={contacts}
+                        />
+                    ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-10 text-muted-foreground">
+                    <FolderKanban className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <p className="text-lg">No hay documentos.</p>
+                    {searchTerm ? <p>Intenta con otro término de búsqueda.</p> : <p>Empieza subiendo tu primer documento.</p>}
+                    </div>
+                )}
+                </CardContent>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="templates">
+           <Card className="mt-4">
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <CardTitle>Plantillas de Documentos</CardTitle>
+                        <Button onClick={openNewTemplateDialog} disabled={!currentUser}>
+                            <PlusCircle className="mr-2 h-4 w-4" /> Nueva Plantilla
+                        </Button>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                        <div className="relative flex-grow">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                                type="search" 
+                                placeholder="Buscar por nombre, descripción o categoría..." 
+                                className="pl-8 w-full"
+                                value={templateSearchTerm}
+                                onChange={(e) => setTemplateSearchTerm(e.target.value)}
+                            />
+                        </div>
+                         <Button variant="outline" disabled>
+                            <Filter className="mr-2 h-4 w-4" /> Filtrar
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingTemplates ? (
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
+                        </div>
+                    ) : filteredDocumentTemplates.length > 0 ? (
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {filteredDocumentTemplates.map(template => (
+                                <DocumentTemplateListItem
+                                    key={template.id}
+                                    template={template}
+                                    onEdit={openEditTemplateDialog}
+                                    onDelete={confirmDeleteTemplate}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 text-muted-foreground">
+                            <Library className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                            <p className="text-lg">No hay plantillas de documentos.</p>
+                            {templateSearchTerm ? <p>Intenta con otro término de búsqueda.</p> : <p>Crea tu primera plantilla.</p>}
+                        </div>
+                    )}
+                </CardContent>
+           </Card>
+        </TabsContent>
+      </Tabs>
+      
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
          {renderFutureFeatureCard(
             "Asociación de Documentos",
@@ -400,7 +526,9 @@ export default function DocumentsPage() {
             "Plantillas de Documentos",
             FileSignature,
             "Crea y gestiona plantillas para propuestas, contratos, etc.",
-            ["Crear plantillas con campos personalizables.", "Generar documentos a partir de plantillas."]
+            ["Crear plantillas (nombre, descripción, categoría, contenido simple o archivo - Implementado).", "Listar y buscar plantillas (Implementado).", "Generar documentos a partir de plantillas (Pendiente).", "Campos personalizables en plantillas (Pendiente)."],
+            false, // Not fully implemented yet
+            true  // Partially implemented
         )}
          {renderFutureFeatureCard(
             "Compartir Documentos",
@@ -441,6 +569,25 @@ export default function DocumentsPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+       {templateToDelete && (
+        <AlertDialog open={!!templateToDelete} onOpenChange={() => setTemplateToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar Plantilla?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción no se puede deshacer. La plantilla &quot;{templateToDelete.name}&quot; será eliminada permanentemente.
+                {templateToDelete.fileURL && " También se eliminará el archivo asociado del almacenamiento."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setTemplateToDelete(null)}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteTemplate} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Sí, eliminar plantilla
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
       {documentForNewVersion && currentUser &&(
         <UploadNewVersionDialog
@@ -460,9 +607,16 @@ export default function DocumentsPage() {
           onRestoreVersion={handleRestoreVersion}
         />
       )}
+
+      {currentUser && (
+         <AddEditDocumentTemplateDialog
+            isOpen={isTemplateDialogOpen}
+            onOpenChange={setIsTemplateDialogOpen}
+            templateToEdit={editingTemplate}
+            currentUser={currentUser}
+            onSaveSuccess={handleSaveTemplateSuccess}
+        />
+      )}
     </div>
   );
 }
-
-
-    
