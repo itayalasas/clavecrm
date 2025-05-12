@@ -116,9 +116,9 @@ export function AddEditDocumentTemplateDialog({
   const onSubmitHandler: SubmitHandler<DocumentTemplateFormValues> = async (data) => {
     setIsSubmitting(true);
 
-    let fileURL: string | undefined = templateToEdit?.fileURL;
-    let fileNameInStorage: string | undefined = templateToEdit?.fileNameInStorage;
-    let fileType: string | undefined = templateToEdit?.fileType;
+    let fileURL: string | undefined | null = templateToEdit?.fileURL;
+    let fileNameInStorage: string | undefined | null = templateToEdit?.fileNameInStorage;
+    let fileType: string | undefined | null = templateToEdit?.fileType;
 
     if (data.file) {
       setIsUploadingFile(true);
@@ -166,11 +166,11 @@ export function AddEditDocumentTemplateDialog({
       name: data.name,
       description: data.description || "",
       category: data.category || "",
-      content: data.file ? "" : data.content || "", // If file is uploaded, content field might be cleared or ignored
+      content: data.file ? "" : data.content || "",
       variables: data.variables?.split(',').map(v => v.trim()).filter(Boolean) || [],
-      fileURL: fileURL,
-      fileNameInStorage: fileNameInStorage,
-      fileType: fileType,
+      fileURL: fileURL === undefined ? null : fileURL,
+      fileNameInStorage: fileNameInStorage === undefined ? null : fileNameInStorage,
+      fileType: fileType === undefined ? null : fileType,
     };
 
     try {
@@ -317,3 +317,4 @@ export function AddEditDocumentTemplateDialog({
     </Dialog>
   );
 }
+
