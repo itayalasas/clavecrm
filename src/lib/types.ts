@@ -315,23 +315,47 @@ export interface ActivityLog {
   createdAt: string; // ISO string - when the log entry was created
 }
 
-export interface DocumentFile {
-  id: string;
-  name: string; // Original file name
-  storagePath: string; // Path in Firebase Storage
-  fileUrl: string; // Download URL
-  fileType: string; // MIME type
-  fileSize: number; // in bytes
-  version?: string;
-  description?: string;
-  relatedLeadId?: string;
-  relatedQuoteId?: string;
-  relatedOrderId?: string;
-  relatedInvoiceId?: string;
-  relatedTicketId?: string;
+export interface DocumentVersion {
+  version: number;
+  fileURL: string;
+  fileNameInStorage: string;
   uploadedAt: string; // ISO string
   uploadedByUserId: string;
+  notes?: string;
+  fileSize: number;
+  fileType: string;
+}
+export interface DocumentFile {
+  id: string;
+  name: string; // Original file name presented to user
+  fileNameInStorage: string; // Name used in Firebase Storage (e.g., with UUID/timestamp)
+  fileURL: string; // Download URL from Firebase Storage
+  fileType: string; // MIME type
+  fileSize: number; // in bytes
+  description?: string;
   tags?: string[];
+  
+  uploadedAt: string; // ISO string
+  uploadedByUserId: string;
+  uploadedByUserName: string; // Denormalized for display
+
+  relatedLeadId?: string;
+  relatedContactId?: string;
+  relatedOpportunityId?: string; // Assuming you might add opportunities
+  relatedOrderId?: string;
+  relatedQuoteId?: string;
+  relatedTicketId?: string;
+  relatedProjectId?: string; // Assuming you might add projects
+
+  currentVersion: number;
+  versionHistory?: DocumentVersion[]; // Array of past versions
+
+  // For future use with sharing
+  isPublic?: boolean;
+  sharedWithUserIds?: string[];
+  sharedWithGroupIds?: string[]; // If you implement user groups
+  accessLink?: string; // A unique link for sharing if applicable
+  linkExpiresAt?: string; // ISO string for temporary links
 }
 
 export interface DocumentTemplate {
@@ -342,7 +366,7 @@ export interface DocumentTemplate {
   content?: string; // For simple text/markdown templates. For complex, might be a link or reference.
   storagePath?: string; // If the template itself is a file (e.g. .docx, .pdf template)
   variables?: string[]; // e.g. {{lead_name}}, {{company_name}}
-  createdAt: string;
+  createdAt: string; // ISO string
   createdByUserId: string;
-  updatedAt?: string;
+  updatedAt?: string; // ISO string
 }
