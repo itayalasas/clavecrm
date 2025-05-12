@@ -327,6 +327,7 @@ export interface DocumentVersion {
   notes?: string; // Optional notes for this specific version
   fileSize: number;
   fileType: string;
+  versionNotes?: string; // Notes specific to this version upload
 }
 
 export interface DocumentFile {

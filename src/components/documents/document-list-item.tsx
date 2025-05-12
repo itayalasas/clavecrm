@@ -4,7 +4,7 @@ import type { DocumentFile, Lead, Contact } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon, History } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon, History, UploadCloud, Eye } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -17,6 +17,8 @@ import {
 interface DocumentListItemProps {
   documentFile: DocumentFile;
   onDelete: (documentId: string, storagePath: string) => void;
+  onUploadNewVersion: (document: DocumentFile) => void;
+  onViewHistory: (document: DocumentFile) => void;
   leads?: Lead[];
   contacts?: Contact[];
 }
@@ -43,7 +45,7 @@ function formatFileSize(bytes: number): string {
 }
 
 
-export function DocumentListItem({ documentFile, onDelete, leads = [], contacts = [] }: DocumentListItemProps) {
+export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, onViewHistory, leads = [], contacts = [] }: DocumentListItemProps) {
   const FileIcon = getFileIcon(documentFile.fileType);
   // Construct the full storage path for deletion (of the current version)
   const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
@@ -54,6 +56,7 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
   const displayUploadedAt = documentFile.lastVersionUploadedAt || documentFile.uploadedAt;
   const displayUploadedBy = documentFile.lastVersionUploadedByUserName || documentFile.uploadedByUserName;
 
+  const hasHistory = documentFile.versionHistory && documentFile.versionHistory.length > 0;
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -83,25 +86,40 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
                     <TooltipContent><p>Descargar v{documentFile.currentVersion}</p></TooltipContent>
                 </Tooltip>
              </TooltipProvider>
-             {/* Placeholder for future version history button */}
-             {/* <TooltipProvider> 
+             <TooltipProvider> 
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => alert('Ver historial - Próximamente')} className="h-8 w-8">
+                        <Button variant="ghost" size="icon" onClick={() => onUploadNewVersion(documentFile)} className="h-8 w-8">
+                            <UploadCloud className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Subir Nueva Versión</p></TooltipContent>
+                </Tooltip>
+             </TooltipProvider>
+             <TooltipProvider> 
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => onViewHistory(documentFile)} className="h-8 w-8" disabled={!hasHistory && documentFile.currentVersion <= 1}>
                             <History className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent><p>Ver Historial de Versiones</p></TooltipContent>
                 </Tooltip>
-             </TooltipProvider> */}
+             </TooltipProvider>
             <TooltipProvider>
                  <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => onDelete(documentFile.id, storagePath)} className="h-8 w-8 text-destructive hover:text-destructive">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => onDelete(documentFile.id, storagePath)} 
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          disabled={hasHistory} // Simple safety: disable delete if history exists. Refine later.
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>Eliminar Documento (Todas las versiones)</p></TooltipContent>
+                    <TooltipContent><p>{hasHistory ? "Eliminar versiones individualmente desde historial (Próx.)" : "Eliminar Documento"}</p></TooltipContent>
                 </Tooltip>
             </TooltipProvider>
           </div>
@@ -126,7 +144,7 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
         {relatedContact && (
             <div className="flex items-center gap-1 text-primary" title={`Asociado al Contacto: ${relatedContact.firstName || ''} ${relatedContact.lastName || ''}`}>
                 <LinkIcon className="h-3 w-3"/>
-                Contacto: <span className="font-medium truncate">{relatedContact.firstName || ''} {relatedContact.lastName || ''} ({relatedContact.email})</span>
+                Contacto: <span className="font-medium truncate">{`${relatedContact.firstName || ''} ${relatedContact.lastName || ''} (${relatedContact.email})`.trim()}</span>
             </div>
         )}
       </CardContent>

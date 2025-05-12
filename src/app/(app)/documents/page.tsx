@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { DocumentFile, Lead, Contact, Order, Quote, Ticket, LucideIcon as LucideIconType } from "@/lib/types";
+import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,12 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, where, updateDoc, arrayUnion } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form"; 
+import { UploadNewVersionDialog } from "@/components/documents/upload-new-version-dialog";
+import { VersionHistoryDialog } from "@/components/documents/version-history-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +42,11 @@ export default function DocumentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string} | null>(null);
+
+  const [isUploadNewVersionDialogOpen, setIsUploadNewVersionDialogOpen] = useState(false);
+  const [documentForNewVersion, setDocumentForNewVersion] = useState<DocumentFile | null>(null);
+  const [isVersionHistoryDialogOpen, setIsVersionHistoryDialogOpen] = useState(false);
+  const [documentForVersionHistory, setDocumentForVersionHistory] = useState<DocumentFile | null>(null);
 
 
   const { currentUser } = useAuth();
@@ -102,11 +109,27 @@ export default function DocumentsPage() {
   }, [fetchDocuments, fetchSupportData]);
 
   const handleUploadSuccess = () => {
-    fetchDocuments(); // Refresh the list after a successful upload
-    setIsUploadFormVisible(false); // Optionally hide form after upload
+    fetchDocuments(); 
+    setIsUploadFormVisible(false); 
   };
 
+  const handleUploadNewVersionSuccess = () => {
+    fetchDocuments();
+    setIsUploadNewVersionDialogOpen(false);
+    setDocumentForNewVersion(null);
+  }
+
   const confirmDeleteDocument = (docId: string, storagePath: string) => {
+    const docFile = documents.find(d => d.id === docId);
+    if (docFile && docFile.versionHistory && docFile.versionHistory.length > 0) {
+        toast({
+            title: "Eliminación no permitida",
+            description: "Este documento tiene historial de versiones. Elimina las versiones anteriores primero (Funcionalidad Próxima).",
+            variant: "destructive",
+            duration: 7000,
+        });
+        return;
+    }
     setDocumentToDelete({ id: docId, storagePath });
   };
 
@@ -143,11 +166,21 @@ export default function DocumentsPage() {
     }
   };
 
+  const openUploadNewVersionDialog = (docFile: DocumentFile) => {
+    setDocumentForNewVersion(docFile);
+    setIsUploadNewVersionDialogOpen(true);
+  };
 
-  const filteredDocuments = documents.filter(doc => 
-    doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
+  const openVersionHistoryDialog = (docFile: DocumentFile) => {
+    setDocumentForVersionHistory(docFile);
+    setIsVersionHistoryDialogOpen(true);
+  };
+
+
+  const filteredDocuments = documents.filter(docFile => 
+    docFile.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (docFile.description && docFile.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (docFile.tags && docFile.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
   
   const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false, partiallyImplemented: boolean = false) => (
@@ -234,6 +267,8 @@ export default function DocumentsPage() {
                   key={docFile.id} 
                   documentFile={docFile} 
                   onDelete={confirmDeleteDocument}
+                  onUploadNewVersion={openUploadNewVersionDialog}
+                  onViewHistory={openVersionHistoryDialog}
                   leads={leads}
                   contacts={contacts}
                 />
@@ -261,9 +296,9 @@ export default function DocumentsPage() {
             "Control de Versiones",
             History,
             "Mantén un historial de cambios y accede a versiones anteriores.",
-            ["Estructura básica para versionamiento implementada (v1 inicial).", "Subir nueva versión de un documento existente (Pendiente).", "Ver historial de versiones (Pendiente).", "Restaurar versión anterior (Pendiente)."],
-            false, // Not fully implemented
-            true // Partially implemented
+            ["Estructura básica para versionamiento implementada (v1 inicial).", "Subir nueva versión de un documento existente (Implementado).", "Ver historial de versiones (Implementado).", "Restaurar versión anterior (Pendiente)."],
+            false, 
+            true 
         )}
         {renderFutureFeatureCard(
             "Plantillas de Documentos",
@@ -298,7 +333,7 @@ export default function DocumentsPage() {
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
                 Esta acción no se puede deshacer. El documento &quot;{documents.find(d => d.id === documentToDelete.id)?.name}&quot; será eliminado permanentemente del almacenamiento y de la base de datos. 
-                Si existen múltiples versiones, todas serán eliminadas (funcionalidad de borrado de versiones pendiente).
+                Si existen múltiples versiones, esta acción solo elimina la versión actual listada y su registro. (La eliminación de todas las versiones históricas de almacenamiento es una funcionalidad pendiente).
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -309,6 +344,24 @@ export default function DocumentsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      )}
+
+      {documentForNewVersion && currentUser &&(
+        <UploadNewVersionDialog
+          isOpen={isUploadNewVersionDialogOpen}
+          onOpenChange={setIsUploadNewVersionDialogOpen}
+          documentToUpdate={documentForNewVersion}
+          currentUser={currentUser}
+          onUploadSuccess={handleUploadNewVersionSuccess}
+        />
+      )}
+
+      {documentForVersionHistory && (
+        <VersionHistoryDialog
+          isOpen={isVersionHistoryDialogOpen}
+          onOpenChange={setIsVersionHistoryDialogOpen}
+          documentFile={documentForVersionHistory}
+        />
       )}
     </div>
   );
