@@ -43,7 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: UsersRound,
     subItems: [
       { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays },
-      { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, disabled: true },
+      { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock },
       { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban },
       { href: '/tasks', label: 'Tareas', icon: ListChecks },
     ],
@@ -207,7 +207,9 @@ export const COMMON_EMAIL_VARIABLES: CommonEmailVariable[] = [
 ];
 
 export const MEETING_STATUSES: MeetingStatus[] = ['Programada', 'Confirmada', 'Cancelada', 'Realizada', 'Pospuesta'];
-export const ACTIVITY_TYPES: ActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'];
+
+export const ACTIVITY_TYPES: readonly ActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'] as const;
+
 
 export const INITIAL_RESOURCES: Resource[] = [
   { id: 'room-1', name: 'Sala de Conferencias A', type: 'Sala de Reuniones', location: 'Edificio Principal, Planta 1', capacity: 10, isAvailable: true },

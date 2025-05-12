@@ -262,7 +262,10 @@ export interface EmailSettings {
 
 // Collaboration and Productivity Types
 export type MeetingStatus = 'Programada' | 'Confirmada' | 'Cancelada' | 'Realizada' | 'Pospuesta';
+
+// Use a more specific type for ActivityType based on constants
 export type ActivityType = 'Llamada' | 'Reunión' | 'Correo Enviado' | 'Correo Recibido' | 'Nota' | 'Visita';
+
 
 export interface MeetingAttendee {
   id: string; // Can be userId or contactId or a unique ID for an external guest
@@ -301,19 +304,27 @@ export interface Meeting {
   resourceId?: string; // ID of the selected resource
 }
 
+export interface Opportunity { // Added Opportunity type for relatedOpportunityId
+    id: string;
+    name: string;
+    // Add other relevant fields for Opportunity
+}
+
+
 export interface ActivityLog {
   id: string;
   type: ActivityType;
-  subject?: string; // e.g., "Llamada de seguimiento", "Email sobre propuesta"
-  details: string; // Content of the note, summary of the call/meeting, email body snippet
+  subject?: string; 
+  details: string; 
   timestamp: string; // ISO string - when the activity occurred or was logged
-  loggedByUserId: string; // User who logged the activity
+  loggedByUserId: string; 
   relatedLeadId?: string;
-  relatedContactId?: string; // Could be derived from Lead or direct contact
+  relatedContactId?: string; 
+  relatedOpportunityId?: string; // Added relatedOpportunityId
   relatedTicketId?: string;
   relatedOrderId?: string;
   durationMinutes?: number; // For calls/meetings
-  outcome?: string; // e.g., "Interesado", "Necesita seguimiento", "Problema resuelto"
+  outcome?: string; 
   createdAt: string; // ISO string - when the log entry was created
 }
 
@@ -336,7 +347,7 @@ export interface DocumentFile {
   fileNameInStorage: string; // Name used in Firebase Storage (e.g., with UUID/timestamp)
   fileURL: string; // Download URL from Firebase Storage for the current version
   fileType: string; // MIME type of the current version
-  fileSize: number; // in bytes of the current version
+  fileSize: string; // in bytes of the current version
   description?: string;
   tags?: string[];
   
