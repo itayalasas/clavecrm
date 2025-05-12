@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, AlertTriangle, FileText, Download } from "lucide-react"; // Added Download
+import { Loader2, AlertTriangle, FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface DocumentViewerDialogProps {
@@ -32,37 +32,51 @@ export function DocumentViewerDialog({
   const { toast } = useToast();
 
   useEffect(() => {
+    let mounted = true; // Flag to track mount status
+
     const fetchTextContent = async () => {
       if (isOpen && documentFile && documentFile.fileType.startsWith("text/")) {
-        setIsLoadingText(true);
-        setTextContent(null);
+        if (mounted) {
+          setIsLoadingText(true);
+          setTextContent(null);
+        }
         try {
-          const response = await fetch(documentFile.fileURL);
+          const response = await fetch(documentFile.fileURL); // Line 40 in original error
           if (!response.ok) {
             throw new Error(`Error al cargar el archivo: ${response.statusText}`);
           }
           const text = await response.text();
-          setTextContent(text);
+          if (mounted) {
+            setTextContent(text);
+          }
         } catch (error: any) {
           console.error("Error fetching text content:", error);
           let description = "No se pudo cargar el contenido del archivo de texto.";
-          if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError")) {
+          if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError") || error.message?.toLowerCase().includes("cors")) {
             description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles.";
           }
-          toast({
-            title: "Error al Cargar Contenido",
-            description: description,
-            variant: "destructive",
-            duration: 15000, 
-          });
-          setTextContent("Error al cargar el contenido. Revisa la consola para más detalles y verifica la configuración CORS de Firebase Storage si el error es 'Failed to fetch'.");
+          if (mounted) {
+            toast({
+              title: "Error al Cargar Contenido",
+              description: description,
+              variant: "destructive",
+              duration: 15000,
+            });
+            setTextContent("Error al cargar el contenido. Revisa la consola para más detalles y verifica la configuración CORS de Firebase Storage si el error es 'Failed to fetch'.");
+          }
         } finally {
-          setIsLoadingText(false);
+          if (mounted) {
+            setIsLoadingText(false);
+          }
         }
       }
     };
 
     fetchTextContent();
+
+    return () => {
+      mounted = false; // Set to false on unmount
+    };
   }, [isOpen, documentFile, toast]);
 
   if (!documentFile) {
@@ -70,7 +84,11 @@ export function DocumentViewerDialog({
   }
 
   const isPdf = documentFile.fileType === "application/pdf";
-  const isText = documentFile.fileType.startsWith("text/");
+  // More specific check for text types intended for direct rendering
+  const isPlainText = documentFile.fileType === "text/plain" || documentFile.fileType === "text/markdown";
+  const isCsv = documentFile.fileType === "text/csv";
+  const isTextRenderable = isPlainText || isCsv; // CSV will also attempt to render as text
+
   const isDocx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || documentFile.name.endsWith(".docx");
   const isXlsx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || documentFile.name.endsWith(".xlsx");
 
@@ -90,12 +108,12 @@ export function DocumentViewerDialog({
         <div className="flex-grow overflow-hidden border rounded-md bg-muted flex items-center justify-center p-1">
           {isPdf ? (
             <iframe
-              src={`${documentFile.fileURL}#toolbar=0&navpanes=0&scrollbar=0`} 
+              src={`${documentFile.fileURL}#toolbar=0&navpanes=0&scrollbar=0`}
               title={`Vista previa de ${documentFile.name}`}
               className="w-full h-full border-0"
               allowFullScreen
             />
-          ) : isText ? (
+          ) : isTextRenderable ? ( // Use the more specific check
             isLoadingText ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
