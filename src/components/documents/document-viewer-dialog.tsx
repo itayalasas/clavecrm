@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -36,19 +35,6 @@ export function DocumentViewerDialog({
 
     const fetchTextContent = async () => {
       if (isOpen && documentFile && documentFile.fileType.startsWith("text/")) {
-        // IMPORTANT: For this fetch to work with Firebase Storage URLs,
-        // you MUST configure CORS on your Firebase Storage bucket.
-        // Go to Firebase Console -> Storage -> Rules, and add a CORS configuration
-        // that allows GET requests from your application's origin.
-        // Example CORS config in cors.json (Firebase CLI deployment):
-        // [
-        //   {
-        //     "origin": ["http://localhost:3000", "https://your-app-domain.com"], // Add your actual domains
-        //     "method": ["GET"],
-        //     "maxAgeSeconds": 3600
-        //   }
-        // ]
-        // Then deploy with `firebase deploy --only storage` (or include storage in full deploy)
         if (mounted) {
           setIsLoadingText(true);
           setTextContent(null);
@@ -63,19 +49,33 @@ export function DocumentViewerDialog({
             setTextContent(text);
           }
         } catch (error: any) {
-          console.error("Error fetching text content:", error);
-          let description = "No se pudo cargar el contenido del archivo de texto.";
-          if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError") || error.message?.toLowerCase().includes("cors")) {
-            description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles y configura tu archivo cors.json.";
+          console.error("Error fetching text content in DocumentViewerDialog:", error);
+          let detailedDescription = "No se pudo cargar el contenido del archivo de texto.";
+
+          if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
+            detailedDescription += " Este error ('Failed to fetch') frecuentemente indica un problema de CORS o de red. ";
+            console.error(
+                "POSIBLE PROBLEMA DE CORS: Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. " +
+                "Revisa la consola de red del navegador para más detalles y verifica tu archivo cors.json. " +
+                "Ejemplo de cors.json para desarrollo: [{\"origin\": [\"*\"], \"method\": [\"GET\"], \"maxAgeSeconds\": 3600}]. " +
+                "Para producción, especifica tus dominios en lugar de '*'."
+            );
+          } else if (error.message?.includes("NetworkError") || error.message?.toLowerCase().includes("cors")) {
+            detailedDescription += " Esto podría deberse a un problema de CORS o de red. ";
           }
+          
+          detailedDescription += "Asegúrate de que la configuración CORS de tu Firebase Storage bucket esté correctamente desplegada y permite solicitudes GET desde este dominio. " +
+                               "Busca 'Firebase Storage CORS' para más detalles. " +
+                               "Si el problema persiste, revisa la consola de red del navegador para más información.";
+
           if (mounted) {
             toast({
               title: "Error al Cargar Contenido",
-              description: description,
+              description: detailedDescription,
               variant: "destructive",
-              duration: 15000,
+              duration: 20000, // Increased duration for the detailed message
             });
-            setTextContent("Error al cargar el contenido. Revisa la consola para más detalles y verifica la configuración CORS de Firebase Storage si el error es 'Failed to fetch'.");
+            setTextContent("Error al cargar el contenido. Revisa la consola del navegador para más detalles y verifica la configuración CORS de Firebase Storage.");
           }
         } finally {
           if (mounted) {
@@ -85,7 +85,10 @@ export function DocumentViewerDialog({
       }
     };
 
-    fetchTextContent();
+    if (isOpen && documentFile?.fileURL) {
+        fetchTextContent();
+    }
+
 
     return () => {
       mounted = false; // Set to false on unmount
@@ -97,7 +100,6 @@ export function DocumentViewerDialog({
   }
 
   const isPdf = documentFile.fileType === "application/pdf";
-  // More specific check for text types intended for direct rendering
   const isPlainText = documentFile.fileType === "text/plain" || documentFile.fileType === "text/markdown";
   const isCsv = documentFile.fileType === "text/csv";
   const isTextRenderable = isPlainText || isCsv; 
@@ -142,7 +144,7 @@ export function DocumentViewerDialog({
               <FileText className="h-16 w-16 text-blue-500 mb-4" />
               <h3 className="text-lg font-semibold mb-2">Visualización Avanzada Pendiente</h3>
               <p className="text-sm text-muted-foreground mb-1">
-                La visualización en la aplicación para archivos <strong className="text-foreground">{isDocx ? "DOCX" : "XLSX"}</strong> es una funcionalidad avanzada que requiere bibliotecas o servicios externos.
+                La visualización en la aplicación para archivos <strong className="text-foreground">{isDocx ? "DOCX" : "XLSX"}</strong> es una funcionalidad avanzada.
               </p>
               <p className="text-sm text-muted-foreground mb-4">Esta característica está planeada para futuras versiones. Por ahora, puedes descargar el documento para verlo.</p>
               <Button asChild>
@@ -177,5 +179,3 @@ export function DocumentViewerDialog({
     </Dialog>
   );
 }
-
-    
