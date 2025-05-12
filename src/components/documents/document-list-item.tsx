@@ -1,10 +1,11 @@
+
 "use client";
 
 import type { DocumentFile, Lead, Contact } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon, History, UploadCloud, Eye } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -13,12 +14,29 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import React from "react";
+
 
 interface DocumentListItemProps {
   documentFile: DocumentFile;
   onDelete: (documentId: string, storagePath: string) => void;
   onUploadNewVersion: (document: DocumentFile) => void;
   onViewHistory: (document: DocumentFile) => void;
+  onTogglePublic: (documentId: string, currentIsPublic: boolean) => Promise<void>;
   leads?: Lead[];
   contacts?: Contact[];
 }
@@ -45,9 +63,9 @@ function formatFileSize(bytes: number): string {
 }
 
 
-export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, onViewHistory, leads = [], contacts = [] }: DocumentListItemProps) {
+export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, onViewHistory, onTogglePublic, leads = [], contacts = [] }: DocumentListItemProps) {
+  const { toast } = useToast();
   const FileIcon = getFileIcon(documentFile.fileType);
-  // Construct the full storage path for deletion (of the current version)
   const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
 
   const relatedLead = documentFile.relatedLeadId ? leads.find(l => l.id === documentFile.relatedLeadId) : null;
@@ -57,6 +75,19 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
   const displayUploadedBy = documentFile.lastVersionUploadedByUserName || documentFile.uploadedByUserName;
 
   const hasHistory = documentFile.versionHistory && documentFile.versionHistory.length > 0;
+
+  const handleCopyToClipboard = () => {
+    if (documentFile.isPublic && documentFile.fileURL) {
+      navigator.clipboard.writeText(documentFile.fileURL)
+        .then(() => {
+          toast({ title: "Enlace Copiado", description: "El enlace público del documento ha sido copiado al portapapeles." });
+        })
+        .catch(err => {
+          console.error('Failed to copy link: ', err);
+          toast({ title: "Error al Copiar", description: "No se pudo copiar el enlace.", variant: "destructive" });
+        });
+    }
+  };
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -70,10 +101,57 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
               </CardTitle>
               <CardDescription className="text-xs truncate">
                 Tipo: {documentFile.fileType} | Tamaño: {formatFileSize(documentFile.fileSize)} | Ver: {documentFile.currentVersion}
+                {documentFile.isPublic && <Badge variant="outline" className="ml-2 border-green-500 text-green-500">Público</Badge>}
               </CardDescription>
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
+            <AlertDialog>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Compartir Documento</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Compartir Documento: {documentFile.name}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {documentFile.isPublic 
+                      ? "Este documento es público. Cualquiera con el enlace puede verlo." 
+                      : "Haz este documento público para generar un enlace compartible."}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                {documentFile.isPublic && documentFile.fileURL && (
+                  <div className="space-y-2 mt-2">
+                    <Label htmlFor={`share-link-${documentFile.id}`}>Enlace Público:</Label>
+                    <div className="flex items-center space-x-2">
+                      <Input id={`share-link-${documentFile.id}`} value={documentFile.fileURL} readOnly className="text-xs"/>
+                      <Button type="button" size="sm" onClick={handleCopyToClipboard} variant="outline">
+                        <Copy className="mr-2 h-3 w-3"/>Copiar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                 <Button 
+                    onClick={() => onTogglePublic(documentFile.id, !!documentFile.isPublic)} 
+                    variant={documentFile.isPublic ? "secondary" : "default"}
+                    className="w-full mt-4"
+                  >
+                    {documentFile.isPublic ? <><EyeOff className="mr-2 h-4 w-4"/>Hacer Privado</> : <><Globe className="mr-2 h-4 w-4"/>Hacer Público</>}
+                  </Button>
+                <AlertDialogFooter className="mt-4">
+                  <AlertDialogCancel>Cerrar</AlertDialogCancel>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
              <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -159,3 +237,5 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
     </Card>
   );
 }
+
+```

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIconLucide, RotateCcw, Library, Play } from "lucide-react";
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucide, RotateCcw, Library, Play } from "lucide-react"; // Renamed Share to ShareIconLucide
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -120,8 +120,8 @@ export default function DocumentsPage() {
           isPublic: data.isPublic as (boolean | undefined),
           sharedWithUserIds: data.sharedWithUserIds as (string[] | undefined),
           sharedWithGroupIds: data.sharedWithGroupIds as (string[] | undefined),
-          accessLink: data.accessLink as (string | undefined),
-          linkExpiresAt: data.linkExpiresAt as (string | undefined),
+          accessKey: data.accessKey as (string | undefined),
+          permissions: data.permissions as (Record<string, any> | undefined),
           basedOnTemplateId: data.basedOnTemplateId as (string | undefined),
           templateVariablesFilled: data.templateVariablesFilled as (Record<string, string> | undefined),
         } as DocumentFile;
@@ -298,6 +298,24 @@ export default function DocumentsPage() {
     setIsGenerateDocumentDialogOpen(true);
   };
 
+  const handleTogglePublic = async (documentId: string, currentIsPublic: boolean) => {
+    try {
+      const docRef = doc(db, "documents", documentId);
+      await updateDoc(docRef, {
+        isPublic: !currentIsPublic,
+        updatedAt: serverTimestamp(), // Also update the updatedAt timestamp
+      });
+      toast({
+        title: "Visibilidad Actualizada",
+        description: `El documento es ahora ${!currentIsPublic ? "público" : "privado"}.`,
+      });
+      fetchDocuments(); // Re-fetch to update UI
+    } catch (error) {
+      console.error("Error actualizando visibilidad del documento:", error);
+      toast({ title: "Error al Actualizar Visibilidad", variant: "destructive" });
+    }
+  };
+
 
   const handleRestoreVersion = async (documentId: string, versionToRestore: DocumentVersion) => {
     if (!currentUser) {
@@ -339,7 +357,7 @@ export default function DocumentsPage() {
       const newCurrentVersionNumber = currentDocData.currentVersion + 1;
 
       await updateDoc(docRef, {
-        name: versionToRestore.versionNotes ? `${documentFile.name.split(' (v')[0]} (Restaurado desde v${versionToRestore.version})` : documentFile.name, // Optionally update name
+        name: versionToRestore.versionNotes ? `${currentDocData.name.split(' (v')[0]} (Restaurado desde v${versionToRestore.version})` : currentDocData.name, // Optionally update name
         fileURL: versionToRestore.fileURL,
         fileNameInStorage: versionToRestore.fileNameInStorage,
         fileType: versionToRestore.fileType,
@@ -469,6 +487,7 @@ export default function DocumentsPage() {
                         onDelete={confirmDeleteDocument}
                         onUploadNewVersion={openUploadNewVersionDialog}
                         onViewHistory={openVersionHistoryDialog}
+                        onTogglePublic={handleTogglePublic}
                         leads={leads}
                         contacts={contacts}
                         />
@@ -563,9 +582,10 @@ export default function DocumentsPage() {
         )}
          {renderFutureFeatureCard(
             "Compartir Documentos",
-            Share,
+            ShareIconLucide,
             "Comparte documentos de forma segura con clientes o colaboradores.",
-            ["Generar enlaces seguros para compartir.", "Establecer permisos de acceso (ver, editar).", "Notificaciones de acceso."]
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Permisos de acceso detallados (ver, editar) por usuario/grupo (Pendiente).", "Notificaciones de acceso (Pendiente)."],
+            false, true
         )}
          {renderFutureFeatureCard(
             "Integración con Almacenamiento en la Nube",

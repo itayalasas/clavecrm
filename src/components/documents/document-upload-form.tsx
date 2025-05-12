@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type ChangeEvent } from "react";
@@ -136,6 +137,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
 
             currentVersion: 1, 
             versionHistory: [], // Initialize with empty history for new documents
+            isPublic: false, // Default to not public
           };
 
           if (data.relatedLeadId && data.relatedLeadId !== NO_SELECTION_VALUE) {
@@ -306,3 +308,5 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
     </Card>
   );
 }
+
+```

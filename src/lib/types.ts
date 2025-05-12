@@ -41,7 +41,7 @@ export interface Task {
 }
 
 export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';
-export type TicketPriority = 'Baja' | 'Media' | 'Alta';
+export type TicketPriority = 'Alta' | 'Media' | 'Baja';
 
 export interface User {
   id: string;
@@ -341,13 +341,15 @@ export interface DocumentVersion {
   versionNotes?: string; // Specific notes for the upload event of this version
 }
 
+export type DocumentPermission = 'view' | 'edit' | 'comment'; // Define possible permissions
+
 export interface DocumentFile {
   id: string;
   name: string; // Original file name presented to user
   fileNameInStorage: string; // Name used in Firebase Storage (e.g., with UUID/timestamp)
   fileURL: string; // Download URL from Firebase Storage for the current version
   fileType: string; // MIME type of the current version
-  fileSize: string; // in bytes of the current version
+  fileSize: number; // in bytes of the current version // Corrected type to number
   description?: string;
   tags?: string[];
   
@@ -370,11 +372,10 @@ export interface DocumentFile {
   currentVersion: number;
   versionHistory?: DocumentVersion[]; 
 
-  isPublic?: boolean;
-  sharedWithUserIds?: string[];
-  sharedWithGroupIds?: string[]; 
-  accessLink?: string; 
-  linkExpiresAt?: string;
+  isPublic?: boolean; // If true, fileURL can be considered a public share link
+  accessKey?: string; // A unique key for more controlled sharing (future)
+  sharedWithUserIds?: string[]; // Users who have direct access (future)
+  permissions?: Record<string, DocumentPermission[]>; // UserID/GroupID -> Permissions (future)
   
   basedOnTemplateId?: string; // ID of the DocumentTemplate used to generate this document
   templateVariablesFilled?: Record<string, string>; // Values used for template variables during generation
@@ -397,3 +398,5 @@ export interface DocumentTemplate {
 
 // LucideIcon type definition, using the renamed import
 export type LucideIcon = LucideIconType;
+
+```
