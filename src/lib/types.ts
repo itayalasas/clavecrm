@@ -1,5 +1,3 @@
-
-
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
 export interface Lead {
@@ -272,6 +270,16 @@ export interface MeetingAttendee {
   status: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Tentativa';
 }
 
+export interface Resource {
+  id: string;
+  name: string;
+  type: 'Sala de Reuniones' | 'Proyector' | 'Pizarra Digital' | 'Otro';
+  description?: string;
+  location?: string; 
+  capacity?: number; 
+  isAvailable?: boolean; // Basic availability flag
+}
+
 export interface Meeting {
   id: string;
   title: string;
@@ -288,7 +296,7 @@ export interface Meeting {
   updatedAt?: string; // ISO string
   status: MeetingStatus;
   reminderSent?: boolean;
-  resources?: string; // For room or equipment booking
+  resourceId?: string; // ID of the selected resource
 }
 
 export interface ActivityLog {
@@ -338,5 +346,3 @@ export interface DocumentTemplate {
   createdByUserId: string;
   updatedAt?: string;
 }
-
-    

@@ -1,7 +1,5 @@
-
-
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityType } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban } from 'lucide-react'; // Added Settings icon
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityType, Resource } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -47,7 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays },
       { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, disabled: true },
       { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban, disabled: true },
-      { href: '/tasks', label: 'Tareas', icon: ListChecks }, // Moved from "Soporte y Tareas"
+      { href: '/tasks', label: 'Tareas', icon: ListChecks },
     ],
     parentActiveIf: (pathname) => ['/calendar', '/activity-log', '/documents', '/tasks'].some(p => pathname.startsWith(p)),
   },
@@ -204,7 +202,6 @@ export const COMMON_EMAIL_VARIABLES: CommonEmailVariable[] = [
   { variable: "{{email_contacto}}", description: "Dirección de correo electrónico del contacto." },
   { variable: "{{nombre_empresa_remitente}}", description: "Nombre de tu empresa (remitente)." },
   { variable: "{{enlace_desuscripcion}}", description: "Enlace para que el contacto se dé de baja (requiere implementación)." },
-  // Example custom variables (user would define these elsewhere or they'd be context-specific)
   { variable: "{{nombre_campana}}", description: "Nombre de la campaña actual." },
   { variable: "{{fecha_actual}}", description: "Fecha actual del envío." },
 ];
@@ -212,4 +209,10 @@ export const COMMON_EMAIL_VARIABLES: CommonEmailVariable[] = [
 export const MEETING_STATUSES: MeetingStatus[] = ['Programada', 'Confirmada', 'Cancelada', 'Realizada', 'Pospuesta'];
 export const ACTIVITY_TYPES: ActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'];
 
-    
+export const INITIAL_RESOURCES: Resource[] = [
+  { id: 'room-1', name: 'Sala de Conferencias A', type: 'Sala de Reuniones', location: 'Edificio Principal, Planta 1', capacity: 10, isAvailable: true },
+  { id: 'room-2', name: 'Sala de Reuniones Pequeña B', type: 'Sala de Reuniones', location: 'Edificio Anexo, Planta Baja', capacity: 4, isAvailable: true },
+  { id: 'projector-1', name: 'Proyector HD (P1)', type: 'Proyector', location: 'Almacén Equipos', isAvailable: true },
+  { id: 'whiteboard-1', name: 'Pizarra Digital Interactiva', type: 'Pizarra Digital', location: 'Sala de Colaboración', isAvailable: false },
+  { id: 'other-1', name: 'Catering Café Mañana', type: 'Otro', description: 'Servicio de café y bollería para reuniones matutinas.', isAvailable: true },
+];

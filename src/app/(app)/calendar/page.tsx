@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { Meeting, Lead, User, Contact } from "@/lib/types";
-import { NAV_ITEMS } from "@/lib/constants";
+import type { Meeting, Lead, User, Contact, Resource } from "@/lib/types";
+import { NAV_ITEMS, INITIAL_RESOURCES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CalendarDays, PlusCircle, List, AlertTriangle } from "lucide-react";
@@ -26,6 +25,7 @@ export default function CalendarPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isMeetingDialogOpen, setIsMeetingDialogOpen] = useState(false);
@@ -84,12 +84,28 @@ export default function CalendarPage() {
     }
   }, [getAllUsers, toast]);
 
+  const fetchResources = useCallback(async () => {
+    // For now, using INITIAL_RESOURCES. Later, this could fetch from Firestore.
+    setResources(INITIAL_RESOURCES);
+    // Example Firestore fetch (uncomment and adapt if resources are in Firestore)
+    /*
+    try {
+      const resourcesSnapshot = await getDocs(collection(db, "resources"));
+      setResources(resourcesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Resource)));
+    } catch (error) {
+      console.error("Error al obtener recursos:", error);
+      toast({ title: "Error al Cargar Recursos", variant: "destructive"});
+    }
+    */
+  }, [/* toast */]);
+
 
   useEffect(() => {
     fetchMeetings();
     fetchLeadsAndContacts();
     fetchUsers();
-  }, [fetchMeetings, fetchLeadsAndContacts, fetchUsers]);
+    fetchResources();
+  }, [fetchMeetings, fetchLeadsAndContacts, fetchUsers, fetchResources]);
 
   const handleSaveMeeting = async (meetingDataFromDialog: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, existingMeetingId?: string) => {
     if (!currentUser) {
@@ -110,7 +126,7 @@ export default function CalendarPage() {
         conferenceLink: meetingDataFromDialog.conferenceLink !== undefined ? meetingDataFromDialog.conferenceLink : null,
         relatedLeadId: meetingDataFromDialog.relatedLeadId === "" || meetingDataFromDialog.relatedLeadId === undefined ? null : meetingDataFromDialog.relatedLeadId,
         status: meetingDataFromDialog.status,
-        resources: meetingDataFromDialog.resources !== undefined ? meetingDataFromDialog.resources : null,
+        resourceId: meetingDataFromDialog.resourceId === "" || meetingDataFromDialog.resourceId === undefined ? null : meetingDataFromDialog.resourceId,
         updatedAt: Timestamp.now(),
       };
 
@@ -193,6 +209,7 @@ export default function CalendarPage() {
             onEditMeeting={openEditMeetingDialog}
             leads={leads}
             users={users}
+            resources={resources}
             />
         </TabsContent>
         <TabsContent value="list">
@@ -210,6 +227,7 @@ export default function CalendarPage() {
                   meeting={meeting}
                   leads={leads}
                   users={users}
+                  resources={resources}
                   onEdit={openEditMeetingDialog}
                   onDelete={handleDeleteMeeting}
                 />
@@ -236,18 +254,18 @@ export default function CalendarPage() {
           <ul className="list-disc list-inside space-y-2">
             <li>
               <strong>Envío de invitaciones (.ics) y recordatorios por correo electrónico:</strong> 
-              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">Parcialmente Implementado</Badge>
+              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Parcialmente Implementado</Badge>
               <p className="text-xs pl-5">Actualmente simulado con un toast. El envío real requiere configuración de backend (Cloud Functions y servicio de correo).</p>
             </li>
             <li>
               <strong>Vistas de calendario por semana y día completamente interactivas:</strong>
-              <Badge variant="destructive" className="ml-2">En Desarrollo</Badge>
-              <p className="text-xs pl-5">La vista de calendario actual es mensual y básica. Se implementarán vistas más detalladas e interactivas.</p>
+              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">En Desarrollo</Badge>
+              <p className="text-xs pl-5">La vista de calendario mensual actual resalta los días con eventos. Vistas más detalladas (semana/día) e interactivas se implementarán progresivamente.</p>
             </li>
              <li>
               <strong>Asignación de salas o recursos para reuniones:</strong>
-              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">Parcialmente Implementado</Badge>
-              <p className="text-xs pl-5">Se añadió campo para recursos/sala en el formulario. La gestión y disponibilidad de recursos está en desarrollo.</p>
+              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Parcialmente Implementado</Badge>
+              <p className="text-xs pl-5">Se permite seleccionar un recurso de una lista predefinida. La gestión de recursos y la comprobación de disponibilidad en tiempo real está en desarrollo.</p>
             </li>
             <li>
               <strong>Sincronización con calendarios externos (Google Calendar, Outlook):</strong>
@@ -267,11 +285,9 @@ export default function CalendarPage() {
         leads={leads}
         contacts={contacts}
         users={users}
+        resources={resources}
         currentUser={currentUser}
       />
     </div>
   );
 }
-
-
-    

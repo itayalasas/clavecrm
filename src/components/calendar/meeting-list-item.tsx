@@ -1,7 +1,6 @@
-
 "use client";
 
-import type { Meeting, Lead, User } from "@/lib/types";
+import type { Meeting, Lead, User, Resource } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,11 +14,12 @@ interface MeetingListItemProps {
   meeting: Meeting;
   leads: Lead[]; 
   users: User[]; 
+  resources: Resource[];
   onEdit: (meeting: Meeting) => void;
   onDelete: (meetingId: string) => void;
 }
 
-export function MeetingListItem({ meeting, leads, users, onEdit, onDelete }: MeetingListItemProps) {
+export function MeetingListItem({ meeting, leads, users, resources, onEdit, onDelete }: MeetingListItemProps) {
   
   const getStatusBadge = (status: Meeting['status']) => {
     switch (status) {
@@ -34,6 +34,7 @@ export function MeetingListItem({ meeting, leads, users, onEdit, onDelete }: Mee
 
   const relatedLead = meeting.relatedLeadId ? leads.find(l => l.id === meeting.relatedLeadId) : null;
   const createdByUser = users.find(u => u.id === meeting.createdByUserId);
+  const selectedResource = meeting.resourceId ? resources.find(r => r.id === meeting.resourceId) : null;
 
   const formatTime = (isoString: string) => {
     if (!isValid(parseISO(isoString))) return "Hora inválida";
@@ -97,9 +98,9 @@ export function MeetingListItem({ meeting, leads, users, onEdit, onDelete }: Mee
                 <LinkIcon className="h-3 w-3 shrink-0" /> Lead: {relatedLead.name}
             </div>
           )}
-           {meeting.resources && (
-            <div className="flex items-center gap-1 truncate" title={`Recursos: ${meeting.resources}`}>
-                <Briefcase className="h-3 w-3 shrink-0" /> {meeting.resources}
+           {selectedResource && (
+            <div className="flex items-center gap-1 truncate" title={`Recurso: ${selectedResource.name}`}>
+                <Briefcase className="h-3 w-3 shrink-0" /> Recurso: {selectedResource.name}
             </div>
           )}
           {createdByUser && (

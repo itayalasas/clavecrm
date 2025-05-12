@@ -1,12 +1,11 @@
-
 "use client";
 
 import { useState, useEffect, useId } from "react";
 import { useForm, Controller, useFieldArray, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Meeting, Lead, User, Contact, MeetingAttendee, MeetingStatus } from "@/lib/types";
-import { MEETING_STATUSES } from "@/lib/constants";
+import type { Meeting, Lead, User, Contact, MeetingAttendee, MeetingStatus, Resource } from "@/lib/types";
+import { MEETING_STATUSES, INITIAL_RESOURCES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,7 +21,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarIcon, Loader2, PlusCircle, Trash2, Users as UsersIcon, UserPlus, Mail, Briefcase } from "lucide-react";
+import { CalendarIcon, Loader2, PlusCircle, Trash2, Users as UsersIcon, UserPlus, Briefcase } from "lucide-react";
 import { format, parseISO, isValid, setHours, setMinutes } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -52,7 +51,7 @@ const meetingFormSchema = z.object({
   conferenceLink: z.string().url("Enlace de conferencia inválido.").optional().or(z.literal('')),
   relatedLeadId: z.string().optional(), 
   status: z.enum(MEETING_STATUSES as [string, ...string[]], { errorMap: () => ({ message: "Estado inválido."}) }),
-  resources: z.string().optional(),
+  resourceId: z.string().optional(),
 }).refine(data => {
     const startDateTime = setMinutes(setHours(data.startDate, parseInt(data.startTime.split(':')[0])), parseInt(data.startTime.split(':')[1]));
     const endDateTime = setMinutes(setHours(data.endDate, parseInt(data.endTime.split(':')[0])), parseInt(data.endTime.split(':')[1]));
@@ -72,6 +71,7 @@ interface AddEditMeetingDialogProps {
   leads: Lead[];
   contacts: Contact[];
   users: User[];
+  resources: Resource[];
   currentUser: User | null;
 }
 
@@ -83,6 +83,7 @@ export function AddEditMeetingDialog({
   leads,
   contacts,
   users,
+  resources,
   currentUser,
 }: AddEditMeetingDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,7 +104,7 @@ export function AddEditMeetingDialog({
       conferenceLink: "",
       relatedLeadId: NO_SELECTION_VALUE,
       status: "Programada",
-      resources: "",
+      resourceId: NO_SELECTION_VALUE,
     },
   });
 
@@ -129,7 +130,7 @@ export function AddEditMeetingDialog({
           conferenceLink: meetingToEdit.conferenceLink || "",
           relatedLeadId: meetingToEdit.relatedLeadId || NO_SELECTION_VALUE,
           status: meetingToEdit.status,
-          resources: meetingToEdit.resources || "",
+          resourceId: meetingToEdit.resourceId || NO_SELECTION_VALUE,
         });
       } else {
         const now = new Date();
@@ -142,7 +143,7 @@ export function AddEditMeetingDialog({
           location: "", conferenceLink: "", 
           relatedLeadId: NO_SELECTION_VALUE, 
           status: "Programada",
-          resources: "",
+          resourceId: NO_SELECTION_VALUE,
         });
       }
       setIsSubmitting(false);
@@ -164,7 +165,7 @@ export function AddEditMeetingDialog({
       conferenceLink: data.conferenceLink,
       relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? undefined : data.relatedLeadId,
       status: data.status,
-      resources: data.resources,
+      resourceId: data.resourceId === NO_SELECTION_VALUE ? undefined : data.resourceId,
     };
 
     const success = await onSave(meetingPayload, meetingToEdit?.id);
@@ -255,19 +256,34 @@ export function AddEditMeetingDialog({
                 <FormField control={form.control} name="conferenceLink" render={({ field }) => (
                   <FormItem><FormLabel>Enlace de Videoconferencia (Opcional)</FormLabel><FormControl><Input type="url" placeholder="Ej. https://meet.google.com/..." {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
-                <FormField control={form.control} name="resources" render={({ field }) => (
+                
+                <FormField control={form.control} name="resourceId" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-1">
                       <Briefcase className="h-4 w-4 text-muted-foreground" />
-                      Recursos/Sala (Opcional)
+                      Recurso/Sala (Opcional)
                     </FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej. Sala de Conferencias 1, Proyector" {...field} />
-                    </FormControl>
-                    <FormDescription className="text-xs">La gestión y disponibilidad de recursos se implementará en el futuro.</FormDescription>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === NO_SELECTION_VALUE ? undefined : value)} 
+                      value={field.value || NO_SELECTION_VALUE}
+                    >
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un recurso" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value={NO_SELECTION_VALUE}>Ninguno</SelectItem>
+                        {resources.map(resource => (
+                          <SelectItem key={resource.id} value={resource.id}>
+                            {resource.name} ({resource.type})
+                            {resource.location && ` - ${resource.location}`}
+                            {typeof resource.capacity === 'number' && ` (Cap: ${resource.capacity})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-xs">La gestión de disponibilidad de recursos está en desarrollo.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
+
                 <FormField control={form.control} name="relatedLeadId" render={({ field }) => (
                   <FormItem><FormLabel>Lead Relacionado (Opcional)</FormLabel>
                     <Select 
