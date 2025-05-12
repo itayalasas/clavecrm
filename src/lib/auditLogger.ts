@@ -24,7 +24,7 @@ export async function logSystemEvent(
       type: actionType,
       subject: subject || `${entityType || 'Sistema'} ${actionType}`,
       details: actionDetails || `Acción ${actionType} realizada en ${entityType || 'sistema'}${entityId ? ` (ID: ${entityId})` : ''}.`,
-      timestamp: new Date().toISOString(),
+      timestamp: serverTimestamp(), // Changed to serverTimestamp
       loggedByUserId: performingUser.id,
       loggedByUserName: performingUser.name,
       entityType: entityType,
@@ -37,3 +37,4 @@ export async function logSystemEvent(
     // Optionally, you could implement a fallback logging mechanism here
   }
 }
+

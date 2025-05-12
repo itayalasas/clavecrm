@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { ActivityLog, Lead, Contact, Ticket, User, Opportunity } from "@/lib/types";
-import { NAV_ITEMS, ACTIVITY_TYPES } from "@/lib/constants";
+import { NAV_ITEMS, ACTIVITY_LOG_USER_ACTIVITY_TYPES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileClock, PlusCircle, Search, Filter } from "lucide-react";
@@ -15,7 +15,9 @@ import { collection, addDoc, getDocs, query, orderBy, Timestamp, serverTimestamp
 import { AddEditActivityLogDialog } from "@/components/activity-log/add-edit-activity-log-dialog";
 import { ActivityLogListItem } from "@/components/activity-log/activity-log-list-item";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge"; // Added import
+import { Badge } from "@/components/ui/badge";
+import { isValid, parseISO } from "date-fns";
+
 
 export default function ActivityLogPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/activity-log');
@@ -37,6 +39,19 @@ export default function ActivityLogPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
 
+  const parseTimestampField = (fieldValue: any): string => {
+    if (fieldValue && typeof fieldValue.toDate === 'function') { // Firestore Timestamp
+      return (fieldValue as Timestamp).toDate().toISOString();
+    }
+    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
+      return fieldValue;
+    }
+    if (fieldValue && typeof fieldValue === 'object' && fieldValue.hasOwnProperty('_methodName') && fieldValue._methodName === 'serverTimestamp') {
+        return new Date().toISOString(); 
+    }
+    return new Date().toISOString(); // Fallback
+  };
+
   const fetchActivities = useCallback(async () => {
     if (!currentUser) {
       setIsLoading(false);
@@ -51,14 +66,14 @@ export default function ActivityLogPage() {
         return {
           id: docSnap.id,
           ...data,
-          timestamp: (data.timestamp as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          timestamp: parseTimestampField(data.timestamp),
+          createdAt: parseTimestampField(data.createdAt),
         } as ActivityLog;
       });
       setActivities(fetchedActivities);
     } catch (error) {
       console.error("Error fetching activities:", error);
-      toast({ title: "Error al Cargar Actividades", variant: "destructive" });
+      toast({ title: "Error al Cargar Actividades", description: String(error), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }

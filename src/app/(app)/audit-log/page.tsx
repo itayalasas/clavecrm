@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { ActivityLog, User } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { HistoryIcon, UserCircle, CalendarDays, ShieldAlert, Settings, FileText, Users, ShoppingCart, Receipt, Send, Users2, Ticket, Zap, LayoutDashboardIcon, LucideIcon } from "lucide-react";
+import { HistoryIcon, UserCircle, CalendarDays, ShieldAlert, Settings, FileText, Users, ShoppingCart, Receipt, Send, Users2, Ticket, Zap, LayoutDashboardIcon, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,7 +28,7 @@ const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
     EmailCampaign: Send,
     Quote: FileText,
     Order: ShoppingCart,
-    Invoice: Receipt, // Changed from ReceiptSend
+    Invoice: Receipt,
     Meeting: CalendarDays,
     ContactList: Users2,
     EmailTemplate: FileText,
@@ -60,6 +60,22 @@ export default function AuditLogPage() {
   const { currentUser, getAllUsers } = useAuth();
   const { toast } = useToast();
 
+  const parseTimestampField = (fieldValue: any): string => {
+    if (fieldValue && typeof fieldValue.toDate === 'function') { // Firestore Timestamp
+      return (fieldValue as Timestamp).toDate().toISOString();
+    }
+    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
+      return fieldValue;
+    }
+    // Check for Firestore serverTimestamp sentinel object if it's a pending write
+    // This case usually happens with onSnapshot for local changes before server confirms
+    // For getDocs, this is less likely, but good to be aware
+    if (fieldValue && typeof fieldValue === 'object' && fieldValue.hasOwnProperty('_methodName') && fieldValue._methodName === 'serverTimestamp') {
+        return new Date().toISOString(); // Or handle as "Pending"
+    }
+    return new Date().toISOString(); // Fallback
+  };
+
   const fetchAuditLogs = useCallback(async () => {
     if (!currentUser) {
       setIsLoading(false);
@@ -78,14 +94,14 @@ export default function AuditLogPage() {
         return {
           id: docSnap.id,
           ...data,
-          timestamp: (data.timestamp as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          timestamp: parseTimestampField(data.timestamp),
+          createdAt: parseTimestampField(data.createdAt),
         } as ActivityLog;
       });
       setAuditLogs(fetchedLogs);
     } catch (error) {
       console.error("Error al obtener historial de auditoría:", error);
-      toast({ title: "Error al Cargar Historial de Auditoría", variant: "destructive" });
+      toast({ title: "Error al Cargar Historial de Auditoría", description: String(error), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
