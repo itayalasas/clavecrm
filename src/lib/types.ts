@@ -341,7 +341,14 @@ export interface DocumentVersion {
   versionNotes?: string; // Specific notes for the upload event of this version
 }
 
-export type DocumentPermission = 'view' | 'edit' | 'comment'; // Define possible permissions
+export type DocumentPermissionLevel = 'view' | 'edit'; 
+
+export interface DocumentUserPermission {
+  userId: string;
+  userName: string; 
+  email: string; // For display and avatar generation
+  level: DocumentPermissionLevel;
+}
 
 export interface DocumentFile {
   id: string;
@@ -349,7 +356,7 @@ export interface DocumentFile {
   fileNameInStorage: string; // Name used in Firebase Storage (e.g., with UUID/timestamp)
   fileURL: string; // Download URL from Firebase Storage for the current version
   fileType: string; // MIME type of the current version
-  fileSize: number; // in bytes of the current version // Corrected type to number
+  fileSize: number; // in bytes of the current version 
   description?: string;
   tags?: string[];
   
@@ -374,8 +381,11 @@ export interface DocumentFile {
 
   isPublic?: boolean; // If true, fileURL can be considered a public share link
   accessKey?: string; // A unique key for more controlled sharing (future)
-  sharedWithUserIds?: string[]; // Users who have direct access (future)
-  permissions?: Record<string, DocumentPermission[]>; // UserID/GroupID -> Permissions (future)
+  
+  permissions?: {
+    users?: DocumentUserPermission[];
+    // groups?: { [groupId: string]: DocumentPermissionLevel[] }; // Future placeholder
+  };
   
   basedOnTemplateId?: string; // ID of the DocumentTemplate used to generate this document
   templateVariablesFilled?: Record<string, string>; // Values used for template variables during generation
@@ -398,5 +408,3 @@ export interface DocumentTemplate {
 
 // LucideIcon type definition, using the renamed import
 export type LucideIcon = LucideIconType;
-
-```

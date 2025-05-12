@@ -1,14 +1,13 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion, DocumentTemplate, User } from "@/lib/types";
+import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion, DocumentTemplate, User, DocumentUserPermission } from "@/lib/types";
 import { NAV_ITEMS, DOCUMENT_TEMPLATE_CATEGORIES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucide, RotateCcw, Library, Play } from "lucide-react"; // Renamed Share to ShareIconLucide
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +42,8 @@ export default function DocumentsPage() {
   const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+
 
   const [isLoading, setIsLoading] = useState(true); // For documents
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true); // For templates
@@ -66,7 +67,7 @@ export default function DocumentsPage() {
   const [templateForGeneration, setTemplateForGeneration] = useState<DocumentTemplate | null>(null);
 
 
-  const { currentUser } = useAuth();
+  const { currentUser, getAllUsers } = useAuth();
   const { toast } = useToast();
 
   const fetchDocuments = useCallback(async () => {
@@ -118,10 +119,8 @@ export default function DocumentsPage() {
             versionNotes: v.versionNotes as (string | undefined),
           })),
           isPublic: data.isPublic as (boolean | undefined),
-          sharedWithUserIds: data.sharedWithUserIds as (string[] | undefined),
-          sharedWithGroupIds: data.sharedWithGroupIds as (string[] | undefined),
+          permissions: data.permissions as ({ users?: DocumentUserPermission[] } | undefined),
           accessKey: data.accessKey as (string | undefined),
-          permissions: data.permissions as (Record<string, any> | undefined),
           basedOnTemplateId: data.basedOnTemplateId as (string | undefined),
           templateVariablesFilled: data.templateVariablesFilled as (Record<string, string> | undefined),
         } as DocumentFile;
@@ -166,21 +165,23 @@ export default function DocumentsPage() {
   const fetchSupportData = useCallback(async () => {
     setIsLoadingSupportData(true);
     try {
-      const [leadsSnapshot, contactsSnapshot] = await Promise.all([
+      const [leadsSnapshot, contactsSnapshot, usersData] = await Promise.all([
         getDocs(collection(db, "leads")),
         getDocs(collection(db, "contacts")),
+        getAllUsers(),
       ]);
 
       setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
+      setAllUsers(usersData);
       
     } catch (error) {
-      console.error("Error al obtener datos de soporte (leads, contactos):", error);
+      console.error("Error al obtener datos de soporte (leads, contactos, usuarios):", error);
       toast({ title: "Error al Cargar Datos de Soporte", variant: "destructive"});
     } finally {
       setIsLoadingSupportData(false);
     }
-  }, [toast]);
+  }, [getAllUsers, toast]);
 
 
   useEffect(() => {
@@ -227,8 +228,8 @@ export default function DocumentsPage() {
         if (docData.versionHistory && docData.versionHistory.length > 0) {
           for (const version of docData.versionHistory) {
             if (version.fileNameInStorage) {
-              // Construct full path for versioned file, assuming same user uploaded
-              const versionStoragePath = `documents/${version.uploadedByUserId}/${version.fileNameInStorage}`;
+              const versionUploaderId = version.uploadedByUserId || docData.uploadedByUserId; // Fallback to original uploader if version specific is missing
+              const versionStoragePath = `documents/${versionUploaderId}/${version.fileNameInStorage}`;
               const versionFileRef = storageRef(storage, versionStoragePath);
               await deleteObject(versionFileRef).catch(err => console.warn(`Error eliminando archivo de versión ${version.version} de storage:`, err));
             }
@@ -303,16 +304,34 @@ export default function DocumentsPage() {
       const docRef = doc(db, "documents", documentId);
       await updateDoc(docRef, {
         isPublic: !currentIsPublic,
-        updatedAt: serverTimestamp(), // Also update the updatedAt timestamp
+        updatedAt: serverTimestamp(),
       });
       toast({
         title: "Visibilidad Actualizada",
         description: `El documento es ahora ${!currentIsPublic ? "público" : "privado"}.`,
       });
-      fetchDocuments(); // Re-fetch to update UI
+      fetchDocuments(); 
     } catch (error) {
       console.error("Error actualizando visibilidad del documento:", error);
       toast({ title: "Error al Actualizar Visibilidad", variant: "destructive" });
+    }
+  };
+
+  const handleUpdateSharingSettings = async (documentId: string, newPermissions: DocumentFile['permissions']) => {
+    try {
+      const docRef = doc(db, "documents", documentId);
+      await updateDoc(docRef, {
+        permissions: newPermissions || { users: [] }, // Ensure it's not undefined
+        updatedAt: serverTimestamp(),
+      });
+      toast({
+        title: "Permisos Actualizados",
+        description: "Los permisos de compartición del documento han sido actualizados.",
+      });
+      fetchDocuments();
+    } catch (error) {
+      console.error("Error actualizando permisos de compartición:", error);
+      toast({ title: "Error al Actualizar Permisos", variant: "destructive" });
     }
   };
 
@@ -332,7 +351,6 @@ export default function DocumentsPage() {
       }
       const currentDocData = currentDocSnap.data() as DocumentFile;
       
-      // The version being replaced (current active version) becomes a new history entry
       const versionBeingReplaced: DocumentVersion = {
         version: currentDocData.currentVersion,
         fileURL: currentDocData.fileURL,
@@ -342,11 +360,10 @@ export default function DocumentsPage() {
         uploadedByUserName: currentDocData.lastVersionUploadedByUserName || currentDocData.uploadedByUserName,
         fileSize: currentDocData.fileSize,
         fileType: currentDocData.fileType,
-        notes: currentDocData.description, // Or a specific note about this version before restore
+        notes: currentDocData.description,
         versionNotes: `Restaurado desde v${versionToRestore.version}. Versión anterior era v${currentDocData.currentVersion}.`,
       };
       
-      // Remove the versionToRestore from history (if it exists there) because it's becoming current
       const filteredOldHistory = (currentDocData.versionHistory || []).filter(
         (v) => v.version !== versionToRestore.version 
       );
@@ -357,7 +374,7 @@ export default function DocumentsPage() {
       const newCurrentVersionNumber = currentDocData.currentVersion + 1;
 
       await updateDoc(docRef, {
-        name: versionToRestore.versionNotes ? `${currentDocData.name.split(' (v')[0]} (Restaurado desde v${versionToRestore.version})` : currentDocData.name, // Optionally update name
+        name: versionToRestore.versionNotes ? `${currentDocData.name.split(' (v')[0]} (Restaurado desde v${versionToRestore.version})` : currentDocData.name,
         fileURL: versionToRestore.fileURL,
         fileNameInStorage: versionToRestore.fileNameInStorage,
         fileType: versionToRestore.fileType,
@@ -368,11 +385,12 @@ export default function DocumentsPage() {
         lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
         currentVersion: newCurrentVersionNumber, 
         versionHistory: updatedVersionHistory,
+        updatedAt: serverTimestamp(),
       });
 
       toast({ title: "Versión Restaurada", description: `El contenido de la versión ${versionToRestore.version} es ahora la versión actual ${newCurrentVersionNumber}.` });
       fetchDocuments();
-      setIsVersionHistoryDialogOpen(false); // Close dialog after action
+      setIsVersionHistoryDialogOpen(false); 
     } catch (error) {
       console.error("Error restaurando versión:", error);
       toast({ title: "Error al Restaurar Versión", description: String(error), variant: "destructive" });
@@ -392,12 +410,16 @@ export default function DocumentsPage() {
     (template.category && template.category.toLowerCase().includes(templateSearchTerm.toLowerCase()))
   );
   
-  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false, partiallyImplemented: boolean = false) => (
-    <Card className={implemented ? "bg-green-50 border-green-200" : (partiallyImplemented ? "bg-yellow-50 border-yellow-200" : "bg-muted/30")}>
+  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false, partiallyImplemented: boolean = false, inProgress: boolean = false) => (
+    <Card className={implemented ? "bg-green-50 border-green-200" : (partiallyImplemented || inProgress ? "bg-yellow-50 border-yellow-200" : "bg-muted/30")}>
       <CardHeader>
-        <CardTitle className={`flex items-center gap-2 text-lg ${implemented ? 'text-green-700' : (partiallyImplemented ? 'text-yellow-600' : 'text-amber-500')}`}>
+        <CardTitle className={`flex items-center gap-2 text-lg ${implemented ? 'text-green-700' : (partiallyImplemented || inProgress ? 'text-yellow-700' : 'text-amber-500')}`}>
           <Icon className="h-5 w-5" />
-          {title} {implemented ? "" : (partiallyImplemented ? "(Parcialmente Implementado)" : "(Próximamente)")}
+          {title} 
+          {implemented && <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white text-xs">Implementado</Badge>}
+          {partiallyImplemented && <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600 text-black text-xs">Parcial</Badge>}
+          {inProgress && !implemented && !partiallyImplemented && <Badge variant="outline" className="border-blue-500 text-blue-600 text-xs">En Progreso</Badge>}
+          {!implemented && !partiallyImplemented && !inProgress && <Badge variant="outline" className="text-xs">Planeado</Badge>}
         </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
@@ -474,11 +496,11 @@ export default function DocumentsPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                {isLoading ? (
+                {(isLoading || isLoadingSupportData) ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
                     </div>
-                ) : filteredDocuments.length > 0 ? (
+                ) : filteredDocuments.length > 0 && currentUser ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredDocuments.map(docFile => (
                         <DocumentListItem 
@@ -488,8 +510,11 @@ export default function DocumentsPage() {
                         onUploadNewVersion={openUploadNewVersionDialog}
                         onViewHistory={openVersionHistoryDialog}
                         onTogglePublic={handleTogglePublic}
+                        onUpdateSharingSettings={handleUpdateSharingSettings}
                         leads={leads}
                         contacts={contacts}
+                        allUsers={allUsers}
+                        currentUser={currentUser}
                         />
                     ))}
                     </div>
@@ -561,7 +586,7 @@ export default function DocumentsPage() {
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
          {renderFutureFeatureCard(
             "Asociación de Documentos",
-            LinkIconLucide,
+            LinkIconLucideReal,
             "Vincula documentos a leads, contactos, oportunidades, etc.",
             ["Seleccionar lead/contacto al subir (Implementado).", "Ver documentos desde la ficha del lead/contacto (Pendiente)."],
             true 
@@ -584,7 +609,7 @@ export default function DocumentsPage() {
             "Compartir Documentos",
             ShareIconLucide,
             "Comparte documentos de forma segura con clientes o colaboradores.",
-            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Permisos de acceso detallados (ver, editar) por usuario/grupo (Pendiente).", "Notificaciones de acceso (Pendiente)."],
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Parcialmente Implementado - UI lista, Falta lógica de control de acceso).", "Permisos de acceso por grupo (Pendiente).", "Notificaciones de acceso (Pendiente)."],
             false, true
         )}
          {renderFutureFeatureCard(
@@ -597,7 +622,7 @@ export default function DocumentsPage() {
             "Información Adicional",
             Info,
             "Funcionalidades en desarrollo.",
-            ["Búsqueda avanzada y filtros más detallados.", "Auditoría de acceso a documentos.", "Flujos de aprobación de documentos."]
+            ["Búsqueda avanzada y filtros más detallados.", "Auditoría de acceso a documentos (Pendiente, relacionado con Notificaciones).", "Flujos de aprobación de documentos (Pendiente)."]
         )}
       </div>
 

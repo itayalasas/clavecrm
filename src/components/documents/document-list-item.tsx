@@ -1,11 +1,10 @@
-
 "use client";
 
-import type { DocumentFile, Lead, Contact } from "@/lib/types";
+import type { DocumentFile, Lead, Contact, User } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIconLucide, History, UploadCloud, Eye, Share2, Copy, EyeOff, Globe, Users } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -28,7 +27,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import React from "react";
+import React, { useState } from "react";
+import { DocumentSharingDialogContent } from "./document-sharing-dialog-content";
 
 
 interface DocumentListItemProps {
@@ -37,8 +37,11 @@ interface DocumentListItemProps {
   onUploadNewVersion: (document: DocumentFile) => void;
   onViewHistory: (document: DocumentFile) => void;
   onTogglePublic: (documentId: string, currentIsPublic: boolean) => Promise<void>;
+  onUpdateSharingSettings: (documentId: string, newPermissions: DocumentFile['permissions']) => Promise<void>;
   leads?: Lead[];
   contacts?: Contact[];
+  allUsers: User[]; // For sharing dialog
+  currentUser: User;
 }
 
 function getFileIcon(fileType: string): LucideIcon {
@@ -63,10 +66,22 @@ function formatFileSize(bytes: number): string {
 }
 
 
-export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, onViewHistory, onTogglePublic, leads = [], contacts = [] }: DocumentListItemProps) {
+export function DocumentListItem({ 
+    documentFile, 
+    onDelete, 
+    onUploadNewVersion, 
+    onViewHistory, 
+    onTogglePublic, 
+    onUpdateSharingSettings,
+    leads = [], 
+    contacts = [],
+    allUsers,
+    currentUser
+}: DocumentListItemProps) {
   const { toast } = useToast();
   const FileIcon = getFileIcon(documentFile.fileType);
   const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
+  const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
 
   const relatedLead = documentFile.relatedLeadId ? leads.find(l => l.id === documentFile.relatedLeadId) : null;
   const relatedContact = documentFile.relatedContactId ? contacts.find(c => c.id === documentFile.relatedContactId) : null;
@@ -76,18 +91,7 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
 
   const hasHistory = documentFile.versionHistory && documentFile.versionHistory.length > 0;
 
-  const handleCopyToClipboard = () => {
-    if (documentFile.isPublic && documentFile.fileURL) {
-      navigator.clipboard.writeText(documentFile.fileURL)
-        .then(() => {
-          toast({ title: "Enlace Copiado", description: "El enlace público del documento ha sido copiado al portapapeles." });
-        })
-        .catch(err => {
-          console.error('Failed to copy link: ', err);
-          toast({ title: "Error al Copiar", description: "No se pudo copiar el enlace.", variant: "destructive" });
-        });
-    }
-  };
+  const sharedUserCount = documentFile.permissions?.users?.length || 0;
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -99,14 +103,23 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
               <CardTitle className="text-base truncate" title={documentFile.name}>
                 {documentFile.name}
               </CardTitle>
-              <CardDescription className="text-xs truncate">
-                Tipo: {documentFile.fileType} | Tamaño: {formatFileSize(documentFile.fileSize)} | Ver: {documentFile.currentVersion}
-                {documentFile.isPublic && <Badge variant="outline" className="ml-2 border-green-500 text-green-500">Público</Badge>}
+              <CardDescription className="text-xs truncate flex items-center gap-1.5">
+                <span>Tipo: {documentFile.fileType}</span>
+                <span className="text-muted-foreground/50">|</span>
+                <span>Tamaño: {formatFileSize(documentFile.fileSize)}</span>
+                <span className="text-muted-foreground/50">|</span>
+                <span>Ver: {documentFile.currentVersion}</span>
+                {documentFile.isPublic && <Badge variant="outline" className="ml-1 border-green-500 text-green-600 text-[10px] px-1 py-0">Público</Badge>}
+                {!documentFile.isPublic && sharedUserCount > 0 && (
+                    <Badge variant="outline" className="ml-1 border-blue-500 text-blue-600 text-[10px] px-1 py-0 flex items-center gap-0.5">
+                        <Users className="h-2.5 w-2.5"/> {sharedUserCount}
+                    </Badge>
+                )}
               </CardDescription>
             </div>
           </div>
           <div className="flex gap-1 items-center">
-            <AlertDialog>
+            <AlertDialog open={isSharingDialogOpen} onOpenChange={setIsSharingDialogOpen}>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -119,36 +132,25 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
                   <TooltipContent><p>Compartir Documento</p></TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <AlertDialogContent>
+              <AlertDialogContent className="sm:max-w-md md:max-w-lg">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Compartir Documento: {documentFile.name}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {documentFile.isPublic 
-                      ? "Este documento es público. Cualquiera con el enlace puede verlo." 
-                      : "Haz este documento público para generar un enlace compartible."}
+                    Gestiona quién puede acceder a este documento.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                {documentFile.isPublic && documentFile.fileURL && (
-                  <div className="space-y-2 mt-2">
-                    <Label htmlFor={`share-link-${documentFile.id}`}>Enlace Público:</Label>
-                    <div className="flex items-center space-x-2">
-                      <Input id={`share-link-${documentFile.id}`} value={documentFile.fileURL} readOnly className="text-xs"/>
-                      <Button type="button" size="sm" onClick={handleCopyToClipboard} variant="outline">
-                        <Copy className="mr-2 h-3 w-3"/>Copiar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                 <Button 
-                    onClick={() => onTogglePublic(documentFile.id, !!documentFile.isPublic)} 
-                    variant={documentFile.isPublic ? "secondary" : "default"}
-                    className="w-full mt-4"
-                  >
-                    {documentFile.isPublic ? <><EyeOff className="mr-2 h-4 w-4"/>Hacer Privado</> : <><Globe className="mr-2 h-4 w-4"/>Hacer Público</>}
-                  </Button>
-                <AlertDialogFooter className="mt-4">
-                  <AlertDialogCancel>Cerrar</AlertDialogCancel>
-                </AlertDialogFooter>
+                <DocumentSharingDialogContent
+                    documentFile={documentFile}
+                    allUsers={allUsers}
+                    currentUser={currentUser}
+                    onSaveSharing={async (docId, perms) => {
+                        await onUpdateSharingSettings(docId, perms);
+                        // No need to close here, onSaveSharing in page will trigger re-fetch and DocumentSharingDialogContent calls onClose
+                    }}
+                    onTogglePublic={onTogglePublic}
+                    onClose={() => setIsSharingDialogOpen(false)}
+                />
+                {/* Footer is handled within DocumentSharingDialogContent */}
               </AlertDialogContent>
             </AlertDialog>
 
@@ -192,12 +194,12 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
                           size="icon" 
                           onClick={() => onDelete(documentFile.id, storagePath)} 
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          disabled={hasHistory} // Simple safety: disable delete if history exists. Refine later.
+                          disabled={hasHistory} 
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>{hasHistory ? "Eliminar versiones individualmente desde historial (Próx.)" : "Eliminar Documento"}</p></TooltipContent>
+                    <TooltipContent><p>{hasHistory ? "Eliminar versiones individuales desde historial (Próx.)" : "Eliminar Documento"}</p></TooltipContent>
                 </Tooltip>
             </TooltipProvider>
           </div>
@@ -215,13 +217,13 @@ export function DocumentListItem({ documentFile, onDelete, onUploadNewVersion, o
         </div>
          {relatedLead && (
             <div className="flex items-center gap-1 text-primary" title={`Asociado al Lead: ${relatedLead.name}`}>
-                <LinkIcon className="h-3 w-3"/>
+                <LinkIconLucide className="h-3 w-3"/>
                 Lead: <span className="font-medium truncate">{relatedLead.name}</span>
             </div>
         )}
         {relatedContact && (
             <div className="flex items-center gap-1 text-primary" title={`Asociado al Contacto: ${relatedContact.firstName || ''} ${relatedContact.lastName || ''}`}>
-                <LinkIcon className="h-3 w-3"/>
+                <LinkIconLucide className="h-3 w-3"/>
                 Contacto: <span className="font-medium truncate">{`${relatedContact.firstName || ''} ${relatedContact.lastName || ''} (${relatedContact.email})`.trim()}</span>
             </div>
         )}
