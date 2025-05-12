@@ -1,17 +1,32 @@
+
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type { PipelineStage, Lead } from "@/lib/types";
-import { INITIAL_PIPELINE_STAGES, NAV_ITEMS } from "@/lib/constants";
-import { PipelineStageColumn } from "@/components/pipeline/pipeline-stage-column";
-import { AddEditLeadDialog } from "@/components/pipeline/add-edit-lead-dialog";
-import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { db } from "@/lib/firebase";
-import { collection, getDocs, doc, setDoc, query, orderBy, Timestamp } from "firebase/firestore";
-import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useState, useEffect, useCallback }
+from "react";
+import type { Lead, PipelineStage }
+from "@/lib/types";
+import { INITIAL_PIPELINE_STAGES, NAV_ITEMS }
+from "@/lib/constants";
+import { PipelineStageColumn }
+from "@/components/pipeline/pipeline-stage-column";
+import { AddEditLeadDialog }
+from "@/components/pipeline/add-edit-lead-dialog";
+import { Button }
+from "@/components/ui/button";
+import { PlusCircle }
+from "lucide-react";
+import { ScrollArea, ScrollBar }
+from "@/components/ui/scroll-area";
+import { db }
+from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, query, orderBy, Timestamp }
+from "firebase/firestore";
+import { useToast }
+from "@/hooks/use-toast";
+import { Skeleton }
+from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/auth-context"; // Import useAuth
+import { logSystemEvent } from "@/lib/auditLogger"; // Import audit logger
 
 export default function PipelinePage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -22,6 +37,7 @@ export default function PipelinePage() {
 
   const pipelineNavItem = NAV_ITEMS.find(item => item.href === '/pipeline');
   const { toast } = useToast();
+  const { currentUser } = useAuth(); // Get currentUser
 
   const fetchLeads = useCallback(async () => {
     setIsLoadingLeads(true);
@@ -57,6 +73,10 @@ export default function PipelinePage() {
   }, [fetchLeads]);
 
   const handleSaveLead = async (leadData: Lead) => {
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
+    }
     setIsSubmittingLead(true);
     const isEditing = !!leadData.id && leads.some(l => l.id === leadData.id);
     const leadId = leadData.id || doc(collection(db, "leads")).id;
@@ -66,13 +86,12 @@ export default function PipelinePage() {
         
         const firestoreSafeLead = {
             ...leadData,
-            id: leadId, // ensure id is part of the object for local state, but not saved directly in document fields
+            id: leadId,
             createdAt: leadData.createdAt ? Timestamp.fromDate(new Date(leadData.createdAt)) : Timestamp.now(),
             updatedAt: Timestamp.now(),
             expectedCloseDate: leadData.expectedCloseDate ? Timestamp.fromDate(new Date(leadData.expectedCloseDate)) : null,
         };
         
-        // Firestore setDoc will use leadId as document ID, so we exclude it from the data payload itself.
         const { id, ...dataToSave } = firestoreSafeLead;
 
         await setDoc(leadDocRef, dataToSave, { merge: true });
@@ -82,6 +101,14 @@ export default function PipelinePage() {
           title: isEditing ? "Lead Actualizado" : "Lead Creado",
           description: `El lead "${leadData.name}" ha sido guardado exitosamente.`,
         });
+
+        // Log audit event
+        const actionType = isEditing ? 'update' : 'create';
+        const actionDetails = isEditing ? 
+          `Lead "${leadData.name}" actualizado.` : 
+          `Lead "${leadData.name}" creado.`;
+        await logSystemEvent(currentUser, actionType, 'Lead', leadId, actionDetails);
+
         setEditingLead(null);
     } catch (error) {
         console.error("Error al guardar lead:", error);
@@ -101,9 +128,6 @@ export default function PipelinePage() {
   
   const openNewLeadDialog = () => {
     setEditingLead(null); 
-    // The dialog will open/close based on its internal `isOpen` state,
-    // which is typically controlled by its `trigger` or an explicit `open` prop
-    // if we decide to manage it from here. For now, AddEditLeadDialog manages its own open state via trigger.
   };
 
 
@@ -121,7 +145,7 @@ export default function PipelinePage() {
           leadToEdit={editingLead}
           onSave={handleSaveLead}
           isSubmitting={isSubmittingLead}
-          key={editingLead ? editingLead.id : "new-lead"} // Ensure dialog re-initializes
+          key={editingLead ? editingLead.id : "new-lead"}
         />
       </div>
       

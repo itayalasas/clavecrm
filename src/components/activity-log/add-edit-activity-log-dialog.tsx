@@ -5,8 +5,8 @@ import { useState, useEffect, useId } from "react";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { ActivityLog, Lead, Contact, Ticket, User, ActivityType, Opportunity } from "@/lib/types";
-import { ACTIVITY_TYPES } from "@/lib/constants";
+import type { ActivityLog, Lead, Contact, Ticket, User, ActivityType, Opportunity, ActivityLogUserActivityType } from "@/lib/types";
+import { ACTIVITY_LOG_USER_ACTIVITY_TYPES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,7 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const NO_SELECTION_VALUE = "__NONE__";
 
 const activityLogFormSchema = z.object({
-  type: z.enum(ACTIVITY_TYPES as [string, ...string[]], { required_error: "El tipo de actividad es obligatorio."}),
+  type: z.enum(ACTIVITY_LOG_USER_ACTIVITY_TYPES, { required_error: "El tipo de actividad es obligatorio."}),
   subject: z.string().optional(),
   details: z.string().min(1, "Los detalles son obligatorios."),
   timestampDate: z.date({ required_error: "La fecha es obligatoria." }),
@@ -94,7 +94,7 @@ export function AddEditActivityLogDialog({
       if (activityToEdit) {
         const activityDate = parseISO(activityToEdit.timestamp);
         form.reset({
-          type: activityToEdit.type,
+          type: activityToEdit.type as ActivityLogUserActivityType,
           subject: activityToEdit.subject || "",
           details: activityToEdit.details,
           timestampDate: activityDate,
@@ -136,9 +136,11 @@ export function AddEditActivityLogDialog({
       relatedOpportunityId: data.relatedOpportunityId === NO_SELECTION_VALUE ? undefined : data.relatedOpportunityId,
       durationMinutes: data.durationMinutes,
       outcome: data.outcome,
+      // Ensure category is set correctly when saving
+      category: 'user_activity' as const,
     };
 
-    const success = await onSave(activityPayload);
+    const success = await onSave(activityPayload as Omit<ActivityLog, 'id' | 'createdAt' | 'loggedByUserId'>);
     if (success) {
       onOpenChange(false);
     }
@@ -163,7 +165,7 @@ export function AddEditActivityLogDialog({
                     <FormLabel>Tipo de Actividad</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un tipo" /></SelectTrigger></FormControl>
-                      <SelectContent>{ACTIVITY_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+                      <SelectContent>{ACTIVITY_LOG_USER_ACTIVITY_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>

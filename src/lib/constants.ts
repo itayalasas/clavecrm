@@ -1,5 +1,6 @@
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityType, Resource } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library } from 'lucide-react';
+
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -63,8 +64,9 @@ export const NAV_ITEMS: NavItem[] = [
     subItems: [
       { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
       { href: '/settings', label: 'Configuración', icon: Settings },
+      { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
     ],
-    parentActiveIf: (pathname) => ['/user-management', '/settings'].some(p => pathname.startsWith(p)),
+    parentActiveIf: (pathname) => ['/user-management', '/settings', '/audit-log'].some(p => pathname.startsWith(p)),
   },
 ];
 
@@ -208,7 +210,9 @@ export const COMMON_EMAIL_VARIABLES: CommonEmailVariable[] = [
 
 export const MEETING_STATUSES: MeetingStatus[] = ['Programada', 'Confirmada', 'Cancelada', 'Realizada', 'Pospuesta'];
 
-export const ACTIVITY_TYPES: readonly ActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'] as const;
+export const ACTIVITY_LOG_USER_ACTIVITY_TYPES: readonly ActivityLogUserActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'] as const;
+
+export const AUDIT_ACTION_TYPES: readonly ActivityLogSystemAuditActionType[] = ['create', 'update', 'delete', 'login', 'logout', 'config_change', 'access_change', 'file_upload', 'file_download'] as const;
 
 
 export const INITIAL_RESOURCES: Resource[] = [

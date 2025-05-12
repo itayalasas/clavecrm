@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -17,6 +18,7 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch } from "firebase/firestore";
 import { addMonths, setDate, startOfMonth, format, parseISO } from "date-fns";
 import { es } from 'date-fns/locale';
+import { logSystemEvent } from "@/lib/auditLogger"; // Import audit logger
 
 
 export default function TasksPage() {
@@ -55,8 +57,8 @@ export default function TasksPage() {
           id: docSnap.id,
           title: data.title as string,
           description: data.description as string | undefined,
-          createdAt: typeof data.createdAt === 'string' ? data.createdAt : (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          dueDate: typeof data.dueDate === 'string' ? data.dueDate : (data.dueDate as Timestamp)?.toDate().toISOString() || undefined,
+          createdAt: (data.createdAt instanceof Timestamp) ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString()),
+          dueDate: (data.dueDate instanceof Timestamp) ? data.dueDate.toDate().toISOString() : (typeof data.dueDate === 'string' ? data.dueDate : undefined),
           completed: data.completed as boolean,
           relatedLeadId: data.relatedLeadId as string | undefined,
           priority: data.priority as Task['priority'] | undefined,
@@ -163,12 +165,19 @@ export default function TasksPage() {
       
       await setDoc(taskDocRef, firestoreSafeTask, { merge: true }); 
 
-      fetchTasks(); // Re-fetch tasks
+      fetchTasks(); 
       
       toast({
         title: isEditing ? "Tarea Actualizada" : "Tarea Creada",
         description: `La tarea "${taskToSave.title}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
       });
+
+      const actionType = isEditing ? 'update' : 'create';
+      const actionDetails = isEditing ? 
+        `Tarea "${taskToSave.title}" actualizada.` : 
+        `Tarea "${taskToSave.title}" creada.`;
+      await logSystemEvent(currentUser, actionType, 'Task', taskId, actionDetails);
+
       setEditingTask(null);
       setIsTaskDialogOpen(false);
     } catch (error) {
@@ -224,17 +233,20 @@ export default function TasksPage() {
 
 
       await batch.commit();
-      fetchTasks(); // Re-fetch tasks
+      fetchTasks(); 
 
       toast({
         title: "Tarea Actualizada",
         description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
       });
+
+      await logSystemEvent(currentUser, 'update', 'Task', taskId, `Estado de tarea "${task.title}" cambiado a ${updatedTask.completed ? 'completada' : 'pendiente'}.`);
       if (newRecurringTaskInstance && newRecurringTaskInstance.dueDate) {
         toast({
           title: "Tarea Recurrente Creada",
           description: `Nueva instancia de "${newRecurringTaskInstance.title}" creada para el ${format(parseISO(newRecurringTaskInstance.dueDate), "PP", {locale: es})}.`
         });
+        await logSystemEvent(currentUser, 'create', 'Task', newRecurringTaskInstance.id, `Tarea recurrente "${newRecurringTaskInstance.title}" creada.`);
       }
 
     } catch (error) {
@@ -249,18 +261,19 @@ export default function TasksPage() {
 
   const handleDeleteTask = async (taskId: string) => {
     const taskToDelete = tasks.find(t => t.id === taskId);
-    if (!taskToDelete) return;
+    if (!taskToDelete || !currentUser) return;
 
     if (window.confirm(`¿Estás seguro de que quieres eliminar la tarea "${taskToDelete.title}"?`)) {
       try {
         // TODO: Delete attachments from Firebase Storage if any
         const taskDocRef = doc(db, "tasks", taskId);
         await deleteDoc(taskDocRef);
-        fetchTasks(); // Re-fetch tasks
+        fetchTasks(); 
         toast({
           title: "Tarea Eliminada",
           description: `La tarea "${taskToDelete.title}" ha sido eliminada.`,
         });
+        await logSystemEvent(currentUser, 'delete', 'Task', taskId, `Tarea "${taskToDelete.title}" eliminada.`);
       } catch (error) {
         console.error("Error al eliminar tarea:", error);
         toast({
@@ -327,7 +340,6 @@ export default function TasksPage() {
             users={users} 
             onSave={handleSaveTask}
             isSubmitting={isSubmittingTask}
-            key={editingTask ? `edit-${editingTask.id}` : 'new-task-dialog'}
           />
       </div>
 

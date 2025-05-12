@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users, Eye, Bell, Users2, View } from "lucide-react"; // Added Bell for notifications, View
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users, Eye, Bell, Users2, View } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { isValid, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { logSystemEvent } from "@/lib/auditLogger"; // Import audit logger
 
 
 export default function DocumentsPage() {
@@ -48,14 +49,14 @@ export default function DocumentsPage() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
 
 
-  const [isLoading, setIsLoading] = useState(true); // For documents
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true); // For templates
+  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true); 
   const [isLoadingSupportData, setIsLoadingSupportData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [templateSearchTerm, setTemplateSearchTerm] = useState("");
 
   const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
-  const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string} | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string, name: string} | null>(null);
 
   const [isUploadNewVersionDialogOpen, setIsUploadNewVersionDialogOpen] = useState(false);
   const [documentForNewVersion, setDocumentForNewVersion] = useState<DocumentFile | null>(null);
@@ -115,7 +116,7 @@ export default function DocumentsPage() {
             version: v.version as number,
             fileURL: v.fileURL as string,
             fileNameInStorage: v.fileNameInStorage as string,
-            uploadedAt: (typeof v.uploadedAt === 'string' && isValid(parseISO(v.uploadedAt)))
+             uploadedAt: (typeof v.uploadedAt === 'string' && isValid(parseISO(v.uploadedAt)))
               ? v.uploadedAt
               : (v.uploadedAt instanceof Timestamp ? v.uploadedAt.toDate().toISOString() : new Date().toISOString()),
             uploadedByUserId: v.uploadedByUserId as string,
@@ -146,12 +147,11 @@ export default function DocumentsPage() {
         } as DocumentFile;
       });
 
-      // Client-side filtering for ownership and sharing
       const userVisibleDocuments = fetchedDocs.filter(docFile =>
-        docFile.uploadedByUserId === currentUser.id || // User owns the document
-        docFile.permissions?.users?.some(p => p.userId === currentUser.id) || // Document is shared with the user
-        (docFile.permissions?.groups?.some(pg => currentUser.role === 'admin' || (currentUser.groups?.includes(pg.groupId)))) || // User is part of a group that has access, or is admin
-        docFile.isPublic // Document is public
+        docFile.uploadedByUserId === currentUser.id || 
+        docFile.permissions?.users?.some(p => p.userId === currentUser.id) || 
+        (docFile.permissions?.groups?.some(pg => currentUser.role === 'admin' || (currentUser.groups?.includes(pg.groupId)))) || 
+        docFile.isPublic 
       );
 
       setDocuments(userVisibleDocuments);
@@ -219,21 +219,31 @@ export default function DocumentsPage() {
     fetchSupportData();
   }, [fetchDocuments, fetchDocumentTemplates, fetchSupportData]);
 
-  const handleUploadSuccess = () => {
+  const handleUploadSuccess = (uploadedFileName: string) => {
     fetchDocuments();
     setIsUploadFormVisible(false);
+    if (currentUser) {
+      logSystemEvent(currentUser, 'file_upload', 'Document', uploadedFileName, `Documento "${uploadedFileName}" subido.`);
+    }
   };
 
-  const handleUploadNewVersionSuccess = () => {
+  const handleUploadNewVersionSuccess = (docName: string, newVersion: number) => {
     fetchDocuments();
     setIsUploadNewVersionDialogOpen(false);
     setDocumentForNewVersion(null);
+     if (currentUser) {
+      logSystemEvent(currentUser, 'update', 'Document', docName, `Nueva versión ${newVersion} subida para "${docName}".`);
+    }
   }
 
-  const handleSaveTemplateSuccess = () => {
+  const handleSaveTemplateSuccess = (templateName: string, isEditing: boolean) => {
     fetchDocumentTemplates();
     setIsTemplateDialogOpen(false);
     setEditingTemplate(null);
+    if (currentUser) {
+      const action = isEditing ? 'update' : 'create';
+      logSystemEvent(currentUser, action, 'DocumentTemplate', templateName, `Plantilla de documento "${templateName}" ${isEditing ? 'actualizada' : 'creada'}.`);
+    }
   }
 
   const handleGenerateDocumentSuccess = (newDocument: DocumentFile) => {
@@ -241,14 +251,18 @@ export default function DocumentsPage() {
     toast({ title: "Documento Generado", description: `El documento "${newDocument.name}" ha sido creado exitosamente.`});
     setIsGenerateDocumentDialogOpen(false);
     setTemplateForGeneration(null);
+    if (currentUser) {
+      logSystemEvent(currentUser, 'create', 'Document', newDocument.id, `Documento "${newDocument.name}" generado desde plantilla "${templateForGeneration?.name}".`);
+    }
   };
 
-  const confirmDeleteDocument = (docId: string, storagePath: string) => {
-    setDocumentToDelete({ id: docId, storagePath });
+  const confirmDeleteDocument = (docId: string, storagePath: string, docName: string) => {
+    setDocumentToDelete({ id: docId, storagePath, name: docName });
   };
 
   const handleDeleteDocument = async () => {
     if (!documentToDelete || !currentUser) return;
+    const { id: docId, name: docName } = documentToDelete;
     try {
       // First, delete all files in versionHistory from storage
       const docSnap = await getDoc(doc(db, "documents", documentToDelete.id));
@@ -257,7 +271,6 @@ export default function DocumentsPage() {
         if (docData.versionHistory && docData.versionHistory.length > 0) {
           for (const version of docData.versionHistory) {
             if (version.fileNameInStorage) {
-              // Construct path based on the uploader of that specific version
               const versionUploaderId = version.uploadedByUserId;
               const versionStoragePath = `documents/${versionUploaderId}/${version.fileNameInStorage}`;
               const versionFileRef = storageRef(storage, versionStoragePath);
@@ -266,15 +279,13 @@ export default function DocumentsPage() {
           }
         }
       }
-      // Then, delete the current version file from storage
-      // The storagePath provided to confirmDeleteDocument already contains the correct uploader ID for the current version
       const currentFileRef = storageRef(storage, documentToDelete.storagePath);
       await deleteObject(currentFileRef).catch(err => console.warn(`Error eliminando archivo actual de storage:`, err));
 
-      // Finally, delete the document record from Firestore
       await deleteDoc(doc(db, "documents", documentToDelete.id));
-      toast({ title: "Documento Eliminado", description: "El documento y todas sus versiones han sido eliminados exitosamente." });
+      toast({ title: "Documento Eliminado", description: `El documento "${docName}" y todas sus versiones han sido eliminados.` });
       fetchDocuments();
+      await logSystemEvent(currentUser, 'delete', 'Document', docId, `Documento "${docName}" eliminado.`);
     } catch (error: any) {
       console.error("Error al eliminar documento:", error);
       toast({ title: "Error al Eliminar Documento", description: String(error.message || error), variant: "destructive" });
@@ -290,13 +301,14 @@ export default function DocumentsPage() {
   const handleDeleteTemplate = async () => {
     if (!templateToDelete || !currentUser) return;
     try {
-      if (templateToDelete.fileURL && templateToDelete.fileNameInStorage) {
+      if (templateToDelete.fileURL && templateToDelete.fileNameInStorage && templateToDelete.createdByUserId) {
         const templateFileRef = storageRef(storage, `documentTemplates/${templateToDelete.createdByUserId}/${templateToDelete.fileNameInStorage}`);
         await deleteObject(templateFileRef).catch(err => console.warn("Error eliminando archivo de plantilla de storage:", err));
       }
       await deleteDoc(doc(db, "documentTemplates", templateToDelete.id));
-      toast({ title: "Plantilla Eliminada", description: "La plantilla de documento ha sido eliminada." });
+      toast({ title: "Plantilla Eliminada", description: `La plantilla de documento "${templateToDelete.name}" ha sido eliminada.` });
       fetchDocumentTemplates();
+      await logSystemEvent(currentUser, 'delete', 'DocumentTemplate', templateToDelete.id, `Plantilla de documento "${templateToDelete.name}" eliminada.`);
     } catch (error) {
       console.error("Error al eliminar plantilla:", error);
       toast({ title: "Error al Eliminar Plantilla", variant: "destructive" });
@@ -330,25 +342,29 @@ export default function DocumentsPage() {
     setIsGenerateDocumentDialogOpen(true);
   };
 
-  const handleTogglePublic = async (documentId: string, currentIsPublic: boolean) => {
+  const handleTogglePublic = async (documentId: string, currentIsPublic: boolean, docName: string) => {
+    if (!currentUser) return;
     try {
       const docRef = doc(db, "documents", documentId);
       await updateDoc(docRef, {
         isPublic: !currentIsPublic,
         updatedAt: serverTimestamp(),
       });
+      const newVisibility = !currentIsPublic ? "público" : "privado";
       toast({
         title: "Visibilidad Actualizada",
-        description: `El documento es ahora ${!currentIsPublic ? "público" : "privado"}.`,
+        description: `El documento es ahora ${newVisibility}.`,
       });
       fetchDocuments();
+      await logSystemEvent(currentUser, 'access_change', 'Document', documentId, `Visibilidad de "${docName}" cambiada a ${newVisibility}.`);
     } catch (error) {
       console.error("Error actualizando visibilidad del documento:", error);
       toast({ title: "Error al Actualizar Visibilidad", variant: "destructive" });
     }
   };
 
-  const handleUpdateSharingSettings = async (documentId: string, newPermissions: DocumentFile['permissions']) => {
+  const handleUpdateSharingSettings = async (documentId: string, newPermissions: DocumentFile['permissions'], docName: string) => {
+     if (!currentUser) return;
     try {
       const docRef = doc(db, "documents", documentId);
       const permissionsToSave = {
@@ -361,9 +377,10 @@ export default function DocumentsPage() {
       });
       toast({
         title: "Permisos Actualizados",
-        description: "Los permisos de compartición del documento han sido actualizados.",
+        description: `Los permisos de compartición del documento "${docName}" han sido actualizados.`,
       });
       fetchDocuments();
+      await logSystemEvent(currentUser, 'access_change', 'Document', documentId, `Permisos de "${docName}" actualizados.`);
     } catch (error) {
       console.error("Error actualizando permisos de compartición:", error);
       toast({ title: "Error al Actualizar Permisos", variant: "destructive" });
@@ -375,7 +392,7 @@ export default function DocumentsPage() {
     setIsDocumentViewerOpen(true);
   };
 
-  const handleRestoreVersion = async (documentId: string, versionToRestore: DocumentVersion) => {
+  const handleRestoreVersion = async (documentId: string, versionToRestore: DocumentVersion, docName: string) => {
     if (!currentUser) {
       toast({ title: "Error de autenticación", variant: "destructive"});
       return;
@@ -430,6 +447,7 @@ export default function DocumentsPage() {
       toast({ title: "Versión Restaurada", description: `El contenido de la versión ${versionToRestore.version} es ahora la versión actual ${newCurrentVersionNumber}.` });
       fetchDocuments();
       setIsVersionHistoryDialogOpen(false);
+      await logSystemEvent(currentUser, 'update', 'Document', documentId, `Documento "${docName}" restaurado a versión ${versionToRestore.version}. Nueva versión actual: ${newCurrentVersionNumber}.`);
     } catch (error) {
       console.error("Error restaurando versión:", error);
       toast({ title: "Error al Restaurar Versión", description: String(error), variant: "destructive" });
@@ -545,11 +563,11 @@ export default function DocumentsPage() {
                         <DocumentListItem
                         key={docFile.id}
                         documentFile={docFile}
-                        onDelete={confirmDeleteDocument}
+                        onDelete={(docId, storagePath) => confirmDeleteDocument(docId, storagePath, docFile.name)}
                         onUploadNewVersion={openUploadNewVersionDialog}
                         onViewHistory={openVersionHistoryDialog}
-                        onTogglePublic={handleTogglePublic}
-                        onUpdateSharingSettings={handleUpdateSharingSettings}
+                        onTogglePublic={(docId, isPub) => handleTogglePublic(docId, isPub, docFile.name)}
+                        onUpdateSharingSettings={(docId, perms) => handleUpdateSharingSettings(docId, perms, docFile.name)}
                         onViewDocument={handleViewDocument}
                         leads={leads}
                         contacts={contacts}
@@ -674,7 +692,7 @@ export default function DocumentsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer. El documento &quot;{documents.find(d => d.id === documentToDelete.id)?.name}&quot; y todas sus versiones serán eliminados permanentemente del almacenamiento y de la base de datos.
+                Esta acción no se puede deshacer. El documento &quot;{documentToDelete.name}&quot; y todas sus versiones serán eliminados permanentemente del almacenamiento y de la base de datos.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -712,7 +730,7 @@ export default function DocumentsPage() {
           onOpenChange={setIsUploadNewVersionDialogOpen}
           documentToUpdate={documentForNewVersion}
           currentUser={currentUser}
-          onUploadSuccess={handleUploadNewVersionSuccess}
+          onUploadSuccess={(docName, newVer) => handleUploadNewVersionSuccess(docName, newVer)}
         />
       )}
 
@@ -721,7 +739,7 @@ export default function DocumentsPage() {
           isOpen={isVersionHistoryDialogOpen}
           onOpenChange={setIsVersionHistoryDialogOpen}
           documentFile={documentForVersionHistory}
-          onRestoreVersion={handleRestoreVersion}
+          onRestoreVersion={(docId, version) => handleRestoreVersion(docId, version, documentForVersionHistory.name)}
         />
       )}
 
@@ -731,7 +749,7 @@ export default function DocumentsPage() {
             onOpenChange={setIsTemplateDialogOpen}
             templateToEdit={editingTemplate}
             currentUser={currentUser}
-            onSaveSuccess={handleSaveTemplateSuccess}
+            onSaveSuccess={(tplName, isEdit) => handleSaveTemplateSuccess(tplName, isEdit)}
         />
       )}
       {currentUser && templateForGeneration && (

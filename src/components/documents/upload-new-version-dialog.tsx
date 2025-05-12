@@ -11,14 +11,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { UploadCloud, Loader2, Sparkles } from "lucide-react"; // Added Sparkles
+import { UploadCloud, Loader2, Sparkles } from "lucide-react"; 
 import { useToast } from "@/hooks/use-toast";
 import { db, storage } from "@/lib/firebase";
 import { doc, updateDoc, serverTimestamp, arrayUnion, Timestamp } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Progress } from "@/components/ui/progress";
-import { compareDocumentVersions, type DocumentComparisonOutput } from "@/ai/flows/document-comparison"; // Import the new flow
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // For displaying AI results
+import { compareDocumentVersions, type DocumentComparisonOutput } from "@/ai/flows/document-comparison"; 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_FILE_TYPES = [
@@ -43,7 +43,7 @@ interface UploadNewVersionDialogProps {
   onOpenChange: (open: boolean) => void;
   documentToUpdate: DocumentFile;
   currentUser: User;
-  onUploadSuccess: () => void;
+  onUploadSuccess: (documentName: string, newVersionNumber: number) => void;
 }
 
 export function UploadNewVersionDialog({
@@ -69,14 +69,16 @@ export function UploadNewVersionDialog({
 
   useEffect(() => {
     if (isOpen) {
-        form.reset({ versionNotes: "" }); // Reset notes
-        // Do NOT reset the file input here, as it's controlled by a separate mechanism.
-        // It will be reset explicitly if needed after successful upload or when dialog is cancelled.
+        form.reset({ versionNotes: "" }); 
+        const fileInput = document.getElementById('new-version-file-input') as HTMLInputElement | null;
+        if (fileInput) fileInput.value = ""; // Explicitly clear file input
+        form.setValue('file', undefined as any); // Clear RHF state for file
+        form.clearErrors('file'); // Clear any validation errors for file
+
         setAiComparisonResult(null);
         setIsComparingWithAI(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]); // form dependency removed to prevent re-triggering reset on every render
+  }, [isOpen, form]);
 
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -84,7 +86,7 @@ export function UploadNewVersionDialog({
     if (file) {
       form.setValue("file", file);
       form.clearErrors("file");
-      setAiComparisonResult(null); // Reset AI comparison if new file is selected
+      setAiComparisonResult(null); 
     }
   };
 
@@ -96,10 +98,9 @@ export function UploadNewVersionDialog({
     }
 
     let newFileText = "";
-    let currentFileText = ""; // This is the challenging part to get client-side
+    let currentFileText = ""; 
 
-    // --- TODO: Robust Content Extraction for newFile ---
-    if (newFile.type === "text/plain" || newFile.type === "text/markdown" || newFile.type === "text/csv") {
+    if (newFile.type.startsWith("text/")) {
       try {
         newFileText = await newFile.text();
       } catch (e) {
@@ -109,20 +110,15 @@ export function UploadNewVersionDialog({
       }
     } else {
       newFileText = `El archivo '${newFile.name}' (tipo: ${newFile.type}) no es de texto plano. La comparación IA se basará en metadatos y no en contenido profundo.`;
-      toast({ title: "Comparación IA Limitada", description: "La comparación detallada funciona mejor con archivos de texto plano (.txt, .md, .csv).", variant: "default", duration: 7000 });
+      toast({ title: "Comparación IA Limitada", description: "La comparación detallada funciona mejor con archivos de texto plano.", variant: "default", duration: 7000 });
     }
 
-    // --- TODO: Robust Content Extraction for documentToUpdate.fileURL ---
-    // Fetching and parsing documentToUpdate.fileURL client-side is complex.
-    // For now, we'll use a placeholder or metadata.
-    // In a real app, this might involve a serverless function to get content if not stored.
-    if (documentToUpdate.fileType === "text/plain" || documentToUpdate.fileType === "text/markdown" || documentToUpdate.fileType === "text/csv") {
+    if (documentToUpdate.fileType.startsWith("text/")) {
         currentFileText = `(Contenido de la versión actual '${documentToUpdate.name}' no extraído en el cliente para esta demo. Se usarán metadatos.)`;
          toast({ title: "Nota sobre Comparación", description: "La extracción del texto de la versión actual es compleja en el cliente. Se usarán metadatos.", variant: "default", duration: 7000});
     } else {
         currentFileText = `Metadatos de la versión actual: Nombre: ${documentToUpdate.name}, Tipo: ${documentToUpdate.fileType}, Tamaño: ${documentToUpdate.fileSize} bytes.`;
     }
-    // --- End of TODO ---
 
     setIsComparingWithAI(true);
     setAiComparisonResult(null);
@@ -178,6 +174,7 @@ export function UploadNewVersionDialog({
         try {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
           const nowServerTimestamp = serverTimestamp();
+          const newVersionNumber = documentToUpdate.currentVersion + 1;
           
           const previousVersionEntry: DocumentVersion = {
             version: documentToUpdate.currentVersion,
@@ -188,7 +185,7 @@ export function UploadNewVersionDialog({
             uploadedByUserName: documentToUpdate.lastVersionUploadedByUserName || documentToUpdate.uploadedByUserName,
             fileSize: documentToUpdate.fileSize,
             fileType: documentToUpdate.fileType,
-            notes: documentToUpdate.description, // Using main description as notes for old version for simplicity.
+            notes: documentToUpdate.description, 
           };
 
           const docRef = doc(db, "documents", documentToUpdate.id);
@@ -197,19 +194,19 @@ export function UploadNewVersionDialog({
             fileNameInStorage: newFileNameInStorage,
             fileType: fileToUpload.type,
             fileSize: fileToUpload.size,
-            description: data.versionNotes || documentToUpdate.description, // Preserve old description if new notes are empty
+            description: data.versionNotes || documentToUpdate.description, 
             lastVersionUploadedAt: nowServerTimestamp,
             lastVersionUploadedByUserId: currentUser.id,
             lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
-            currentVersion: documentToUpdate.currentVersion + 1,
+            currentVersion: newVersionNumber,
             versionHistory: arrayUnion(previousVersionEntry),
           });
 
           toast({
             title: "Nueva Versión Subida",
-            description: `El archivo "${fileToUpload.name}" ha sido subido como versión ${documentToUpdate.currentVersion + 1}.`,
+            description: `El archivo "${fileToUpload.name}" ha sido subido como versión ${newVersionNumber}.`,
           });
-          onUploadSuccess();
+          onUploadSuccess(documentToUpdate.name, newVersionNumber); // Pass document name and new version number
           form.reset();
           const fileInput = document.getElementById('new-version-file-input') as HTMLInputElement | null;
           if (fileInput) fileInput.value = "";

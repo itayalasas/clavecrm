@@ -12,11 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NAV_ITEMS } from "@/lib/constants";
 import type { EmailSettings, SMTPSecurity } from "@/lib/types";
-import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff } from "lucide-react";
+import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/auth-context"; // Import useAuth
+import Link from "next/link"; // Import Link for navigation
 
 const emailSettingsSchema = z.object({
   smtpHost: z.string().min(1, "El host SMTP es obligatorio."),
@@ -35,6 +37,7 @@ export default function SettingsPage() {
   const navItem = NAV_ITEMS.find(item => item.href === '/settings');
   const PageIcon = navItem?.icon || Settings;
   const { toast } = useToast();
+  const { currentUser } = useAuth(); // Get currentUser
 
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +80,26 @@ export default function SettingsPage() {
     fetchEmailSettings();
   }, [form, toast]);
 
+  const logSystemEvent = async (action: string, entityType: string, entityId: string, details: string) => {
+    if (!currentUser) return;
+    try {
+      await addDoc(collection(db, "activityLogs"), {
+        category: 'system_audit',
+        type: 'config_change', // More specific type for config changes
+        subject: action,
+        details: `${details} por ${currentUser.name}.`,
+        timestamp: new Date().toISOString(),
+        loggedByUserId: currentUser.id,
+        loggedByUserName: currentUser.name,
+        entityType: entityType,
+        entityId: entityId,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error logging system event:", error);
+    }
+  };
+
   const onSubmitHandler: SubmitHandler<EmailSettingsFormValues> = async (data) => {
     setIsSaving(true);
     try {
@@ -86,6 +109,7 @@ export default function SettingsPage() {
         title: "Configuración Guardada",
         description: "La configuración de correo electrónico ha sido actualizada.",
       });
+      await logSystemEvent("Actualización Config. Email", "EmailSettings", "emailConfiguration", "Se actualizaron los ajustes de correo electrónico.");
     } catch (error) {
       console.error("Error al guardar configuración de correo:", error);
       toast({
@@ -165,7 +189,7 @@ export default function SettingsPage() {
                         name="smtpUser"
                         render={({ field }) => (
                             <FormItem>
-                            <FormLabel>Usuario SMTP (Opcional)</FormLabel>
+                            <FormLabel>Usuario SMTP</FormLabel>
                             <FormControl><Input placeholder="usuario@example.com" {...field} /></FormControl>
                             <FormMessage />
                             </FormItem>
@@ -176,7 +200,7 @@ export default function SettingsPage() {
                         name="smtpPass"
                         render={({ field }) => (
                             <FormItem>
-                            <FormLabel>Contraseña SMTP (Opcional)</FormLabel>
+                            <FormLabel>Contraseña SMTP</FormLabel>
                             <div className="relative">
                                 <FormControl><Input type={showSmtpPass ? "text" : "password"} placeholder="••••••••" {...field} /></FormControl>
                                 <Button
@@ -251,7 +275,7 @@ export default function SettingsPage() {
                   <div className="p-3 border border-amber-500 bg-amber-50 rounded-md text-amber-700 text-sm flex items-start gap-2">
                     <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
                     <div>
-                      <span className="font-semibold">Nota de Seguridad Importante:</span> Las credenciales SMTP (usuario/contraseña) se almacenarán en Firestore. Asegúrate de que tus reglas de seguridad de Firestore protejan adecuadamente el documento `settings/emailConfiguration` para restringir el acceso no autorizado a estas credenciales. 
+                      <span className="font-semibold">Nota de Seguridad Importante:</span> Las credenciales SMTP (usuario/contraseña) se almacenarán en Firestore. Asegúrate de que tus reglas de seguridad de Firestore protejan adecuadamente el documento `settings/emailConfiguration` para restringir el acceso no autorizado a estas credenciales.
                       Idealmente, en producción avanzada, estas credenciales se manejarían a través de secretos en el entorno de Cloud Functions, no directamente en Firestore si el acceso al documento no puede ser estrictamente limitado.
                     </div>
                   </div>
@@ -270,11 +294,58 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <Share2Icon className="h-5 w-5 text-primary" />
-              Integraciones de Redes Sociales
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Seguridad y Auditoría
             </CardTitle>
             <CardDescription>
-              Conecta tus perfiles de redes sociales para habilitar las funciones de Social CRM.
+              Configuraciones de seguridad y acceso al historial de auditoría del sistema.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h4 className="font-semibold">Autenticación Multifactor (MFA)</h4>
+              <p className="text-sm text-muted-foreground">
+                La MFA se gestiona directamente en la consola de Firebase para cada cuenta de usuario.
+                <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline ml-1">
+                  Ir a Firebase Console
+                </a>
+              </p>
+               <p className="text-xs text-muted-foreground mt-1">
+                Se recomienda habilitar MFA para todos los usuarios, especialmente administradores.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold">Roles y Permisos</h4>
+              <p className="text-sm text-muted-foreground">
+                La asignación de roles a los usuarios se realiza en la sección de <Link href="/user-management" className="text-primary underline">Gestión de Usuarios</Link>.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Permisos más granulares por módulo o acción podrían implementarse en futuras versiones.
+              </p>
+            </div>
+             <div>
+              <h4 className="font-semibold">Historial de Auditoría</h4>
+              <p className="text-sm text-muted-foreground">
+                Consulta el registro de acciones importantes realizadas en el sistema.
+              </p>
+              <Button variant="outline" size="sm" asChild className="mt-2">
+                <Link href="/audit-log">
+                  <History className="mr-2 h-4 w-4" /> Ver Historial de Auditoría
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+       <Card className="mt-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Share2Icon className="h-5 w-5 text-primary" />
+              Integraciones
+            </CardTitle>
+            <CardDescription>
+              Conecta tu CRM con otras herramientas y plataformas.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -292,20 +363,9 @@ export default function SettingsPage() {
                 Integraciones en desarrollo. Próximamente podrás vincular tus cuentas.
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                La disponibilidad y el alcance de las integraciones dependerán de las APIs proporcionadas por cada plataforma de red social.
+                La disponibilidad y el alcance de las integraciones dependerán de las APIs proporcionadas por cada plataforma.
               </p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-       <Card className="mt-2">
-          <CardHeader>
-            <CardTitle className="text-xl">Otras Configuraciones</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Futuras configuraciones del sistema, como campos personalizados, roles y permisos detallados, y ajustes de la interfaz, se gestionarán aquí.
-            </p>
           </CardContent>
         </Card>
     </div>

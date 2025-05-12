@@ -52,7 +52,7 @@ type DocumentUploadFormValues = z.infer<typeof formSchema>;
 
 interface DocumentUploadFormProps {
   currentUser: User | null;
-  onUploadSuccess: () => void; 
+  onUploadSuccess: (fileName: string) => void; 
   leads?: Lead[];
   contacts?: Contact[];
 }
@@ -113,7 +113,6 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
         setUploadProgress(0);
       },
       async () => {
-        // Upload completed successfully, now get the download URL
         try {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
           const nowTimestamp = serverTimestamp();
@@ -127,17 +126,17 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
             description: data.description || "",
             tags: data.tags?.split(',').map(tag => tag.trim()).filter(tag => tag) || [],
             
-            uploadedAt: nowTimestamp, // Upload date of the first version
-            uploadedByUserId: currentUser.id, // User who uploaded the first version
-            uploadedByUserName: currentUser.name || "Usuario Desconocido", // User who uploaded first version
+            uploadedAt: nowTimestamp, 
+            uploadedByUserId: currentUser.id, 
+            uploadedByUserName: currentUser.name || "Usuario Desconocido", 
 
-            lastVersionUploadedAt: nowTimestamp, // For new doc, same as uploadedAt
-            lastVersionUploadedByUserId: currentUser.id, // For new doc, same as uploader
-            lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido", // For new doc
+            lastVersionUploadedAt: nowTimestamp, 
+            lastVersionUploadedByUserId: currentUser.id, 
+            lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido", 
 
             currentVersion: 1, 
-            versionHistory: [], // Initialize with empty history for new documents
-            isPublic: false, // Default to not public
+            versionHistory: [], 
+            isPublic: false, 
           };
 
           if (data.relatedLeadId && data.relatedLeadId !== NO_SELECTION_VALUE) {
@@ -154,15 +153,14 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
             title: "Documento Subido",
             description: `El archivo "${fileToUpload.name}" ha sido subido exitosamente.`,
           });
-          onUploadSuccess();
+          onUploadSuccess(fileToUpload.name); // Pass file name on success
           form.reset({ 
             description: "", 
             tags: "",
             relatedLeadId: NO_SELECTION_VALUE,
             relatedContactId: NO_SELECTION_VALUE,
-            file: undefined, // Reset file field explicitly
+            file: undefined, 
           }); 
-          // Reset file input field
           const fileInput = document.getElementById('document-file-input') as HTMLInputElement | null;
           if (fileInput) {
             fileInput.value = ""; 
@@ -286,7 +284,6 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
                 )}
                 />
             </div>
-            {/* Display the specific error message for the refine condition */}
             {form.formState.errors.relatedLeadId?.type === 'custom' && form.formState.errors.relatedLeadId.message && <FormMessage>{form.formState.errors.relatedLeadId.message}</FormMessage>}
 
 

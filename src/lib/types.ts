@@ -266,45 +266,39 @@ export interface EmailSettings {
 export type MeetingStatus = 'Programada' | 'Confirmada' | 'Cancelada' | 'Realizada' | 'Pospuesta';
 
 // Use a more specific type for ActivityType based on constants
-export type ActivityType = 'Llamada' | 'Reunión' | 'Correo Enviado' | 'Correo Recibido' | 'Nota' | 'Visita';
+export type ActivityLogUserActivityType = 'Llamada' | 'Reunión' | 'Correo Enviado' | 'Correo Recibido' | 'Nota' | 'Visita';
+export type ActivityLogSystemAuditActionType = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'config_change' | 'access_change' | 'file_upload' | 'file_download';
 
+export type ActivityLogCategory = 'user_activity' | 'system_audit';
 
-export interface MeetingAttendee {
-  id: string; // Can be userId or contactId or a unique ID for an external guest
-  type: 'user' | 'contact' | 'external';
-  name: string; // Denormalized name
-  email: string; // Denormalized email
-  status: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Tentativa';
-}
-
-export interface Resource {
+export interface ActivityLog {
   id: string;
-  name: string;
-  type: 'Sala de Reuniones' | 'Proyector' | 'Pizarra Digital' | 'Otro';
-  description?: string;
-  location?: string;
-  capacity?: number;
-  isAvailable?: boolean; // Basic availability flag
-}
+  category: ActivityLogCategory; // Distinguishes between user-driven activities and system audit events
+  type: ActivityLogUserActivityType | ActivityLogSystemAuditActionType; // Union of possible types
+  subject?: string; // For user activities: 'Llamada de seguimiento'. For system audits: 'Lead Creado' or 'Configuración de Email Actualizada'
+  details: string; // Detailed description of the activity or audit event
+  timestamp: string; // ISO string - when the event occurred
+  loggedByUserId: string; // User who performed the action or for whom the system performed it
+  loggedByUserName?: string; // Denormalized user name
 
-export interface Meeting {
-  id: string;
-  title: string;
-  description?: string;
-  startTime: string; // ISO string
-  endTime: string; // ISO string
-  attendees: MeetingAttendee[];
-  location?: string; // Can be a physical address or "Videollamada"
-  conferenceLink?: string; // For online meetings
+  // Fields for user_activity
   relatedLeadId?: string;
+  relatedContactId?: string;
+  relatedOpportunityId?: string;
   relatedTicketId?: string;
-  createdByUserId: string;
-  createdAt: string; // ISO string
-  updatedAt?: string; // ISO string
-  status: MeetingStatus;
-  reminderSent?: boolean;
-  resourceId?: string; // ID of the selected resource
+  relatedOrderId?: string;
+  durationMinutes?: number; // For calls/meetings
+  outcome?: string;
+
+  // Fields for system_audit
+  entityType?: string; // e.g., 'Lead', 'User', 'EmailSettings', 'Document'
+  entityId?: string;   // ID of the affected entity
+  actionDetails?: string; // Specific details of the system action, e.g., "User 'X' logged in" or "Field 'status' changed from 'Open' to 'Closed' on Ticket 'Y'"
+  // changedFields?: Record<string, { oldValue: any, newValue: any }>; // Optional, for detailed field-level changes (can be complex to implement)
+
+  createdAt: string; // ISO string - when the log entry was created in Firestore
 }
+
 
 export interface Opportunity { // Added Opportunity type for relatedOpportunityId
     id: string;
@@ -312,23 +306,6 @@ export interface Opportunity { // Added Opportunity type for relatedOpportunityI
     // Add other relevant fields for Opportunity
 }
 
-
-export interface ActivityLog {
-  id: string;
-  type: ActivityType;
-  subject?: string;
-  details: string;
-  timestamp: string; // ISO string - when the activity occurred or was logged
-  loggedByUserId: string;
-  relatedLeadId?: string;
-  relatedContactId?: string;
-  relatedOpportunityId?: string; // Added relatedOpportunityId
-  relatedTicketId?: string;
-  relatedOrderId?: string;
-  durationMinutes?: number; // For calls/meetings
-  outcome?: string;
-  createdAt: string; // ISO string - when the log entry was created
-}
 
 export interface DocumentVersion {
   version: number;
@@ -425,5 +402,42 @@ export interface UserGroup {
     description?: string;
     memberIds?: string[]; // Array of User IDs
     // other group-specific fields
+}
+
+export interface Resource {
+  id: string;
+  name: string;
+  type: 'Sala de Reuniones' | 'Proyector' | 'Pizarra Digital' | 'Otro';
+  description?: string;
+  location?: string;
+  capacity?: number;
+  isAvailable?: boolean; // Basic availability flag
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description?: string;
+  startTime: string; // ISO string
+  endTime: string; // ISO string
+  attendees: MeetingAttendee[];
+  location?: string; // Can be a physical address or "Videollamada"
+  conferenceLink?: string; // For online meetings
+  relatedLeadId?: string;
+  relatedTicketId?: string;
+  createdByUserId: string;
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  status: MeetingStatus;
+  reminderSent?: boolean;
+  resourceId?: string; // ID of the selected resource
+}
+
+export interface MeetingAttendee {
+  id: string; // Can be userId or contactId or a unique ID for an external guest
+  type: 'user' | 'contact' | 'external';
+  name: string; // Denormalized name
+  email: string; // Denormalized email
+  status: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Tentativa';
 }
     

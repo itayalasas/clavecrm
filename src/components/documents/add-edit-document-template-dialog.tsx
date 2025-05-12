@@ -39,13 +39,13 @@ const formSchema = z.object({
   description: z.string().optional(),
   category: z.string().optional(),
   content: z.string().optional(),
-  variables: z.string().optional(), // Comma-separated string
+  variables: z.string().optional(), 
   file: z.custom<File>((val) => val instanceof File, "Se requiere un archivo si no se provee contenido de texto.").optional()
     .refine((file) => !file || file.size <= MAX_FILE_SIZE, `El tamaño máximo del archivo es ${MAX_FILE_SIZE / (1024*1024)}MB.`)
     .refine((file) => !file || ALLOWED_FILE_TYPES_FOR_TEMPLATE_UPLOAD.includes(file.type), "Tipo de archivo no permitido para plantilla."),
 }).refine(data => data.content || data.file, {
   message: "Debes proporcionar contenido de texto o subir un archivo para la plantilla.",
-  path: ["content"], // Or path: ["file"]
+  path: ["content"], 
 });
 
 type DocumentTemplateFormValues = z.infer<typeof formSchema>;
@@ -55,7 +55,7 @@ interface AddEditDocumentTemplateDialogProps {
   onOpenChange: (open: boolean) => void;
   templateToEdit?: DocumentTemplate | null;
   currentUser: User;
-  onSaveSuccess: () => void;
+  onSaveSuccess: (templateName: string, isEditing: boolean) => void;
 }
 
 export function AddEditDocumentTemplateDialog({
@@ -90,7 +90,6 @@ export function AddEditDocumentTemplateDialog({
           category: templateToEdit.category || DOCUMENT_TEMPLATE_CATEGORIES[0] || "",
           content: templateToEdit.content || "",
           variables: templateToEdit.variables?.join(", ") || "",
-          // file is not reset here, as it's tricky with existing files
         });
       } else {
         form.reset({
@@ -109,7 +108,7 @@ export function AddEditDocumentTemplateDialog({
     if (file) {
       form.setValue("file", file);
       form.clearErrors("file"); 
-      form.clearErrors("content"); // Clear content error if file is provided
+      form.clearErrors("content"); 
     }
   };
 
@@ -178,13 +177,14 @@ export function AddEditDocumentTemplateDialog({
         templateData.updatedAt = serverTimestamp();
         await updateDoc(doc(db, "documentTemplates", templateToEdit.id), templateData);
         toast({ title: "Plantilla Actualizada", description: `La plantilla "${data.name}" ha sido actualizada.` });
+        onSaveSuccess(data.name, true);
       } else {
         templateData.createdAt = serverTimestamp();
         templateData.createdByUserId = currentUser.id;
         await addDoc(collection(db, "documentTemplates"), templateData);
         toast({ title: "Plantilla Creada", description: `La plantilla "${data.name}" ha sido creada.` });
+        onSaveSuccess(data.name, false);
       }
-      onSaveSuccess();
       onOpenChange(false);
     } catch (error) {
       console.error("Error guardando plantilla:", error);
@@ -317,4 +317,3 @@ export function AddEditDocumentTemplateDialog({
     </Dialog>
   );
 }
-
