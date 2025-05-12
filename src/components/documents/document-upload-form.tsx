@@ -39,9 +39,13 @@ const formSchema = z.object({
   tags: z.string().optional(),
   relatedLeadId: z.string().optional(),
   relatedContactId: z.string().optional(),
-}).refine(data => !(data.relatedLeadId && data.relatedContactId), {
+}).refine(data => {
+  const leadSelected = data.relatedLeadId && data.relatedLeadId !== NO_SELECTION_VALUE;
+  const contactSelected = data.relatedContactId && data.relatedContactId !== NO_SELECTION_VALUE;
+  return !(leadSelected && contactSelected);
+}, {
   message: "Asocia el documento a un Lead o a un Contacto, no a ambos.",
-  path: ["relatedLeadId"], // Path to display error, can be either
+  path: ["relatedLeadId"], 
 });
 
 type DocumentUploadFormValues = z.infer<typeof formSchema>;
@@ -145,6 +149,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
             tags: "",
             relatedLeadId: NO_SELECTION_VALUE,
             relatedContactId: NO_SELECTION_VALUE,
+            file: undefined, // Reset file field explicitly
           }); 
           // Reset file input field
           const fileInput = document.getElementById('document-file-input') as HTMLInputElement | null;
@@ -231,7 +236,11 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
                     <FormLabel className="flex items-center gap-1">
                         <LinkIcon className="h-4 w-4 text-muted-foreground" /> Asociar a Lead (Opcional)
                     </FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_VALUE} disabled={isUploading || !!form.watch("relatedContactId") && form.watch("relatedContactId") !== NO_SELECTION_VALUE}>
+                    <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || NO_SELECTION_VALUE} 
+                        disabled={isUploading || (!!form.watch("relatedContactId") && form.watch("relatedContactId") !== NO_SELECTION_VALUE)}
+                    >
                         <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un Lead" /></SelectTrigger></FormControl>
                         <SelectContent>
                         <SelectItem value={NO_SELECTION_VALUE}>Ninguno</SelectItem>
@@ -250,7 +259,11 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
                     <FormLabel className="flex items-center gap-1">
                         <LinkIcon className="h-4 w-4 text-muted-foreground" /> Asociar a Contacto (Opcional)
                     </FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_VALUE} disabled={isUploading || !!form.watch("relatedLeadId") && form.watch("relatedLeadId") !== NO_SELECTION_VALUE}>
+                    <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || NO_SELECTION_VALUE} 
+                        disabled={isUploading || (!!form.watch("relatedLeadId") && form.watch("relatedLeadId") !== NO_SELECTION_VALUE)}
+                    >
                         <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un Contacto" /></SelectTrigger></FormControl>
                         <SelectContent>
                         <SelectItem value={NO_SELECTION_VALUE}>Ninguno</SelectItem>
@@ -262,7 +275,8 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
                 )}
                 />
             </div>
-             {form.formState.errors.relatedLeadId && <FormMessage>{form.formState.errors.relatedLeadId.message}</FormMessage>}
+            {/* Display the specific error message for the refine condition */}
+            {form.formState.errors.relatedLeadId?.type === 'custom' && <FormMessage>{form.formState.errors.relatedLeadId.message}</FormMessage>}
 
 
             {isUploading && (
