@@ -50,7 +50,7 @@ export interface User {
   email: string;
   avatarUrl?: string;
   role: UserRole; // Updated to use UserRole
-  // groups?: string[]; // Potential future field for user's group memberships
+  groups?: string[]; // IDs of groups the user belongs to
 }
 
 export interface Comment {
@@ -393,8 +393,8 @@ export interface DocumentFile {
 
   permissions?: {
     users?: DocumentUserPermission[];
-    groups?: DocumentGroupPermission[]; // Added group permissions
-  } | null; // Allow null for Firestore initially
+    groups?: DocumentGroupPermission[];
+  } | null;
 
   basedOnTemplateId?: string | null; // ID of the DocumentTemplate used to generate this document
   templateVariablesFilled?: Record<string, string> | null; // Values used for template variables during generation
@@ -422,7 +422,8 @@ export type LucideIcon = LucideIconType;
 export interface UserGroup {
     id: string;
     name: string;
-    memberIds: string[];
+    description?: string;
+    memberIds?: string[]; // Array of User IDs
+    // other group-specific fields
 }
-
     
