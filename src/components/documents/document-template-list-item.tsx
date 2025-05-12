@@ -5,7 +5,7 @@ import type { DocumentTemplate } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileSignature, Edit3, Trash2, CalendarDays, Variable, FileText, Link as LinkIconLucide } from "lucide-react";
+import { FileSignature, Edit3, Trash2, CalendarDays, Variable, FileText, Link as LinkIconLucide, Play } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -19,14 +19,14 @@ interface DocumentTemplateListItemProps {
   template: DocumentTemplate;
   onEdit: (template: DocumentTemplate) => void;
   onDelete: (template: DocumentTemplate) => void;
-  // onGenerate?: (template: DocumentTemplate) => void; // Future functionality
+  onGenerate: (template: DocumentTemplate) => void; 
 }
 
 export function DocumentTemplateListItem({
   template,
   onEdit,
   onDelete,
-  // onGenerate 
+  onGenerate,
 }: DocumentTemplateListItemProps) {
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-full">
@@ -46,16 +46,16 @@ export function DocumentTemplateListItem({
             </div>
           </div>
            <div className="flex gap-1">
-            {/* <TooltipProvider>
+            <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => onGenerate?.(template)} className="h-8 w-8" disabled>
+                        <Button variant="ghost" size="icon" onClick={() => onGenerate(template)} className="h-8 w-8">
                            <Play className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>Generar Documento (Próx.)</p></TooltipContent>
+                    <TooltipContent><p>Generar Documento</p></TooltipContent>
                 </Tooltip>
-            </TooltipProvider> */}
+            </TooltipProvider>
             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>

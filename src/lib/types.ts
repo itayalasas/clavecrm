@@ -363,7 +363,10 @@ export interface DocumentFile {
   sharedWithUserIds?: string[];
   sharedWithGroupIds?: string[]; 
   accessLink?: string; 
-  linkExpiresAt?: string; 
+  linkExpiresAt?: string;
+  
+  basedOnTemplateId?: string; // ID of the DocumentTemplate used to generate this document
+  templateVariablesFilled?: Record<string, string>; // Values used for template variables during generation
 }
 
 export interface DocumentTemplate {
