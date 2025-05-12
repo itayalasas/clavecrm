@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { ActivityLog, User } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { HistoryIcon, UserCircle, CalendarDays, ShieldAlert, Settings, FileText, Users, ShoppingCart, ReceiptSend, Send, Users2, Ticket, Zap, LayoutDashboardIcon } from "lucide-react";
+import { HistoryIcon, UserCircle, CalendarDays, ShieldAlert, Settings, FileText, Users, ShoppingCart, Receipt, Send, Users2, Ticket, Zap, LayoutDashboardIcon, LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,7 +28,7 @@ const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
     EmailCampaign: Send,
     Quote: FileText,
     Order: ShoppingCart,
-    Invoice: ReceiptSend,
+    Invoice: Receipt, // Changed from ReceiptSend
     Meeting: CalendarDays,
     ContactList: Users2,
     EmailTemplate: FileText,
@@ -84,7 +84,7 @@ export default function AuditLogPage() {
       });
       setAuditLogs(fetchedLogs);
     } catch (error) {
-      console.error("Error fetching audit logs:", error);
+      console.error("Error al obtener historial de auditoría:", error);
       toast({ title: "Error al Cargar Historial de Auditoría", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -100,7 +100,7 @@ export default function AuditLogPage() {
         });
         setUsersMap(map);
     } catch (error) {
-        console.error("Error fetching users map for audit log:", error);
+        console.error("Error al obtener mapa de usuarios para historial de auditoría:", error);
     }
   }, [getAllUsers]);
 
@@ -225,3 +225,4 @@ export default function AuditLogPage() {
     </div>
   );
 }
+
