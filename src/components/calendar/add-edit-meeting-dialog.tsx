@@ -28,6 +28,7 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card } from "@/components/ui/card"; // Added import for Card
 
 const attendeeSchema = z.object({
   id: z.string().min(1), // Could be userId, contactId, or a temporary ID for external
@@ -48,7 +49,7 @@ const meetingFormSchema = z.object({
   location: z.string().optional(),
   conferenceLink: z.string().url("Enlace de conferencia inválido.").optional().or(z.literal('')),
   relatedLeadId: z.string().optional(),
-  status: z.enum(MEETING_STATUSES, { errorMap: () => ({ message: "Estado inválido."}) }),
+  status: z.enum(MEETING_STATUSES as [string, ...string[]], { errorMap: () => ({ message: "Estado inválido."}) }),
 }).refine(data => {
     const startDateTime = setMinutes(setHours(data.startDate, parseInt(data.startTime.split(':')[0])), parseInt(data.startTime.split(':')[1]));
     const endDateTime = setMinutes(setHours(data.endDate, parseInt(data.endTime.split(':')[0])), parseInt(data.endTime.split(':')[1]));
