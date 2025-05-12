@@ -1,3 +1,4 @@
+
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
 export interface Lead {
@@ -197,9 +198,9 @@ export interface EmailTemplate {
 export type EmailCampaignStatus = 'Borrador' | 'Programada' | 'Enviando' | 'Enviada' | 'Archivada' | 'Fallida';
 
 export interface EmailCampaignAnalytics {
-  totalRecipients: number; // Now mandatory for new campaigns
-  emailsSent: number; // Now mandatory for new campaigns
-  emailsDelivered?: number; // Requires webhook or feedback loop from SMTP provider
+  totalRecipients: number;
+  emailsSent: number;
+  emailsDelivered?: number; 
   emailsOpened?: number;
   uniqueOpens?: number;
   emailsClicked?: number;
@@ -228,7 +229,7 @@ export interface EmailCampaign {
   sentAt?: string; // ISO string
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
-  analytics: EmailCampaignAnalytics; // Changed to be non-optional
+  analytics: EmailCampaignAnalytics; 
 }
 
 // Types for new email template features
@@ -257,3 +258,83 @@ export interface EmailSettings {
   defaultSenderName: string;
   sendRateLimit?: number; // e.g., emails per hour
 }
+
+// Collaboration and Productivity Types
+export type MeetingStatus = 'Programada' | 'Confirmada' | 'Cancelada' | 'Realizada' | 'Pospuesta';
+export type ActivityType = 'Llamada' | 'Reunión' | 'Correo Enviado' | 'Correo Recibido' | 'Nota' | 'Visita';
+
+export interface MeetingAttendee {
+  userId?: string; // If CRM user
+  contactId?: string; // If external contact
+  name: string; // Denormalized name
+  email: string; // Denormalized email
+  status: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Tentativa';
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description?: string;
+  startTime: string; // ISO string
+  endTime: string; // ISO string
+  attendees: MeetingAttendee[];
+  location?: string; // Can be a physical address or "Videollamada"
+  conferenceLink?: string; // For online meetings
+  relatedLeadId?: string;
+  relatedTicketId?: string;
+  createdByUserId: string;
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  status: MeetingStatus;
+  reminderSent?: boolean;
+}
+
+export interface ActivityLog {
+  id: string;
+  type: ActivityType;
+  subject?: string; // e.g., "Llamada de seguimiento", "Email sobre propuesta"
+  details: string; // Content of the note, summary of the call/meeting, email body snippet
+  timestamp: string; // ISO string - when the activity occurred or was logged
+  loggedByUserId: string; // User who logged the activity
+  relatedLeadId?: string;
+  relatedContactId?: string; // Could be derived from Lead or direct contact
+  relatedTicketId?: string;
+  relatedOrderId?: string;
+  durationMinutes?: number; // For calls/meetings
+  outcome?: string; // e.g., "Interesado", "Necesita seguimiento", "Problema resuelto"
+  createdAt: string; // ISO string - when the log entry was created
+}
+
+export interface DocumentFile {
+  id: string;
+  name: string; // Original file name
+  storagePath: string; // Path in Firebase Storage
+  fileUrl: string; // Download URL
+  fileType: string; // MIME type
+  fileSize: number; // in bytes
+  version?: string;
+  description?: string;
+  relatedLeadId?: string;
+  relatedQuoteId?: string;
+  relatedOrderId?: string;
+  relatedInvoiceId?: string;
+  relatedTicketId?: string;
+  uploadedAt: string; // ISO string
+  uploadedByUserId: string;
+  tags?: string[];
+}
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string; // e.g., "Contratos", "Propuestas de Venta", "Informes"
+  content?: string; // For simple text/markdown templates. For complex, might be a link or reference.
+  storagePath?: string; // If the template itself is a file (e.g. .docx, .pdf template)
+  variables?: string[]; // e.g. {{lead_name}}, {{company_name}}
+  createdAt: string;
+  createdByUserId: string;
+  updatedAt?: string;
+}
+
+    

@@ -1,6 +1,6 @@
 
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown } from 'lucide-react'; // Added Settings icon
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityType } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban } from 'lucide-react'; // Added Settings icon
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -33,20 +33,30 @@ export const NAV_ITEMS: NavItem[] = [
     subItems: [
       { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
       { href: '/email-campaigns', label: 'Campañas de Email', icon: Send },
-      { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap },
-      { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate },
-      { href: '/social-crm', label: 'Social CRM', icon: Share2 },
+      { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap, disabled: true },
+      { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate, disabled: true },
+      { href: '/social-crm', label: 'Social CRM', icon: Share2, disabled: true },
     ],
     parentActiveIf: (pathname) => ['/ai-email-assistant', '/email-campaigns', '/marketing-automation', '/landing-pages', '/social-crm'].some(p => pathname.startsWith(p)),
   },
   {
-    label: 'Soporte y Tareas',
+    label: 'Colaboración y Productividad',
+    icon: UsersRound,
+    subItems: [
+      { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays, disabled: true },
+      { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, disabled: true },
+      { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban, disabled: true },
+      { href: '/tasks', label: 'Tareas', icon: ListChecks }, // Moved from "Soporte y Tareas"
+    ],
+    parentActiveIf: (pathname) => ['/calendar', '/activity-log', '/documents', '/tasks'].some(p => pathname.startsWith(p)),
+  },
+  { 
+    label: 'Soporte al Cliente',
     icon: LifeBuoy,
     subItems: [
-      { href: '/tasks', label: 'Tareas', icon: ListChecks },
       { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
     ],
-    parentActiveIf: (pathname) => ['/tasks', '/tickets'].some(p => pathname.startsWith(p)),
+    parentActiveIf: (pathname) => pathname.startsWith('/tickets'),
   },
   {
     label: 'Administración',
@@ -197,3 +207,8 @@ export const COMMON_EMAIL_VARIABLES: CommonEmailVariable[] = [
   { variable: "{{nombre_campana}}", description: "Nombre de la campaña actual." },
   { variable: "{{fecha_actual}}", description: "Fecha actual del envío." },
 ];
+
+export const MEETING_STATUSES: MeetingStatus[] = ['Programada', 'Confirmada', 'Cancelada', 'Realizada', 'Pospuesta'];
+export const ACTIVITY_TYPES: ActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'];
+
+    
