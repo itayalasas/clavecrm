@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import type { User, Lead, Contact, Order, Quote, Ticket } from "@/lib/types"; // Assuming other types might be needed for association
+import type { User, Lead, Contact, Order, Quote, Ticket } from "@/lib/types"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { db, storage } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_FILE_TYPES = [
@@ -31,19 +34,16 @@ const formSchema = z.object({
     .refine((file) => file.size <= MAX_FILE_SIZE, `El tamaño máximo del archivo es ${MAX_FILE_SIZE / (1024*1024)}MB.`)
     .refine((file) => ALLOWED_FILE_TYPES.includes(file.type), "Tipo de archivo no permitido."),
   description: z.string().optional(),
-  tags: z.string().optional(), // Comma-separated tags
-  // Add fields for association later if needed (e.g., relatedLeadId)
+  tags: z.string().optional(), 
 });
 
 type DocumentUploadFormValues = z.infer<typeof formSchema>;
 
 interface DocumentUploadFormProps {
   currentUser: User | null;
-  onUploadSuccess: () => void; // Callback to refresh document list
-  // Pass lists of other entities if direct association in form is needed
+  onUploadSuccess: () => void; 
   leads?: Lead[];
   contacts?: Contact[];
-  // ... other entities
 }
 
 export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contacts }: DocumentUploadFormProps) {
@@ -59,7 +59,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
     const file = event.target.files?.[0];
     if (file) {
       form.setValue("file", file);
-      form.clearErrors("file");
+      form.clearErrors("file"); 
     }
   };
 
@@ -75,54 +75,68 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
 
     setIsUploading(true);
     setUploadProgress(0);
-
-    // Simulate upload to Firebase Storage and saving metadata to Firestore
-    // In a real app, this would involve calls to Firebase SDK
-    // For now, we'll simulate it with a delay
     
-    const fileName = data.file.name;
-    const fileType = data.file.type;
-    const fileSize = data.file.size;
-    const description = data.description;
-    const tagsArray = data.tags?.split(',').map(tag => tag.trim()).filter(tag => tag) || [];
+    const fileToUpload = data.file;
+    const fileNameInStorage = `${Date.now()}-${currentUser.id}-${fileToUpload.name}`;
+    const filePath = `documents/${currentUser.id}/${fileNameInStorage}`;
+    const fileStorageRef = storageRef(storage, filePath);
 
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setUploadProgress(progress);
-      if (progress >= 100) clearInterval(interval);
-    }, 200);
+    const uploadTask = uploadBytesResumable(fileStorageRef, fileToUpload);
 
-    await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate upload time
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (error) => {
+        console.error("Error subiendo archivo:", error);
+        toast({ title: "Error al Subir Archivo", description: error.message, variant: "destructive" });
+        setIsUploading(false);
+        setUploadProgress(0);
+      },
+      async () => {
+        // Upload completed successfully, now get the download URL
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          
+          const docData = {
+            name: fileToUpload.name,
+            fileNameInStorage: fileNameInStorage, 
+            fileURL: downloadURL,
+            fileType: fileToUpload.type,
+            fileSize: fileToUpload.size,
+            description: data.description || "",
+            tags: data.tags?.split(',').map(tag => tag.trim()).filter(tag => tag) || [],
+            uploadedAt: serverTimestamp(),
+            uploadedByUserId: currentUser.id,
+            uploadedByUserName: currentUser.name || "Usuario Desconocido",
+            currentVersion: 1, 
+          };
 
-    try {
-      // This is where you would use Firebase SDK:
-      // 1. Upload to Firebase Storage:
-      //    const storageRef = ref(storage, `documents/${currentUser.id}/${Date.now()}-${fileName}`);
-      //    const uploadTask = uploadBytesResumable(storageRef, data.file);
-      //    ... (handle progress, get downloadURL)
-      // 2. Save metadata to Firestore:
-      //    const docData = { name: fileName, fileURL, fileType, fileSize, description, tagsArray, uploadedAt: serverTimestamp(), uploadedByUserId: currentUser.id, uploadedByUserName: currentUser.name, ...associations };
-      //    await addDoc(collection(db, "documents"), docData);
+          await addDoc(collection(db, "documents"), docData);
 
-      toast({
-        title: "Documento Subido (Simulado)",
-        description: `El archivo "${fileName}" ha sido subido exitosamente.`,
-      });
-      onUploadSuccess();
-      form.reset({ description: "", tags: "" }); 
-      const fileInput = document.getElementById('document-file-input') as HTMLInputElement | null;
-      if (fileInput) fileInput.value = ""; // Reset file input
-      
-    } catch (error) {
-      console.error("Error subiendo documento (simulado):", error);
-      toast({ title: "Error al Subir Documento", description: "Ocurrió un error.", variant: "destructive" });
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      clearInterval(interval); // Ensure interval is cleared
-    }
+          toast({
+            title: "Documento Subido",
+            description: `El archivo "${fileToUpload.name}" ha sido subido exitosamente.`,
+          });
+          onUploadSuccess();
+          form.reset({ description: "", tags: "" }); 
+          // Reset file input field
+          const fileInput = document.getElementById('document-file-input') as HTMLInputElement | null;
+          if (fileInput) {
+            fileInput.value = ""; 
+          }
+          
+        } catch (error) {
+          console.error("Error guardando metadata del documento:", error);
+          toast({ title: "Error al Guardar Documento", description: "Ocurrió un error al guardar la información del documento.", variant: "destructive" });
+        } finally {
+          setIsUploading(false);
+          setUploadProgress(0);
+        }
+      }
+    );
   };
 
   return (
@@ -142,7 +156,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads, contac
             <FormField
               control={form.control}
               name="file"
-              render={({ fieldState }) => ( // field is not directly used, manage file via native input
+              render={({ fieldState }) => ( 
                 <FormItem>
                   <FormLabel htmlFor="document-file-input">Archivo</FormLabel>
                   <FormControl>

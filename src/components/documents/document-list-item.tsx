@@ -17,20 +17,20 @@ import {
 
 interface DocumentListItemProps {
   documentFile: DocumentFile;
-  onDelete: (documentId: string, storagePath: string, fileNameInStorage: string) => void; // Added fileNameInStorage for deletion
+  onDelete: (documentId: string, storagePath: string) => void;
 }
 
 function getFileIcon(fileType: string): LucideIcon {
   if (fileType.startsWith("image/")) return FileImage;
   if (fileType.startsWith("audio/")) return FileAudio;
   if (fileType.startsWith("video/")) return FileVideo;
-  if (fileType.startsWith("application/pdf")) return FileType; // More specific for PDF
+  if (fileType.startsWith("application/pdf")) return FileType; 
   if (fileType.startsWith("application/zip") || fileType.startsWith("application/x-rar-compressed")) return FileArchive;
   if (fileType.startsWith("text/")) return FileText;
-  if (fileType.includes("word")) return FileText; // .doc, .docx
-  if (fileType.includes("excel") || fileType.includes("spreadsheet")) return FileText; // .xls, .xlsx
-  if (fileType.includes("powerpoint") || fileType.includes("presentation")) return FileText; // .ppt, .pptx
-  return FileQuestion; // Default icon
+  if (fileType.includes("word")) return FileText; 
+  if (fileType.includes("excel") || fileType.includes("spreadsheet")) return FileText; 
+  if (fileType.includes("powerpoint") || fileType.includes("presentation")) return FileText; 
+  return FileQuestion; 
 }
 
 function formatFileSize(bytes: number): string {
@@ -44,6 +44,8 @@ function formatFileSize(bytes: number): string {
 
 export function DocumentListItem({ documentFile, onDelete }: DocumentListItemProps) {
   const FileIcon = getFileIcon(documentFile.fileType);
+  // Construct the full storage path for deletion
+  const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -76,7 +78,7 @@ export function DocumentListItem({ documentFile, onDelete }: DocumentListItemPro
             <TooltipProvider>
                  <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => onDelete(documentFile.id, `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`, documentFile.fileNameInStorage)} className="h-8 w-8 text-destructive hover:text-destructive">
+                        <Button variant="ghost" size="icon" onClick={() => onDelete(documentFile.id, storagePath)} className="h-8 w-8 text-destructive hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>

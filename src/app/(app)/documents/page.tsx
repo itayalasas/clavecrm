@@ -7,7 +7,7 @@ import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FolderKanban, PlusCircle, Search, Filter, UploadCloud, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIcon } from "lucide-react";
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIconLucide } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,7 +36,7 @@ export default function DocumentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
-  const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string, fileNameInStorage: string} | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{id: string, storagePath: string} | null>(null);
 
 
   const { currentUser } = useAuth();
@@ -82,8 +82,8 @@ export default function DocumentsPage() {
     setIsUploadFormVisible(false); // Optionally hide form after upload
   };
 
-  const confirmDeleteDocument = (docId: string, storagePath: string, fileNameInStorage: string) => {
-    setDocumentToDelete({ id: docId, storagePath, fileNameInStorage });
+  const confirmDeleteDocument = (docId: string, storagePath: string) => {
+    setDocumentToDelete({ id: docId, storagePath });
   };
 
   const handleDeleteDocument = async () => {
@@ -91,14 +91,7 @@ export default function DocumentsPage() {
 
     try {
       // 1. Delete from Firebase Storage
-      // The storagePath for deletion needs to be constructed carefully.
-      // Assuming fileNameInStorage is the actual name in the bucket.
-      // Example path: `documents/${currentUser.id}/${documentToDelete.fileNameInStorage}`
-      // This needs to match how it was saved during upload. For now, using a simplified direct path.
-      // THIS IS A SIMPLIFIED PATH and might need adjustment based on your actual storage structure.
-      // If your `fileNameInStorage` already includes the full path structure from `documents/...` then just use that.
-      // For this example, I'm assuming `fileNameInStorage` is just the file name.
-      const fileRef = storageRef(storage, documentToDelete.storagePath); // Using the full path passed
+      const fileRef = storageRef(storage, documentToDelete.storagePath); 
       await deleteObject(fileRef);
 
       // 2. Delete metadata from Firestore
@@ -164,7 +157,7 @@ export default function DocumentsPage() {
                 Organiza y gestiona todos los documentos relacionados con tus clientes, ventas y proyectos.
                 </CardDescription>
             </div>
-            <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled>
+            <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled={!currentUser}>
                 <PlusCircle className="mr-2 h-4 w-4" /> {isUploadFormVisible ? "Cancelar Subida" : "Subir Documento"}
             </Button>
           </div>
@@ -188,7 +181,6 @@ export default function DocumentsPage() {
                     className="pl-8 w-full"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    disabled
                 />
             </div>
             <Button variant="outline" disabled>
@@ -215,7 +207,7 @@ export default function DocumentsPage() {
             <div className="text-center py-10 text-muted-foreground">
               <FolderKanban className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <p className="text-lg">No hay documentos.</p>
-              <p>Esta funcionalidad está en desarrollo. Vuelve pronto.</p>
+               {searchTerm ? <p>Intenta con otro término de búsqueda.</p> : <p>Empieza subiendo tu primer documento.</p>}
             </div>
           )}
         </CardContent>
@@ -224,7 +216,7 @@ export default function DocumentsPage() {
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
          {renderFutureFeatureCard(
             "Asociación de Documentos",
-            LinkIcon,
+            LinkIconLucide,
             "Vincula documentos a leads, contactos, oportunidades, etc.",
             ["Seleccionar lead/contacto al subir.", "Ver documentos desde la ficha del lead/contacto."]
         )}
@@ -248,7 +240,7 @@ export default function DocumentsPage() {
         )}
          {renderFutureFeatureCard(
             "Integración con Almacenamiento en la Nube",
-            Settings2, // Using Settings2 as a generic integration icon
+            Settings2, 
             "Conecta con servicios como Google Drive o Dropbox (Funcionalidad Avanzada).",
             ["Sincronizar documentos desde/hacia almacenamientos externos.", "Autenticación con servicios de terceros."]
         )}
