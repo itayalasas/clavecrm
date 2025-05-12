@@ -52,7 +52,7 @@ const meetingFormSchema = z.object({
   conferenceLink: z.string().url("Enlace de conferencia inválido.").optional().or(z.literal('')),
   relatedLeadId: z.string().optional(), 
   status: z.enum(MEETING_STATUSES as [string, ...string[]], { errorMap: () => ({ message: "Estado inválido."}) }),
-  resources: z.string().optional(), // New field for resources/room
+  resources: z.string().optional(),
 }).refine(data => {
     const startDateTime = setMinutes(setHours(data.startDate, parseInt(data.startTime.split(':')[0])), parseInt(data.startTime.split(':')[1]));
     const endDateTime = setMinutes(setHours(data.endDate, parseInt(data.endTime.split(':')[0])), parseInt(data.endTime.split(':')[1]));
@@ -164,7 +164,7 @@ export function AddEditMeetingDialog({
       conferenceLink: data.conferenceLink,
       relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? undefined : data.relatedLeadId,
       status: data.status,
-      resources: data.resources, // Save resources
+      resources: data.resources,
     };
 
     const success = await onSave(meetingPayload, meetingToEdit?.id);

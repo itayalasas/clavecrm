@@ -16,7 +16,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge"; // Added import for Badge
+import { Badge } from "@/components/ui/badge";
 
 export default function CalendarPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/calendar');
@@ -53,7 +53,7 @@ export default function CalendarPage() {
       });
       setMeetings(fetchedMeetings);
     } catch (error) {
-      console.error("Error fetching meetings:", error);
+      console.error("Error al obtener reuniones:", error);
       toast({ title: "Error al Cargar Reuniones", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -69,7 +69,7 @@ export default function CalendarPage() {
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
 
     } catch (error) {
-      console.error("Error fetching leads/contacts:", error);
+      console.error("Error al obtener leads/contactos:", error);
       toast({ title: "Error al Cargar Datos de Soporte", description: "No se pudieron cargar leads/contactos.", variant: "destructive"});
     }
   }, [toast]);
@@ -79,7 +79,7 @@ export default function CalendarPage() {
       const allUsers = await getAllUsers();
       setUsers(allUsers);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error al obtener usuarios:", error);
       toast({ title: "Error al Cargar Usuarios", variant: "destructive"});
     }
   }, [getAllUsers, toast]);
@@ -119,7 +119,7 @@ export default function CalendarPage() {
       }
       return true;
     } catch (error) {
-      console.error("Error saving meeting:", error);
+      console.error("Error guardando reunión:", error);
       toast({ title: "Error al Guardar Reunión", variant: "destructive" });
       return false;
     } finally {
@@ -134,7 +134,7 @@ export default function CalendarPage() {
       toast({ title: "Reunión Eliminada", description: "La reunión ha sido eliminada." });
       fetchMeetings();
     } catch (error) {
-      console.error("Error deleting meeting:", error);
+      console.error("Error eliminando reunión:", error);
       toast({ title: "Error al Eliminar Reunión", variant: "destructive" });
     }
   };
@@ -218,7 +218,7 @@ export default function CalendarPage() {
         <CardHeader>
           <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
             <AlertTriangle className="h-5 w-5" />
-            Funcionalidades Adicionales y en Desarrollo
+            Estado de Desarrollo de Funcionalidades
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-amber-600">
@@ -235,12 +235,12 @@ export default function CalendarPage() {
             </li>
              <li>
               <strong>Asignación de salas o recursos para reuniones:</strong>
-              <Badge variant="destructive" className="ml-2">En Desarrollo</Badge>
-              <p className="text-xs pl-5">Se añadirá la opción de seleccionar salas o recursos (proyectores, etc.) al crear/editar reuniones.</p>
+              <Badge variant="default" className="ml-2 bg-yellow-500 text-black">Parcialmente Implementado</Badge>
+              <p className="text-xs pl-5">Se añadió campo para recursos/sala en el formulario. La gestión y disponibilidad de recursos está en desarrollo.</p>
             </li>
             <li>
               <strong>Sincronización con calendarios externos (Google Calendar, Outlook):</strong>
-              <Badge variant="destructive" className="ml-2">Planeado (Avanzado)</Badge>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado (Avanzado)</Badge>
               <p className="text-xs pl-5">Esta funcionalidad es compleja y se considera para futuras versiones mayores.</p>
             </li>
           </ul>
