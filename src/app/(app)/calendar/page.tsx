@@ -6,7 +6,7 @@ import type { Meeting, Lead, User, Contact } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarDays, PlusCircle, List, AlertTriangle, Send, Users as UsersIcon, Video } from "lucide-react";
+import { CalendarDays, PlusCircle, List, AlertTriangle } from "lucide-react";
 import { AddEditMeetingDialog } from "@/components/calendar/add-edit-meeting-dialog";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { MeetingListItem } from "@/components/calendar/meeting-list-item"; 
@@ -16,7 +16,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge"; // Imported Badge
 
 export default function CalendarPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/calendar');

@@ -84,14 +84,14 @@ export function AppSidebar() {
   return (
     <Sidebar
       variant="sidebar" 
-      collapsible={sidebarState === "collapsed" ? "icon" : "offcanvas"} // Adjust based on actual hook if needed
+      collapsible={sidebarState === "collapsed" ? "icon" : "offcanvas"} 
       className="border-r"
     >
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <IconComponent className="h-8 w-8 text-primary" />
+          <IconComponent className="h-8 w-8 text-primary flex-shrink-0" />
           {sidebarState === "expanded" && (
-            <h1 className="text-xl font-semibold">{APP_NAME}</h1>
+            <h1 className="text-xl font-semibold truncate">{APP_NAME}</h1>
           )}
         </Link>
       </SidebarHeader>
@@ -106,17 +106,17 @@ export function AppSidebar() {
                     onClick={() => toggleSubmenu(item.label)}
                     isActive={isParentActive(item)}
                     className={cn(
-                      "justify-between w-full", // Ensure button takes full width for chevron
+                      "justify-between w-full", 
                       sidebarState === "collapsed" && "justify-center"
                     )}
                     tooltip={item.label}
                   >
-                    <div className="flex items-center gap-2">
-                      <item.icon className="h-5 w-5" />
-                      {sidebarState === "expanded" && <span>{item.label}</span>}
+                    <div className="flex items-center gap-2 min-w-0"> {/* Added min-w-0 */}
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {sidebarState === "expanded" && <span className="truncate">{item.label}</span>} {/* Added truncate */}
                     </div>
                     {sidebarState === "expanded" && (
-                      <ChevronDown className={cn("h-4 w-4 transition-transform", openSubmenus[item.label] ? "rotate-180" : "")} />
+                      <ChevronDown className={cn("h-4 w-4 transition-transform flex-shrink-0", openSubmenus[item.label] ? "rotate-180" : "")} />
                     )}
                   </SidebarMenuButton>
                   {sidebarState === "expanded" && openSubmenus[item.label] && (
@@ -129,8 +129,8 @@ export function AppSidebar() {
                                 isActive={subItem.href ? pathname.startsWith(subItem.href) : false}
                             >
                                 <a>
-                                    <subItem.icon className="h-4 w-4 mr-2" />
-                                    {subItem.label}
+                                    <subItem.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span className="truncate">{subItem.label}</span> {/* Added truncate */}
                                 </a>
                             </SidebarMenuSubButton>
                            </Link>
@@ -145,14 +145,13 @@ export function AppSidebar() {
                     asChild
                     isActive={item.href ? pathname.startsWith(item.href) : false}
                     className={cn(
-                      "justify-start",
                       sidebarState === "collapsed" && "justify-center"
                     )}
                     tooltip={item.label}
                   >
                     <a>
-                      <item.icon className="h-5 w-5" />
-                      {sidebarState === "expanded" && <span>{item.label}</span>}
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {sidebarState === "expanded" && <span className="truncate">{item.label}</span>} {/* Added truncate */}
                     </a>
                   </SidebarMenuButton>
                 </Link>
@@ -166,15 +165,15 @@ export function AppSidebar() {
         {currentUser ? (
           sidebarState === 'expanded' ? (
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-10 w-10 flex-shrink-0">
                 <AvatarImage src={currentUser.avatarUrl || `https://avatar.vercel.sh/${currentUser.email}.png`} alt={currentUser.name || "Usuario"} data-ai-hint="user avatar" />
                 <AvatarFallback>{getUserInitials(currentUser.name)}</AvatarFallback>
               </Avatar>
-              <div>
-                <p className="text-sm font-medium truncate max-w-[120px]">{currentUser.name || "Usuario"}</p>
-                <p className="text-xs text-muted-foreground truncate max-w-[120px]">{currentUser.email}</p>
+              <div className="min-w-0"> {/* Added min-w-0 for truncation */}
+                <p className="text-sm font-medium truncate">{currentUser.name || "Usuario"}</p>
+                <p className="text-xs text-muted-foreground truncate">{currentUser.email}</p>
               </div>
-              <Button variant="ghost" size="icon" className="ml-auto" title="Cerrar Sesión" onClick={handleLogout}>
+              <Button variant="ghost" size="icon" className="ml-auto flex-shrink-0" title="Cerrar Sesión" onClick={handleLogout}>
                 <LogOut className="h-5 w-5" />
               </Button>
             </div>
@@ -203,7 +202,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
-// Helper: Define APP_NAME_ICON if not already defined. 
-// Using Briefcase as a placeholder from your constants.
-const APP_NAME_ICON = Briefcase;
