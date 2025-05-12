@@ -28,32 +28,24 @@ export function DocumentViewerDialog({
 }: DocumentViewerDialogProps) {
   const [textContent, setTextContent] = useState<string | null>(null);
   const [isLoadingText, setIsLoadingText] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null); // New state for specific fetch error
   const { toast } = useToast();
 
   useEffect(() => {
-    let mounted = true; 
+    let mounted = true;
+    setFetchError(null); // Reset error on open or document change
 
     const fetchTextContent = async () => {
       if (isOpen && documentFile && documentFile.fileType.startsWith("text/")) {
         if (mounted) {
           setIsLoadingText(true);
           setTextContent(null);
+          setFetchError(null); // Reset fetch error before new attempt
         }
         try {
-          // IMPORTANT: This fetch request might be blocked by CORS if Firebase Storage rules are not configured correctly.
-          // Ensure your Firebase Storage bucket has CORS rules allowing GET requests from your app's domain.
-          // Example cors.json (provided in your project files, should be applied to the bucket):
-          // [
-          //   {
-          //     "origin": ["*"], // For development. For production, list your specific domains.
-          //     "method": ["GET"],
-          //     "maxAgeSeconds": 3600
-          //   }
-          // ]
-          // Upload this to your bucket using gsutil: gsutil cors set cors.json gs://your-bucket-name
           const response = await fetch(documentFile.fileURL);
           if (!response.ok) {
-            throw new Error(`Error al cargar el archivo: ${response.statusText}`);
+            throw new Error(`Error al cargar el archivo (${response.status}): ${response.statusText}`);
           }
           const text = await response.text();
           if (mounted) {
@@ -61,32 +53,28 @@ export function DocumentViewerDialog({
           }
         } catch (error: any) {
           console.error(`Error fetching text content from URL: ${documentFile?.fileURL}`, error);
-          let detailedDescription = "No se pudo cargar el contenido del archivo de texto.";
-
-          if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
-            detailedDescription += " Este error ('Failed to fetch') frecuentemente indica un problema de CORS o de red. ";
+          let userFriendlyError = `No se pudo cargar el contenido de "${documentFile?.name}".`;
+          
+          if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError") || error.message.toLowerCase().includes("cors")) {
+            userFriendlyError += " Esto podría ser un problema de CORS o de red. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permita solicitudes GET desde este dominio.";
             console.error(
                 "POSIBLE PROBLEMA DE CORS: Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. " +
                 "Revisa la consola de red del navegador (pestaña Network) para más detalles sobre la solicitud fallida y verifica tu archivo cors.json en el bucket. " +
                 "Ejemplo de cors.json para desarrollo: [{\"origin\": [\"*\"], \"method\": [\"GET\"], \"maxAgeSeconds\": 3600}]. " +
                 "Para producción, especifica tus dominios en lugar de '*'."
             );
-          } else if (error.message?.includes("NetworkError") || error.message?.toLowerCase().includes("cors")) {
-            detailedDescription += " Esto podría deberse a un problema de CORS o de red. ";
+          } else {
+            userFriendlyError += ` Detalles: ${error.message}`;
           }
-          
-          detailedDescription += "Asegúrate de que la configuración CORS de tu Firebase Storage bucket esté correctamente desplegada y permite solicitudes GET desde este dominio. " +
-                               "Busca 'Firebase Storage CORS' para más detalles. " +
-                               "Si el problema persiste, revisa la consola de red del navegador para más información.";
 
           if (mounted) {
+            setFetchError(userFriendlyError); // Set specific error message for UI
             toast({
               title: "Error al Cargar Contenido",
-              description: detailedDescription,
+              description: "No se pudo cargar el contenido del archivo. Revisa la consola para más detalles y verifica la configuración CORS de Firebase Storage si el problema persiste.",
               variant: "destructive",
-              duration: 20000, 
+              duration: 10000, 
             });
-            setTextContent(`Error al cargar el contenido del archivo "${documentFile?.name}". Revisa la consola del navegador para más detalles y verifica la configuración CORS de Firebase Storage.`);
           }
         } finally {
           if (mounted) {
@@ -97,7 +85,18 @@ export function DocumentViewerDialog({
     };
 
     if (isOpen && documentFile?.fileURL) {
-        fetchTextContent();
+        if (documentFile.fileType.startsWith("text/")) { // Only fetch if it's text-based
+            fetchTextContent();
+        } else {
+            setIsLoadingText(false); // Not text, so no loading needed for text content
+            setTextContent(null);
+            setFetchError(null);
+        }
+    } else {
+        // Clear content if dialog is closed or no document
+        setTextContent(null);
+        setFetchError(null);
+        setIsLoadingText(false);
     }
 
     return () => {
@@ -140,9 +139,20 @@ export function DocumentViewerDialog({
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                 <p className="text-muted-foreground">Cargando contenido del texto...</p>
               </div>
+            ) : fetchError ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
+                <h3 className="text-lg font-semibold mb-2 text-destructive">Error al Cargar Contenido</h3>
+                <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap">{fetchError}</p>
+                <Button asChild>
+                  <a href={documentFile.fileURL} download={documentFile.name} target="_blank" rel="noopener noreferrer">
+                    <Download className="mr-2 h-4 w-4" /> Descargar Documento Directamente
+                  </a>
+                </Button>
+              </div>
             ) : (
               <ScrollArea className="w-full h-full p-4 bg-background">
-                <pre className="text-sm whitespace-pre-wrap break-all">{textContent || "No hay contenido para mostrar o error al cargar."}</pre>
+                <pre className="text-sm whitespace-pre-wrap break-all">{textContent || "No hay contenido para mostrar."}</pre>
               </ScrollArea>
             )
           ) : (isDocx || isXlsx) ? (
