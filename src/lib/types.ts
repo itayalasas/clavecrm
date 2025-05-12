@@ -1,4 +1,3 @@
-
 import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
@@ -261,6 +260,17 @@ export interface EmailSettings {
   defaultSenderName: string;
   sendRateLimit?: number; // e.g., emails per hour
 }
+
+export interface LiveChatWidgetSettings {
+  widgetEnabled: boolean;
+  primaryColor: string; // Hex color
+  welcomeMessage: string;
+  chatHeaderText?: string;
+  widgetPosition: 'bottom-right' | 'bottom-left';
+  // companyLogoUrl?: string; // Future
+  // agentAvatarUrl?: string; // Future
+}
+
 
 // Collaboration and Productivity Types
 export type MeetingStatus = 'Programada' | 'Confirmada' | 'Cancelada' | 'Realizada' | 'Pospuesta';

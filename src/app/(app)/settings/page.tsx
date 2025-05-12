@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -12,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NAV_ITEMS } from "@/lib/constants";
 import type { EmailSettings, SMTPSecurity } from "@/lib/types";
-import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History } from "lucide-react";
+import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -34,7 +33,7 @@ const emailSettingsSchema = z.object({
 type EmailSettingsFormValues = z.infer<typeof emailSettingsSchema>;
 
 export default function SettingsPage() {
-  const navItem = NAV_ITEMS.find(item => item.href === '/settings');
+  const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.label === 'Configuración General');
   const PageIcon = navItem?.icon || Settings;
   const { toast } = useToast();
   const { currentUser } = useAuth(); // Get currentUser
@@ -84,16 +83,16 @@ export default function SettingsPage() {
     if (!currentUser) return;
     try {
       await addDoc(collection(db, "activityLogs"), {
-        category: 'system_audit',
-        type: 'config_change', // More specific type for config changes
+        category: 'system_audit' as const,
+        type: 'config_change' as const, // More specific type for config changes
         subject: action,
         details: `${details} por ${currentUser.name}.`,
-        timestamp: new Date().toISOString(),
+        timestamp: serverTimestamp(), // Use Firestore server timestamp
         loggedByUserId: currentUser.id,
         loggedByUserName: currentUser.name,
         entityType: entityType,
         entityId: entityId,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // Firestore server timestamp
       });
     } catch (error) {
       console.error("Error logging system event:", error);
@@ -338,6 +337,29 @@ export default function SettingsPage() {
         </Card>
       </div>
 
+      <Card className="mt-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <MessageCircle className="h-5 w-5 text-primary" />
+            Configuración del Widget de Chat en Vivo
+          </CardTitle>
+          <CardDescription>
+            Personaliza la apariencia y el comportamiento del widget de chat en vivo para tu sitio web.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Define cómo se verá y funcionará el chat en tu página. El widget real y su funcionalidad de chat en tiempo real están en desarrollo.
+          </p>
+          <Button asChild>
+            <Link href="/settings/live-chat-widget">
+              Ir a Configuración del Chat en Vivo
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+
        <Card className="mt-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
@@ -371,4 +393,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

@@ -1,6 +1,5 @@
-
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile } from 'lucide-react';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -56,7 +55,7 @@ export const NAV_ITEMS: NavItem[] = [
     subItems: [
       { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
       { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain, disabled: true },
-      { href: '/live-chat', label: 'Chat en Vivo / Chatbots', icon: MessagesSquare, disabled: true },
+      { href: '/live-chat', label: 'Chat en Vivo / Chatbots', icon: MessagesSquare },
       { href: '/satisfaction-surveys', label: 'Encuestas de Satisfacción', icon: Smile, disabled: true },
     ],
     parentActiveIf: (pathname) => ['/tickets', '/knowledge-base', '/live-chat', '/satisfaction-surveys'].some(p => pathname.startsWith(p)),
@@ -66,10 +65,11 @@ export const NAV_ITEMS: NavItem[] = [
     icon: SlidersHorizontal,
     subItems: [
       { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
-      { href: '/settings', label: 'Configuración', icon: Settings },
+      { href: '/settings', label: 'Configuración General', icon: Settings },
+      { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
     ],
-    parentActiveIf: (pathname) => ['/user-management', '/settings', '/audit-log'].some(p => pathname.startsWith(p)),
+    parentActiveIf: (pathname) => ['/user-management', '/settings', '/audit-log'].some(p => pathname.startsWith(p) || pathname.startsWith('/settings/live-chat-widget')),
   },
 ];
 
