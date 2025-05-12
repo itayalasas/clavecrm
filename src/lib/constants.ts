@@ -1,5 +1,5 @@
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -69,7 +69,7 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
     ],
-    parentActiveIf: (pathname) => ['/user-management', '/settings', '/audit-log'].some(p => pathname.startsWith(p) || pathname.startsWith('/settings/live-chat-widget')),
+    parentActiveIf: (pathname) => ['/user-management', '/settings', '/audit-log'].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/live-chat-widget'),
   },
 ];
 

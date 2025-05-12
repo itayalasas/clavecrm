@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
-import { useForm, SubmitHandler } from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -13,17 +14,17 @@ import { NAV_ITEMS } from "@/lib/constants";
 import type { EmailSettings, SMTPSecurity } from "@/lib/types";
 import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, Timestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, type Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/auth-context"; // Import useAuth
-import Link from "next/link"; // Import Link for navigation
+import { useAuth } from "@/contexts/auth-context"; 
+import Link from "next/link"; 
 
 const emailSettingsSchema = z.object({
   smtpHost: z.string().min(1, "El host SMTP es obligatorio."),
   smtpPort: z.coerce.number().int().positive("El puerto SMTP debe ser un número positivo."),
-  smtpUser: z.string().optional(),
-  smtpPass: z.string().optional(),
+  smtpUser: z.string().min(1, "El usuario SMTP es obligatorio."),
+  smtpPass: z.string().min(1, "La contraseña SMTP es obligatoria."),
   smtpSecurity: z.enum(["None", "SSL", "TLS"], { errorMap: () => ({ message: "Selecciona un tipo de seguridad."})}),
   defaultSenderEmail: z.string().email("El correo del remitente predeterminado es inválido."),
   defaultSenderName: z.string().min(1, "El nombre del remitente es obligatorio."),
@@ -36,7 +37,7 @@ export default function SettingsPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.label === 'Configuración General');
   const PageIcon = navItem?.icon || Settings;
   const { toast } = useToast();
-  const { currentUser } = useAuth(); // Get currentUser
+  const { currentUser } = useAuth(); 
 
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,15 +85,15 @@ export default function SettingsPage() {
     try {
       await addDoc(collection(db, "activityLogs"), {
         category: 'system_audit' as const,
-        type: 'config_change' as const, // More specific type for config changes
+        type: 'config_change' as const, 
         subject: action,
         details: `${details} por ${currentUser.name}.`,
-        timestamp: serverTimestamp(), // Use Firestore server timestamp
+        timestamp: serverTimestamp(), 
         loggedByUserId: currentUser.id,
         loggedByUserName: currentUser.name,
         entityType: entityType,
         entityId: entityId,
-        createdAt: serverTimestamp(), // Firestore server timestamp
+        createdAt: serverTimestamp(), 
       });
     } catch (error) {
       console.error("Error logging system event:", error);

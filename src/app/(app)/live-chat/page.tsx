@@ -75,11 +75,11 @@ export default function LiveChatPage() {
           MessageCircle,
           "Configura e integra un widget de chat personalizable en tu sitio web.",
           [
-            "Personalización básica del widget (colores, mensaje de bienvenida).",
-            "Script de incrustación para sitios web.",
-            "Notificaciones para agentes cuando un usuario inicia un chat.",
+            "Personalización básica del widget (colores, mensaje de bienvenida, posición) - Implementado.",
+            "Script de incrustación para sitios web (generado, funcionalidad real del chat en desarrollo).",
+            "Notificaciones para agentes cuando un usuario inicia un chat (Planeado, requiere backend).",
           ],
-          "desarrollo"
+          "parcial"
         )}
         {renderFeatureCard(
           "Panel de Agente",
@@ -138,7 +138,7 @@ export default function LiveChatPage() {
         )}
         {renderFeatureCard(
           "Integración con WhatsApp Business API",
-          Settings2, // Using a generic settings icon as WhatsApp icon might not be available or appropriate.
+          Settings2, 
           "Conecta con la API de WhatsApp Business para gestionar mensajes desde el CRM (funcionalidad avanzada).",
           [
             "Configuración de la conexión con WhatsApp Business API.",
@@ -151,3 +151,4 @@ export default function LiveChatPage() {
     </div>
   );
 }
+
