@@ -10,12 +10,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { UploadCloud, Loader2 } from "lucide-react";
+import { UploadCloud, Loader2, Sparkles } from "lucide-react"; // Added Sparkles
 import { useToast } from "@/hooks/use-toast";
 import { db, storage } from "@/lib/firebase";
 import { doc, updateDoc, serverTimestamp, arrayUnion, Timestamp } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Progress } from "@/components/ui/progress";
+import { compareDocumentVersions, type DocumentComparisonOutput } from "@/ai/flows/document-comparison"; // Import the new flow
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // For displaying AI results
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_FILE_TYPES = [
@@ -54,6 +56,9 @@ export function UploadNewVersionDialog({
   const [uploadProgress, setUploadProgress] = useState(0);
   const { toast } = useToast();
 
+  const [aiComparisonResult, setAiComparisonResult] = useState<DocumentComparisonOutput | null>(null);
+  const [isComparingWithAI, setIsComparingWithAI] = useState(false);
+
   const form = useForm<UploadNewVersionFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -61,13 +66,84 @@ export function UploadNewVersionDialog({
     }
   });
 
+  useEffect(() => {
+    if (isOpen) {
+        form.reset({ versionNotes: "" }); // Reset notes
+        // Do NOT reset the file input here, as it's controlled by a separate mechanism.
+        // It will be reset explicitly if needed after successful upload or when dialog is cancelled.
+        setAiComparisonResult(null);
+        setIsComparingWithAI(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]); // form dependency removed to prevent re-triggering reset on every render
+
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       form.setValue("file", file);
       form.clearErrors("file");
+      setAiComparisonResult(null); // Reset AI comparison if new file is selected
     }
   };
+
+  const handleAiCompare = async () => {
+    const newFile = form.getValues("file");
+    if (!newFile) {
+      toast({ title: "Selecciona un archivo nuevo", description: "Debes seleccionar un archivo para la nueva versión antes de comparar.", variant: "destructive" });
+      return;
+    }
+
+    let newFileText = "";
+    let currentFileText = ""; // This is the challenging part to get client-side
+
+    // --- TODO: Robust Content Extraction for newFile ---
+    if (newFile.type === "text/plain" || newFile.type === "text/markdown" || newFile.type === "text/csv") {
+      try {
+        newFileText = await newFile.text();
+      } catch (e) {
+        toast({ title: "Error al leer archivo nuevo", description: "No se pudo leer el contenido del archivo nuevo como texto.", variant: "destructive" });
+        setIsComparingWithAI(false);
+        return;
+      }
+    } else {
+      newFileText = `El archivo '${newFile.name}' (tipo: ${newFile.type}) no es de texto plano. La comparación IA se basará en metadatos y no en contenido profundo.`;
+      toast({ title: "Comparación IA Limitada", description: "La comparación detallada funciona mejor con archivos de texto plano (.txt, .md, .csv).", variant: "default", duration: 7000 });
+    }
+
+    // --- TODO: Robust Content Extraction for documentToUpdate.fileURL ---
+    // Fetching and parsing documentToUpdate.fileURL client-side is complex.
+    // For now, we'll use a placeholder or metadata.
+    // In a real app, this might involve a serverless function to get content if not stored.
+    if (documentToUpdate.fileType === "text/plain" || documentToUpdate.fileType === "text/markdown" || documentToUpdate.fileType === "text/csv") {
+        currentFileText = `(Contenido de la versión actual '${documentToUpdate.name}' no extraído en el cliente para esta demo. Se usarán metadatos.)`;
+         toast({ title: "Nota sobre Comparación", description: "La extracción del texto de la versión actual es compleja en el cliente. Se usarán metadatos.", variant: "default", duration: 7000});
+    } else {
+        currentFileText = `Metadatos de la versión actual: Nombre: ${documentToUpdate.name}, Tipo: ${documentToUpdate.fileType}, Tamaño: ${documentToUpdate.fileSize} bytes.`;
+    }
+    // --- End of TODO ---
+
+    setIsComparingWithAI(true);
+    setAiComparisonResult(null);
+    try {
+      const result = await compareDocumentVersions({
+        currentDocumentText: currentFileText,
+        newDocumentText: newFileText,
+      });
+      setAiComparisonResult(result);
+      if (result.areDifferent) {
+        toast({ title: "IA: Diferencias Encontradas", description: result.differenceSummary || "Se detectaron cambios significativos.", variant: "default", duration: 10000 });
+      } else {
+        toast({ title: "IA: Sin Diferencias Sustanciales", description: result.differenceSummary || "No se detectaron cambios importantes o los documentos son muy similares.", variant: "default", duration: 10000 });
+      }
+    } catch (error) {
+      console.error("Error en comparación IA:", error);
+      toast({ title: "Error en Comparación IA", description: "No se pudo completar la comparación.", variant: "destructive" });
+    } finally {
+      setIsComparingWithAI(false);
+    }
+  };
+
 
   const onSubmit: SubmitHandler<UploadNewVersionFormValues> = async (data) => {
     if (!data.file) {
@@ -80,7 +156,7 @@ export function UploadNewVersionDialog({
 
     const fileToUpload = data.file;
     const newFileNameInStorage = `${Date.now()}-${currentUser.id}-${fileToUpload.name}`;
-    const filePath = `documents/${currentUser.id}/${newFileNameInStorage}`; // Store in user's folder for consistency
+    const filePath = `documents/${currentUser.id}/${newFileNameInStorage}`; 
     const fileStorageRef = storageRef(storage, filePath);
 
     const uploadTask = uploadBytesResumable(fileStorageRef, fileToUpload);
@@ -100,19 +176,18 @@ export function UploadNewVersionDialog({
       async () => {
         try {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          const nowTimestamp = serverTimestamp();
+          const nowServerTimestamp = serverTimestamp();
           
-          // Create version history entry for the *previous* current version
           const previousVersionEntry: DocumentVersion = {
             version: documentToUpdate.currentVersion,
             fileURL: documentToUpdate.fileURL,
             fileNameInStorage: documentToUpdate.fileNameInStorage,
-            uploadedAt: documentToUpdate.lastVersionUploadedAt || documentToUpdate.uploadedAt, // Use lastVersionUploadedAt if available
+            uploadedAt: documentToUpdate.lastVersionUploadedAt || documentToUpdate.uploadedAt, 
             uploadedByUserId: documentToUpdate.lastVersionUploadedByUserId || documentToUpdate.uploadedByUserId,
             uploadedByUserName: documentToUpdate.lastVersionUploadedByUserName || documentToUpdate.uploadedByUserName,
             fileSize: documentToUpdate.fileSize,
             fileType: documentToUpdate.fileType,
-            versionNotes: "Versión anterior", // Or allow user to add notes to old version upon new upload
+            versionNotes: documentToUpdate.description, // Using main description as notes for old version for simplicity.
           };
 
           const docRef = doc(db, "documents", documentToUpdate.id);
@@ -121,12 +196,12 @@ export function UploadNewVersionDialog({
             fileNameInStorage: newFileNameInStorage,
             fileType: fileToUpload.type,
             fileSize: fileToUpload.size,
-            lastVersionUploadedAt: nowTimestamp,
+            description: data.versionNotes || documentToUpdate.description, // Preserve old description if new notes are empty
+            lastVersionUploadedAt: nowServerTimestamp,
             lastVersionUploadedByUserId: currentUser.id,
             lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido",
             currentVersion: documentToUpdate.currentVersion + 1,
             versionHistory: arrayUnion(previousVersionEntry),
-            description: data.versionNotes ? `${documentToUpdate.description || ''}\n\nNotas v${documentToUpdate.currentVersion + 1}: ${data.versionNotes}` : documentToUpdate.description, // Append version notes to description or store separately
           });
 
           toast({
@@ -137,7 +212,8 @@ export function UploadNewVersionDialog({
           form.reset();
           const fileInput = document.getElementById('new-version-file-input') as HTMLInputElement | null;
           if (fileInput) fileInput.value = "";
-          onOpenChange(false); // Close dialog on success
+          setAiComparisonResult(null);
+          onOpenChange(false); 
         } catch (error) {
           console.error("Error actualizando metadata del documento:", error);
           toast({ title: "Error al Guardar Versión", description: "Ocurrió un error al guardar la información de la nueva versión.", variant: "destructive" });
@@ -150,7 +226,7 @@ export function UploadNewVersionDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!isUploading) onOpenChange(open); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -182,6 +258,27 @@ export function UploadNewVersionDialog({
                 </FormItem>
               )}
             />
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleAiCompare} 
+              disabled={isUploading || isComparingWithAI || !form.getValues("file")} 
+              className="w-full mt-2"
+            >
+              {isComparingWithAI ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Comparar con Versión Actual (IA Beta)
+            </Button>
+            {aiComparisonResult && (
+              <Alert className="mt-2">
+                <Sparkles className="h-4 w-4" />
+                <AlertTitle>Resultado de Comparación IA</AlertTitle>
+                <AlertDescription className="text-xs max-h-20 overflow-y-auto">
+                  {aiComparisonResult.areDifferent ? <span className="font-semibold">Se detectaron diferencias.</span> : <span className="font-semibold">No se detectaron diferencias sustanciales.</span>}
+                  <br />
+                  {aiComparisonResult.differenceSummary || "La IA no proporcionó un resumen detallado."}
+                </AlertDescription>
+              </Alert>
+            )}
             <FormField
               control={form.control}
               name="versionNotes"
@@ -191,7 +288,7 @@ export function UploadNewVersionDialog({
                   <FormControl>
                     <Textarea placeholder="Ej. Cambios realizados, correcciones..." {...field} disabled={isUploading} />
                   </FormControl>
-                  <FormDescriptionUI>Estas notas se asociarán con la nueva versión.</FormDescriptionUI>
+                  <FormDescriptionUI>Estas notas se asociarán con la nueva versión y actualizarán la descripción principal del documento.</FormDescriptionUI>
                   <FormMessage />
                 </FormItem>
               )}
@@ -206,7 +303,7 @@ export function UploadNewVersionDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isUploading}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isUploading || !currentUser}>
+              <Button type="submit" disabled={isUploading || !currentUser || !form.formState.isValid}>
                 {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                 {isUploading ? "Subiendo..." : "Subir Nueva Versión"}
               </Button>
