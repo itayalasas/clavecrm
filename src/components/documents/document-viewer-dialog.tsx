@@ -42,10 +42,10 @@ export function DocumentViewerDialog({
         try {
           // IMPORTANT: This fetch request might be blocked by CORS if Firebase Storage rules are not configured correctly.
           // Ensure your Firebase Storage bucket has CORS rules allowing GET requests from your app's domain.
-          // Example cors.json:
+          // Example cors.json (provided in your project files, should be applied to the bucket):
           // [
           //   {
-          //     "origin": ["http://localhost:3000", "https://your-production-domain.com"], // Add your domains
+          //     "origin": ["*"], // For development. For production, list your specific domains.
           //     "method": ["GET"],
           //     "maxAgeSeconds": 3600
           //   }
@@ -60,14 +60,14 @@ export function DocumentViewerDialog({
             setTextContent(text);
           }
         } catch (error: any) {
-          console.error("Error fetching text content in DocumentViewerDialog:", error);
+          console.error(`Error fetching text content from URL: ${documentFile?.fileURL}`, error);
           let detailedDescription = "No se pudo cargar el contenido del archivo de texto.";
 
           if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
             detailedDescription += " Este error ('Failed to fetch') frecuentemente indica un problema de CORS o de red. ";
             console.error(
                 "POSIBLE PROBLEMA DE CORS: Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. " +
-                "Revisa la consola de red del navegador para más detalles y verifica tu archivo cors.json. " +
+                "Revisa la consola de red del navegador (pestaña Network) para más detalles sobre la solicitud fallida y verifica tu archivo cors.json en el bucket. " +
                 "Ejemplo de cors.json para desarrollo: [{\"origin\": [\"*\"], \"method\": [\"GET\"], \"maxAgeSeconds\": 3600}]. " +
                 "Para producción, especifica tus dominios en lugar de '*'."
             );
@@ -86,7 +86,7 @@ export function DocumentViewerDialog({
               variant: "destructive",
               duration: 20000, 
             });
-            setTextContent("Error al cargar el contenido. Revisa la consola del navegador para más detalles y verifica la configuración CORS de Firebase Storage.");
+            setTextContent(`Error al cargar el contenido del archivo "${documentFile?.name}". Revisa la consola del navegador para más detalles y verifica la configuración CORS de Firebase Storage.`);
           }
         } finally {
           if (mounted) {
@@ -99,7 +99,6 @@ export function DocumentViewerDialog({
     if (isOpen && documentFile?.fileURL) {
         fetchTextContent();
     }
-
 
     return () => {
       mounted = false; 
