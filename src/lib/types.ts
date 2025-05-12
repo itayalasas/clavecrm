@@ -1,3 +1,4 @@
+
 import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
@@ -47,7 +48,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null; // Made nullable for consistency
   role: UserRole; // Updated to use UserRole
   groups?: string[]; // IDs of groups the user belongs to
 }
@@ -450,4 +451,37 @@ export interface MeetingAttendee {
   email: string; // Denormalized email
   status: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Tentativa';
 }
-    
+
+// Live Chat Types
+export interface ChatSession {
+  id: string;
+  visitorId: string; // Unique identifier for the visitor (e.g., cookie-based, or generated)
+  visitorName?: string; // Optional: if visitor provides their name
+  agentId: string | null; // User.id of the agent handling the chat
+  status: 'pending' | 'active' | 'closed' | 'transferred';
+  createdAt: string; // ISO string: When the chat session was initiated
+  lastMessageAt: string; // ISO string: Timestamp of the last message, for sorting/activity
+  initialMessage?: string; // The first message from the visitor
+  currentPageUrl?: string; // The URL the visitor was on when they initiated chat
+  // Other potential fields: browser, OS, IP (handle privacy carefully)
+}
+
+export interface ChatMessage {
+  id: string; // Firestore auto-ID
+  sessionId: string; // ID of the ChatSession this message belongs to
+  senderId: string; // visitorId or User.id (for agent)
+  senderName?: string; // Denormalized sender name
+  senderType: 'visitor' | 'agent';
+  text: string; // Message content
+  timestamp: string; // ISO string (serverTimestamp on write, converted on read)
+  // attachments?: { name: string, url: string }[]; // For future file sharing in chat
+}
+
+export interface CannedResponse {
+  id: string;
+  shortcut: string; // e.g., "/saludo"
+  text: string; // The full response text
+  agentId?: string; // Optional: if this response is specific to an agent
+  isGlobal?: boolean; // If true, available to all agents
+  // category?: string; // Optional: for organizing responses
+}

@@ -1,10 +1,11 @@
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS } from "@/lib/constants";
-import { MessagesSquare, Settings2, MessageCircle, Bot, Users, History, PlusCircle, Zap } from "lucide-react";
+import { MessagesSquare, Settings2, MessageCircle, Bot, Users, History, PlusCircle, Zap, LayoutGrid } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function LiveChatPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/live-chat');
@@ -54,17 +55,27 @@ export default function LiveChatPage() {
     <div className="flex flex-col gap-6">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-2xl">
-            <PageIcon className="h-6 w-6 text-primary" />
-            {navItem?.label || "Chat en Vivo y Chatbots"}
-          </CardTitle>
-          <CardDescription>
-            Integra un widget de chat en vivo en tu sitio web y/o configura chatbots para respuestas rápidas y captura de leads.
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-2xl">
+                <PageIcon className="h-6 w-6 text-primary" />
+                {navItem?.label || "Chat en Vivo y Chatbots"}
+              </CardTitle>
+              <CardDescription>
+                Integra un widget de chat en vivo en tu sitio web y/o configura chatbots para respuestas rápidas y captura de leads.
+              </CardDescription>
+            </div>
+            <Button asChild>
+              <Link href="/live-chat/agent-panel">
+                <LayoutGrid className="mr-2 h-4 w-4" />
+                Ir al Panel de Agente
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <p className="text-center text-muted-foreground py-8">
-            Esta sección está actualmente en desarrollo. Vuelve pronto para ver las actualizaciones y funcionalidades.
+          <p className="text-muted-foreground py-4">
+            Utiliza la sección de <Link href="/settings/live-chat-widget" className="text-primary hover:underline">Configuración del Widget de Chat en Vivo</Link> para personalizar y obtener el script de incrustación para tu sitio web. El panel de agente te permite gestionar las conversaciones.
           </p>
         </CardContent>
       </Card>
@@ -86,23 +97,26 @@ export default function LiveChatPage() {
           Users,
           "Interfaz para que los agentes atiendan las conversaciones de chat en tiempo real.",
           [
-            "Visualización de chats entrantes y en curso.",
-            "Respuestas predefinidas (canned responses).",
-            "Información básica del visitante (si está disponible).",
-            "Transferencia de chat entre agentes.",
+            "Visualización de chats entrantes y en curso (Básico Implementado).",
+            "Asignación de chats pendientes (Implementado).",
+            "Envío y recepción de mensajes en tiempo real (Implementado).",
+            "Cierre de chats (Implementado).",
+            "Respuestas predefinidas (canned responses) (Planeado).",
+            "Información básica del visitante (si está disponible) (Planeado).",
+            "Transferencia de chat entre agentes (Planeado).",
           ],
-          "desarrollo"
+          "parcial" // Changed from "desarrollo"
         )}
         {renderFeatureCard(
           "Historial de Conversaciones",
           History,
           "Almacena y revisa todas las conversaciones de chat.",
           [
-            "Listado de conversaciones pasadas.",
-            "Búsqueda y filtrado de historial.",
-            "Transcripciones de chat.",
+            "Listado de conversaciones pasadas (Básico implementado con el estado 'cerrado').",
+            "Búsqueda y filtrado de historial (Planeado).",
+            "Transcripciones de chat (Planeado).",
           ],
-          "planeado"
+          "parcial" // Changed status as basic listing of closed chats can serve as history
         )}
         {renderFeatureCard(
           "Integración CRM",
@@ -151,4 +165,3 @@ export default function LiveChatPage() {
     </div>
   );
 }
-
