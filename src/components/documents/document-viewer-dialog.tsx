@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -42,14 +43,19 @@ export function DocumentViewerDialog({
           }
           const text = await response.text();
           setTextContent(text);
-        } catch (error) {
+        } catch (error: any) {
           console.error("Error fetching text content:", error);
+          let description = "No se pudo cargar el contenido del archivo de texto.";
+          if (error.message?.includes("Failed to fetch")) {
+            description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles.";
+          }
           toast({
             title: "Error al Cargar Contenido",
-            description: "No se pudo cargar el contenido del archivo de texto.",
+            description: description,
             variant: "destructive",
+            duration: 9000, 
           });
-          setTextContent("Error al cargar el contenido.");
+          setTextContent("Error al cargar el contenido. Revisa la consola para más detalles y verifica la configuración CORS de Firebase Storage si el error es 'Failed to fetch'.");
         } finally {
           setIsLoadingText(false);
         }
