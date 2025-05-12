@@ -1,13 +1,14 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion, DocumentTemplate, User, DocumentUserPermission } from "@/lib/types";
+import type { DocumentFile, Lead, Contact, LucideIcon as LucideIconType, DocumentVersion, DocumentTemplate, User, DocumentUserPermission, DocumentGroupPermission } from "@/lib/types";
 import { NAV_ITEMS, DOCUMENT_TEMPLATE_CATEGORIES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users, Eye } from "lucide-react";
+import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users, Eye, Bell } from "lucide-react"; // Added Bell for notifications
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -83,8 +84,6 @@ export default function DocumentsPage() {
     }
     setIsLoading(true);
     try {
-      // Fetch all documents and filter client-side.
-      // For larger datasets, server-side filtering or more complex queries (e.g. using multiple queries and combining results) would be needed.
       const q = query(collection(db, "documents"), orderBy("uploadedAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedDocs = querySnapshot.docs.map(docSnap => {
@@ -127,7 +126,20 @@ export default function DocumentsPage() {
             versionNotes: v.versionNotes as (string | undefined),
           })),
           isPublic: data.isPublic as (boolean | undefined),
-          permissions: data.permissions as ({ users?: DocumentUserPermission[] } | undefined),
+          permissions: {
+            users: (data.permissions?.users || []).map((p:any): DocumentUserPermission => ({
+                userId: p.userId,
+                userName: p.userName,
+                email: p.email,
+                avatarUrl: p.avatarUrl,
+                level: p.level,
+            })),
+            groups: (data.permissions?.groups || []).map((p:any): DocumentGroupPermission => ({
+                groupId: p.groupId,
+                groupName: p.groupName,
+                level: p.level,
+            })),
+          },
           accessKey: data.accessKey as (string | undefined),
           basedOnTemplateId: data.basedOnTemplateId as (string | undefined),
           templateVariablesFilled: data.templateVariablesFilled as (Record<string, string> | undefined),
@@ -138,6 +150,8 @@ export default function DocumentsPage() {
       const userVisibleDocuments = fetchedDocs.filter(docFile =>
         docFile.uploadedByUserId === currentUser.id || // User owns the document
         docFile.permissions?.users?.some(p => p.userId === currentUser.id) || // Document is shared with the user
+        // TODO: Implement group-based visibility once currentUser.groups is available
+        // (docFile.permissions?.groups?.some(pg => currentUser.groups?.includes(pg.groupId) && (pg.level === 'view' || pg.level === 'edit'))) ||
         docFile.isPublic // Document is public
       );
 
@@ -338,8 +352,12 @@ export default function DocumentsPage() {
   const handleUpdateSharingSettings = async (documentId: string, newPermissions: DocumentFile['permissions']) => {
     try {
       const docRef = doc(db, "documents", documentId);
+      const permissionsToSave = {
+        users: newPermissions?.users || [],
+        groups: newPermissions?.groups || [],
+      };
       await updateDoc(docRef, {
-        permissions: newPermissions || { users: [] },
+        permissions: permissionsToSave,
         updatedAt: serverTimestamp(),
       });
       toast({
@@ -632,20 +650,22 @@ export default function DocumentsPage() {
             "Compartir y Visualizar Documentos",
             ShareIconLucide,
             "Comparte y visualiza documentos de forma segura.",
-            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Visualización en-app de PDFs (Implementado).", "Visualización en-app de archivos de texto (.txt, .md) (Básico Implementado).", "Permisos de acceso por grupo (Pendiente).", "Notificaciones de acceso (Pendiente).", "Visualización en-app avanzada para DOCX, XLSX (Pendiente, complejo)."],
-            false, true
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Gestión de permisos por grupo (En Desarrollo).", "Visualización en-app de PDFs (Implementado).", "Visualización en-app de archivos de texto (.txt, .md) (Básico Implementado).", "Visualización en-app avanzada para DOCX, XLSX (Pendiente, complejo)."],
+            false, true, true // partiallyImplemented = true, inProgress = true
         )}
          {renderFutureFeatureCard(
+            "Notificaciones",
+            Bell,
+            "Recibe alertas sobre actividad en documentos.",
+            ["Notificaciones de acceso o cambios en documentos compartidos (Planeado)."],
+            false, false, false
+        )}
+        {renderFutureFeatureCard(
             "Integración con Almacenamiento en la Nube",
             Settings2,
             "Conecta con servicios como Google Drive o Dropbox (Funcionalidad Avanzada).",
-            ["Sincronizar documentos desde/hacia almacenamientos externos.", "Autenticación con servicios de terceros."]
-        )}
-        {renderFutureFeatureCard(
-            "Información Adicional",
-            Info,
-            "Funcionalidades en desarrollo.",
-            ["Búsqueda avanzada y filtros más detallados.", "Auditoría de acceso a documentos (Pendiente, relacionado con Notificaciones).", "Flujos de aprobación de documentos (Pendiente)."]
+            ["Sincronizar documentos desde/hacia almacenamientos externos.", "Autenticación con servicios de terceros."],
+            false, false, false
         )}
       </div>
 

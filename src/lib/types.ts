@@ -50,6 +50,7 @@ export interface User {
   email: string;
   avatarUrl?: string;
   role: UserRole; // Updated to use UserRole
+  // groups?: string[]; // Potential future field for user's group memberships
 }
 
 export interface Comment {
@@ -346,8 +347,15 @@ export type DocumentPermissionLevel = 'view' | 'edit';
 
 export interface DocumentUserPermission {
   userId: string;
-  userName: string;
-  email: string; // For display and avatar generation
+  userName: string; // Name of the user
+  email: string;    // Email of the user, for avatar or contact
+  avatarUrl?: string | null; // Optional avatar URL
+  level: DocumentPermissionLevel;
+}
+
+export interface DocumentGroupPermission {
+  groupId: string;
+  groupName: string; // Name of the group
   level: DocumentPermissionLevel;
 }
 
@@ -385,7 +393,7 @@ export interface DocumentFile {
 
   permissions?: {
     users?: DocumentUserPermission[];
-    // groups?: { [groupId: string]: DocumentPermissionLevel[] }; // Future placeholder
+    groups?: DocumentGroupPermission[]; // Added group permissions
   } | null; // Allow null for Firestore initially
 
   basedOnTemplateId?: string | null; // ID of the DocumentTemplate used to generate this document
@@ -409,3 +417,10 @@ export interface DocumentTemplate {
 
 // LucideIcon type definition, using the renamed import
 export type LucideIcon = LucideIconType;
+
+// User Group (placeholder, to be defined properly if group management is implemented)
+export interface UserGroup {
+    id: string;
+    name: string;
+    memberIds: string[];
+}

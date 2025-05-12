@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, AlertTriangle, FileText } from "lucide-react";
+import { Loader2, AlertTriangle, FileText, Download } from "lucide-react"; // Added Download
 import { useToast } from "@/hooks/use-toast";
 
 interface DocumentViewerDialogProps {
@@ -46,7 +46,6 @@ export function DocumentViewerDialog({
         } catch (error: any) {
           console.error("Error fetching text content:", error);
           let description = "No se pudo cargar el contenido del archivo de texto.";
-          // Check if the error message indicates a network error, which is common for CORS issues
           if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError")) {
             description += " Esto podría deberse a un problema de CORS. Asegúrate de que la configuración CORS de tu Firebase Storage bucket permite solicitudes GET desde este dominio. Busca 'Firebase Storage CORS' para más detalles.";
           }
@@ -72,6 +71,9 @@ export function DocumentViewerDialog({
 
   const isPdf = documentFile.fileType === "application/pdf";
   const isText = documentFile.fileType.startsWith("text/");
+  const isDocx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || documentFile.name.endsWith(".docx");
+  const isXlsx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || documentFile.name.endsWith(".xlsx");
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -88,7 +90,7 @@ export function DocumentViewerDialog({
         <div className="flex-grow overflow-hidden border rounded-md bg-muted flex items-center justify-center p-1">
           {isPdf ? (
             <iframe
-              src={`${documentFile.fileURL}#toolbar=0&navpanes=0&scrollbar=0`} // Basic controls removal
+              src={`${documentFile.fileURL}#toolbar=0&navpanes=0&scrollbar=0`} 
               title={`Vista previa de ${documentFile.name}`}
               className="w-full h-full border-0"
               allowFullScreen
@@ -104,7 +106,21 @@ export function DocumentViewerDialog({
                 <pre className="text-sm whitespace-pre-wrap break-all">{textContent || "No hay contenido para mostrar o error al cargar."}</pre>
               </ScrollArea>
             )
-          ) : (
+          ) : (isDocx || isXlsx) ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-6">
+              <FileText className="h-16 w-16 text-blue-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Visualización Avanzada Pendiente</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                La visualización en la aplicación para archivos {isDocx ? "DOCX" : "XLSX"} está en desarrollo.
+              </p>
+              <Button asChild>
+                <a href={documentFile.fileURL} download={documentFile.name} target="_blank" rel="noopener noreferrer">
+                  <Download className="mr-2 h-4 w-4" /> Descargar Documento para Ver
+                </a>
+              </Button>
+            </div>
+          )
+           : (
             <div className="flex flex-col items-center justify-center h-full text-center p-6">
               <AlertTriangle className="h-16 w-16 text-amber-500 mb-4" />
               <h3 className="text-lg font-semibold mb-2">Visualización No Soportada</h3>
@@ -113,7 +129,7 @@ export function DocumentViewerDialog({
               </p>
               <Button asChild>
                 <a href={documentFile.fileURL} download={documentFile.name} target="_blank" rel="noopener noreferrer">
-                  Descargar Documento para Ver
+                   <Download className="mr-2 h-4 w-4" /> Descargar Documento para Ver
                 </a>
               </Button>
             </div>
@@ -129,4 +145,3 @@ export function DocumentViewerDialog({
     </Dialog>
   );
 }
-
