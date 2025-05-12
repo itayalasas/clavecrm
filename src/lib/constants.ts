@@ -1,4 +1,5 @@
 
+
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityType } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban } from 'lucide-react'; // Added Settings icon
 
@@ -43,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Colaboración y Productividad',
     icon: UsersRound,
     subItems: [
-      { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays, disabled: true },
+      { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays },
       { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, disabled: true },
       { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban, disabled: true },
       { href: '/tasks', label: 'Tareas', icon: ListChecks }, // Moved from "Soporte y Tareas"

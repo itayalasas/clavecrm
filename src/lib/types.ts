@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
 export interface Lead {
@@ -264,8 +265,8 @@ export type MeetingStatus = 'Programada' | 'Confirmada' | 'Cancelada' | 'Realiza
 export type ActivityType = 'Llamada' | 'Reunión' | 'Correo Enviado' | 'Correo Recibido' | 'Nota' | 'Visita';
 
 export interface MeetingAttendee {
-  userId?: string; // If CRM user
-  contactId?: string; // If external contact
+  id: string; // Can be userId or contactId or a unique ID for an external guest
+  type: 'user' | 'contact' | 'external';
   name: string; // Denormalized name
   email: string; // Denormalized email
   status: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Tentativa';
