@@ -5,7 +5,7 @@ import type { Meeting, Lead, User } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarClock, Edit3, Trash2, Users, MapPin, Link as LinkIcon, Video } from "lucide-react";
+import { CalendarClock, Edit3, Trash2, Users, MapPin, Link as LinkIcon, Video, Briefcase } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,8 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface MeetingListItemProps {
   meeting: Meeting;
-  leads: Lead[]; // For displaying related lead name
-  users: User[]; // For displaying creator/attendee names
+  leads: Lead[]; 
+  users: User[]; 
   onEdit: (meeting: Meeting) => void;
   onDelete: (meetingId: string) => void;
 }
@@ -95,6 +95,11 @@ export function MeetingListItem({ meeting, leads, users, onEdit, onDelete }: Mee
           {relatedLead && (
             <div className="flex items-center gap-1 truncate" title={`Lead: ${relatedLead.name}`}>
                 <LinkIcon className="h-3 w-3 shrink-0" /> Lead: {relatedLead.name}
+            </div>
+          )}
+           {meeting.resources && (
+            <div className="flex items-center gap-1 truncate" title={`Recursos: ${meeting.resources}`}>
+                <Briefcase className="h-3 w-3 shrink-0" /> {meeting.resources}
             </div>
           )}
           {createdByUser && (

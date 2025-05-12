@@ -6,7 +6,7 @@ import type { Meeting, Lead, User, Contact } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarDays, PlusCircle, List, AlertTriangle } from "lucide-react";
+import { CalendarDays, PlusCircle, List, AlertTriangle, Send, Users as UsersIcon, Video } from "lucide-react";
 import { AddEditMeetingDialog } from "@/components/calendar/add-edit-meeting-dialog";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { MeetingListItem } from "@/components/calendar/meeting-list-item"; 
@@ -23,7 +23,7 @@ export default function CalendarPage() {
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]); // Assuming you have a contacts collection
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -37,9 +37,6 @@ export default function CalendarPage() {
     if (!currentUser) return;
     setIsLoading(true);
     try {
-      // Query meetings where the current user is the creator or an attendee
-      // This requires attendees to have a consistent structure (e.g., attendees.[userId].id)
-      // For simplicity, fetching all meetings for now. Refine with proper attendee querying later.
       const q = query(collection(db, "meetings"), orderBy("startTime", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedMeetings = querySnapshot.docs.map(docSnap => {
@@ -67,7 +64,6 @@ export default function CalendarPage() {
       const leadsSnapshot = await getDocs(collection(db, "leads"));
       setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
       
-      // Assuming contacts are stored in a "contacts" collection
       const contactsSnapshot = await getDocs(collection(db, "contacts"));
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
 
@@ -116,6 +112,10 @@ export default function CalendarPage() {
       toast({ title: id ? "Reunión Actualizada" : "Reunión Creada", description: `La reunión "${meetingData.title}" ha sido guardada.` });
       fetchMeetings();
       setIsMeetingDialogOpen(false);
+      // Placeholder: Aquí se dispararía el envío de .ics si es una nueva reunión o hay cambios relevantes
+      if (!id || (id && JSON.stringify(meetings.find(m=>m.id===id)?.attendees) !== JSON.stringify(meetingData.attendees))) {
+        toast({ title: "Invitaciones (Simulado)", description: "En un entorno real, se enviarían invitaciones .ics y recordatorios por correo.", variant: "default", duration: 5000 });
+      }
       return true;
     } catch (error) {
       console.error("Error saving meeting:", error);
@@ -176,7 +176,12 @@ export default function CalendarPage() {
           <TabsTrigger value="list"><List className="mr-2 h-4 w-4" />Lista de Reuniones</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar">
-          <CalendarView meetings={meetings} onEditMeeting={openEditMeetingDialog} />
+          <CalendarView 
+            meetings={meetings} 
+            onEditMeeting={openEditMeetingDialog}
+            leads={leads}
+            users={users}
+            />
         </TabsContent>
         <TabsContent value="list">
           {isLoading ? (
@@ -212,17 +217,33 @@ export default function CalendarPage() {
         <CardHeader>
           <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
             <AlertTriangle className="h-5 w-5" />
-            Funcionalidades Avanzadas (En Desarrollo)
+            Funcionalidades Adicionales y en Desarrollo
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-amber-600">
-          <ul className="list-disc list-inside space-y-1">
-            <li>Envío de invitaciones (.ics) y recordatorios por correo electrónico.</li>
-            <li>Sincronización con calendarios externos (Google Calendar, Outlook).</li>
-            <li>Asignación de salas o recursos para reuniones.</li>
-            <li>Vistas de calendario por semana y día completamente interactivas.</li>
+          <ul className="list-disc list-inside space-y-2">
+            <li>
+              <strong>Envío de invitaciones (.ics) y recordatorios por correo electrónico:</strong> 
+              <Badge variant="default" className="ml-2 bg-green-500 text-white">Parcialmente Implementado</Badge>
+              <p className="text-xs pl-5">Actualmente simulado con un toast. El envío real requiere configuración de backend (Cloud Functions y servicio de correo).</p>
+            </li>
+            <li>
+              <strong>Vistas de calendario por semana y día completamente interactivas:</strong>
+              <Badge variant="destructive" className="ml-2">En Desarrollo</Badge>
+              <p className="text-xs pl-5">La vista de calendario actual es mensual y básica. Se implementarán vistas más detalladas e interactivas.</p>
+            </li>
+             <li>
+              <strong>Asignación de salas o recursos para reuniones:</strong>
+              <Badge variant="destructive" className="ml-2">En Desarrollo</Badge>
+              <p className="text-xs pl-5">Se añadirá la opción de seleccionar salas o recursos (proyectores, etc.) al crear/editar reuniones.</p>
+            </li>
+            <li>
+              <strong>Sincronización con calendarios externos (Google Calendar, Outlook):</strong>
+              <Badge variant="destructive" className="ml-2">Planeado (Avanzado)</Badge>
+              <p className="text-xs pl-5">Esta funcionalidad es compleja y se considera para futuras versiones mayores.</p>
+            </li>
           </ul>
-          <p className="mt-3">La vista de calendario actual es básica. Las funcionalidades completas se implementarán progresivamente.</p>
+          <p className="mt-4 font-semibold">Las funcionalidades se implementarán progresivamente.</p>
         </CardContent>
       </Card>
 
@@ -239,3 +260,4 @@ export default function CalendarPage() {
     </div>
   );
 }
+

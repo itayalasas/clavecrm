@@ -288,6 +288,7 @@ export interface Meeting {
   updatedAt?: string; // ISO string
   status: MeetingStatus;
   reminderSent?: boolean;
+  resources?: string; // For room or equipment booking
 }
 
 export interface ActivityLog {

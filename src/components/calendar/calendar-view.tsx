@@ -2,20 +2,21 @@
 "use client";
 
 import { useState } from "react";
-import type { Meeting } from "@/lib/types";
+import type { Meeting, Lead, User } from "@/lib/types";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MeetingListItem } from "./meeting-list-item"; // Assuming this will be created
+import { MeetingListItem } from "./meeting-list-item"; 
 import { format, isSameDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface CalendarViewProps {
   meetings: Meeting[];
   onEditMeeting: (meeting: Meeting) => void;
-  // onDeleteMeeting will be handled by MeetingListItem or a context menu later
+  leads: Lead[]; 
+  users: User[];
 }
 
-export function CalendarView({ meetings, onEditMeeting }: CalendarViewProps) {
+export function CalendarView({ meetings, onEditMeeting, leads, users }: CalendarViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   const meetingsForSelectedDay = meetings.filter(meeting => 
@@ -35,7 +36,9 @@ export function CalendarView({ meetings, onEditMeeting }: CalendarViewProps) {
             onSelect={setSelectedDate}
             className="rounded-md"
             locale={es}
-            // TODO: Add modifiers for days with events
+            // TODO: Add modifiers for days with events using `modifiers` prop
+            // Example: modifiers={{ highlighted: meetings.map(m => parseISO(m.startTime)) }}
+            // modifiersClassNames={{ highlighted: 'bg-primary/20 rounded-full' }}
           />
         </CardContent>
       </Card>
@@ -54,10 +57,9 @@ export function CalendarView({ meetings, onEditMeeting }: CalendarViewProps) {
                   key={meeting.id}
                   meeting={meeting}
                   onEdit={onEditMeeting}
-                  onDelete={() => { /* Implement delete or pass handler */ }} 
-                  // Pass leads and users if MeetingListItem needs them, or handle data fetching inside it
-                  leads={[]} // Placeholder
-                  users={[]} // Placeholder
+                  onDelete={() => { /* Implement delete or pass handler if needed here */ }} 
+                  leads={leads} 
+                  users={users} 
                 />
               ))}
             </div>

@@ -18,11 +18,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarIcon, Loader2, PlusCircle, Trash2, Users as UsersIcon, UserPlus, Mail } from "lucide-react";
+import { CalendarIcon, Loader2, PlusCircle, Trash2, Users as UsersIcon, UserPlus, Mail, Briefcase } from "lucide-react";
 import { format, parseISO, isValid, setHours, setMinutes } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 
-const NO_SELECTION_VALUE = "__NONE__"; // Constant for no selection
+const NO_SELECTION_VALUE = "__NONE__"; 
 
 const attendeeSchema = z.object({
   id: z.string().min(1), 
@@ -50,8 +50,9 @@ const meetingFormSchema = z.object({
   attendees: z.array(attendeeSchema).min(0),
   location: z.string().optional(),
   conferenceLink: z.string().url("Enlace de conferencia inválido.").optional().or(z.literal('')),
-  relatedLeadId: z.string().optional(), // Can be undefined if NO_SELECTION_VALUE
+  relatedLeadId: z.string().optional(), 
   status: z.enum(MEETING_STATUSES as [string, ...string[]], { errorMap: () => ({ message: "Estado inválido."}) }),
+  resources: z.string().optional(), // New field for resources/room
 }).refine(data => {
     const startDateTime = setMinutes(setHours(data.startDate, parseInt(data.startTime.split(':')[0])), parseInt(data.startTime.split(':')[1]));
     const endDateTime = setMinutes(setHours(data.endDate, parseInt(data.endTime.split(':')[0])), parseInt(data.endTime.split(':')[1]));
@@ -102,6 +103,7 @@ export function AddEditMeetingDialog({
       conferenceLink: "",
       relatedLeadId: NO_SELECTION_VALUE,
       status: "Programada",
+      resources: "",
     },
   });
 
@@ -127,6 +129,7 @@ export function AddEditMeetingDialog({
           conferenceLink: meetingToEdit.conferenceLink || "",
           relatedLeadId: meetingToEdit.relatedLeadId || NO_SELECTION_VALUE,
           status: meetingToEdit.status,
+          resources: meetingToEdit.resources || "",
         });
       } else {
         const now = new Date();
@@ -139,6 +142,7 @@ export function AddEditMeetingDialog({
           location: "", conferenceLink: "", 
           relatedLeadId: NO_SELECTION_VALUE, 
           status: "Programada",
+          resources: "",
         });
       }
       setIsSubmitting(false);
@@ -160,6 +164,7 @@ export function AddEditMeetingDialog({
       conferenceLink: data.conferenceLink,
       relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? undefined : data.relatedLeadId,
       status: data.status,
+      resources: data.resources, // Save resources
     };
 
     const success = await onSave(meetingPayload, meetingToEdit?.id);
@@ -197,6 +202,7 @@ export function AddEditMeetingDialog({
           <DialogTitle>{meetingToEdit ? "Editar Reunión" : "Nueva Reunión"}</DialogTitle>
           <DialogDescription>
             {meetingToEdit ? "Actualiza los detalles de esta reunión." : "Programa una nueva reunión y gestiona los asistentes."}
+             Las invitaciones (.ics) y recordatorios se enviarán automáticamente (simulado).
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -248,6 +254,19 @@ export function AddEditMeetingDialog({
                 )} />
                 <FormField control={form.control} name="conferenceLink" render={({ field }) => (
                   <FormItem><FormLabel>Enlace de Videoconferencia (Opcional)</FormLabel><FormControl><Input type="url" placeholder="Ej. https://meet.google.com/..." {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="resources" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1">
+                      <Briefcase className="h-4 w-4 text-muted-foreground" />
+                      Recursos/Sala (Opcional)
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej. Sala de Conferencias 1, Proyector" {...field} />
+                    </FormControl>
+                    <FormDescription className="text-xs">La gestión y disponibilidad de recursos se implementará en el futuro.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="relatedLeadId" render={({ field }) => (
                   <FormItem><FormLabel>Lead Relacionado (Opcional)</FormLabel>
