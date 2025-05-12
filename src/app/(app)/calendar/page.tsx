@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -12,7 +13,7 @@ import { MeetingListItem } from "@/components/calendar/meeting-list-item";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp } from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp, onSnapshot } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -27,92 +28,85 @@ export default function CalendarPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMeetings, setIsLoadingMeetings] = useState(true);
+  const [isLoadingSupportData, setIsLoadingSupportData] = useState(true);
   const [isMeetingDialogOpen, setIsMeetingDialogOpen] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
 
   const { toast } = useToast();
   const { currentUser, getAllUsers } = useAuth();
 
-  const fetchMeetings = useCallback(async () => {
-    if (!currentUser) return;
-    setIsLoading(true);
-    try {
-      const q = query(collection(db, "meetings"), orderBy("createdAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      const fetchedMeetings = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          ...data,
-          startTime: (data.startTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          endTime: (data.endTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-        } as Meeting;
-      });
-      setMeetings(fetchedMeetings);
-    } catch (error) {
-      console.error("Error al obtener reuniones:", error);
-      toast({ title: "Error al Cargar Reuniones", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    if (!currentUser) {
+        setIsLoadingMeetings(false);
+        return;
     }
+    setIsLoadingMeetings(true);
+    const q = query(collection(db, "meetings"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const fetchedMeetings = querySnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            return {
+            id: docSnap.id,
+            ...data,
+            startTime: (data.startTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+            endTime: (data.endTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+            createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+            updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+            } as Meeting;
+        });
+        setMeetings(fetchedMeetings);
+        setIsLoadingMeetings(false);
+    }, (error) => {
+        console.error("Error al obtener reuniones en tiempo real:", error);
+        toast({ title: "Error al Cargar Reuniones", variant: "destructive" });
+        setIsLoadingMeetings(false);
+    });
+
+    return () => unsubscribe();
   }, [currentUser, toast]);
 
-  const fetchLeadsAndContacts = useCallback(async () => {
+
+  const fetchSupportData = useCallback(async () => {
+    setIsLoadingSupportData(true);
     try {
-      const leadsSnapshot = await getDocs(collection(db, "leads"));
+      const [leadsSnapshot, contactsSnapshot, allUsers, resourcesData] = await Promise.all([
+        getDocs(collection(db, "leads")),
+        getDocs(collection(db, "contacts")),
+        getAllUsers(),
+        // For now, using INITIAL_RESOURCES. Later, this could fetch from Firestore.
+        Promise.resolve(INITIAL_RESOURCES) 
+        // getDocs(collection(db, "resources")) // Example for fetching from Firestore
+      ]);
+
       setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
-      
-      const contactsSnapshot = await getDocs(collection(db, "contacts"));
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
-
-    } catch (error) {
-      console.error("Error al obtener leads/contactos:", error);
-      toast({ title: "Error al Cargar Datos de Soporte", description: "No se pudieron cargar leads/contactos.", variant: "destructive"});
-    }
-  }, [toast]);
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      const allUsers = await getAllUsers();
       setUsers(allUsers);
+      setResources(resourcesData as Resource[]); 
+      // setResources(resourcesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Resource))); // If fetching from Firestore
+      
     } catch (error) {
-      console.error("Error al obtener usuarios:", error);
-      toast({ title: "Error al Cargar Usuarios", variant: "destructive"});
+      console.error("Error al obtener datos de soporte (leads, contactos, usuarios, recursos):", error);
+      toast({ title: "Error al Cargar Datos de Soporte", variant: "destructive"});
+    } finally {
+      setIsLoadingSupportData(false);
     }
   }, [getAllUsers, toast]);
 
-  const fetchResources = useCallback(async () => {
-    // For now, using INITIAL_RESOURCES. Later, this could fetch from Firestore.
-    setResources(INITIAL_RESOURCES);
-    // Example Firestore fetch (uncomment and adapt if resources are in Firestore)
-    /*
-    try {
-      const resourcesSnapshot = await getDocs(collection(db, "resources"));
-      setResources(resourcesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Resource)));
-    } catch (error) {
-      console.error("Error al obtener recursos:", error);
-      toast({ title: "Error al Cargar Recursos", variant: "destructive"});
-    }
-    */
-  }, [/* toast */]);
-
 
   useEffect(() => {
-    fetchMeetings();
-    fetchLeadsAndContacts();
-    fetchUsers();
-    fetchResources();
-  }, [fetchMeetings, fetchLeadsAndContacts, fetchUsers, fetchResources]);
+    fetchSupportData();
+  }, [fetchSupportData]);
 
   const handleSaveMeeting = async (meetingDataFromDialog: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, existingMeetingId?: string) => {
     if (!currentUser) {
       toast({ title: "Error", description: "Debe iniciar sesión para guardar reuniones.", variant: "destructive" });
       return false;
     }
-    setIsLoading(true);
+    
+    const isProcessing = isLoadingMeetings; // Use a general loading state for submission
+    if (isProcessing) return false; // Prevent multiple submissions
+
     const meetingIdToUse = existingMeetingId || doc(collection(db, "meetings")).id;
 
     try {
@@ -138,17 +132,16 @@ export default function CalendarPage() {
       await setDoc(doc(db, "meetings", meetingIdToUse), dataForFirestore, { merge: true });
 
       toast({ title: existingMeetingId ? "Reunión Actualizada" : "Reunión Creada", description: `La reunión "${meetingDataFromDialog.title}" ha sido guardada.` });
-      fetchMeetings();
+      // fetchMeetings(); // No need to call with onSnapshot
       setIsMeetingDialogOpen(false);
       
-      // Check if attendees changed or if it's a new meeting to "send" invitations
       const oldAttendees = existingMeetingId ? meetings.find(m => m.id === existingMeetingId)?.attendees : [];
       const attendeesChanged = JSON.stringify(oldAttendees) !== JSON.stringify(meetingDataFromDialog.attendees);
 
       if (!existingMeetingId || attendeesChanged) {
         toast({ 
-          title: "Procesando Invitaciones y Recordatorios...", 
-          description: "Los correos con detalles de la reunión e invitaciones .ics se enviarán a los asistentes en segundo plano.", 
+          title: "Procesando Invitaciones...", 
+          description: "Las invitaciones se enviarán a los asistentes en segundo plano.", 
           variant: "default", 
           duration: 7000 
         });
@@ -158,8 +151,6 @@ export default function CalendarPage() {
       console.error("Error guardando reunión:", error);
       toast({ title: "Error al Guardar Reunión", variant: "destructive", description: String(error) });
       return false;
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -168,7 +159,7 @@ export default function CalendarPage() {
     try {
       await deleteDoc(doc(db, "meetings", meetingId));
       toast({ title: "Reunión Eliminada", description: "La reunión ha sido eliminada." });
-      fetchMeetings();
+      // fetchMeetings(); // No need to call with onSnapshot
     } catch (error) {
       console.error("Error eliminando reunión:", error);
       toast({ title: "Error al Eliminar Reunión", variant: "destructive" });
@@ -185,6 +176,8 @@ export default function CalendarPage() {
     setIsMeetingDialogOpen(true);
   };
 
+  const isLoading = isLoadingMeetings || isLoadingSupportData;
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -200,7 +193,7 @@ export default function CalendarPage() {
                 Gestiona tu agenda, programa reuniones, envía invitaciones y recibe recordatorios.
               </CardDescription>
             </div>
-            <Button onClick={openNewMeetingDialog}>
+            <Button onClick={openNewMeetingDialog} disabled={isLoading}>
               <PlusCircle className="mr-2 h-4 w-4" /> Nueva Reunión
             </Button>
           </div>
@@ -213,6 +206,11 @@ export default function CalendarPage() {
           <TabsTrigger value="list"><List className="mr-2 h-4 w-4" />Lista de Reuniones</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar">
+           {isLoading ? (
+             <div className="space-y-4 mt-4">
+                <Skeleton className="h-80 w-full rounded-md" />
+            </div>
+          ) : (
           <CalendarView 
             meetings={meetings} 
             onEditMeeting={openEditMeetingDialog}
@@ -220,9 +218,10 @@ export default function CalendarPage() {
             users={users}
             resources={resources}
             />
+          )}
         </TabsContent>
         <TabsContent value="list">
-          {isLoading ? (
+          {isLoadingMeetings ? (
              <div className="space-y-4 mt-4">
                 <Skeleton className="h-20 w-full rounded-md" />
                 <Skeleton className="h-20 w-full rounded-md" />
@@ -252,7 +251,7 @@ export default function CalendarPage() {
         </TabsContent>
       </Tabs>
       
-      <Card className="mt-4 bg-amber-50 border-amber-200">
+       <Card className="mt-4 bg-amber-50 border-amber-200">
         <CardHeader>
           <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
             <AlertTriangle className="h-5 w-5" />
@@ -263,18 +262,18 @@ export default function CalendarPage() {
           <ul className="list-disc list-inside space-y-2">
             <li>
               <strong>Envío de invitaciones (.ics) y recordatorios por correo electrónico:</strong> 
-              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">Backend Pendiente</Badge>
-              <p className="text-xs pl-5">La funcionalidad para preparar y enviar invitaciones está lista. Requiere una Cloud Function para generar archivos .ics y enviar correos (usando Nodemailer o similar).</p>
+              <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Backend Pendiente</Badge>
+              <p className="text-xs pl-5">La funcionalidad para preparar y enviar invitaciones está lista en el frontend y parcialmente en el backend. Requiere completar la Cloud Function para generar archivos .ics y enviar correos (usando Nodemailer o similar).</p>
             </li>
             <li>
               <strong>Vistas de calendario por semana y día completamente interactivas:</strong>
-              <Badge variant="default" className="ml-2 bg-amber-500 hover:bg-amber-600 text-black">En Desarrollo</Badge>
-              <p className="text-xs pl-5">La vista de calendario mensual actual resalta los días con eventos. Vistas más detalladas (semana/día) e interactivas se implementarán progresivamente.</p>
+              <Badge variant="default" className="ml-2 bg-orange-500 hover:bg-orange-600 text-black">En Desarrollo</Badge>
+              <p className="text-xs pl-5">La vista de calendario mensual actual resalta los días con eventos. Vistas más detalladas (semana/día) e interactivas se implementarán progresivamente. Esto requiere una librería de calendario más robusta.</p>
             </li>
              <li>
               <strong>Asignación de salas o recursos para reuniones:</strong>
               <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Parcialmente Implementado</Badge>
-              <p className="text-xs pl-5">Se permite seleccionar un recurso de una lista predefinida. La gestión de recursos y la comprobación de disponibilidad en tiempo real está en desarrollo.</p>
+              <p className="text-xs pl-5">Se permite seleccionar un recurso de una lista predefinida. La gestión de la disponibilidad de recursos en tiempo real y la prevención de conflictos está en desarrollo.</p>
             </li>
             <li>
               <strong>Sincronización con calendarios externos (Google Calendar, Outlook):</strong>
