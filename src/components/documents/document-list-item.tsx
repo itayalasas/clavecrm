@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { DocumentFile, Lead, Contact, User } from "@/lib/types";
@@ -97,6 +98,8 @@ export function DocumentListItem({
   const hasHistory = documentFile.versionHistory && documentFile.versionHistory.length > 0;
 
   const sharedUserCount = documentFile.permissions?.users?.length || 0;
+  const sharedGroupCount = documentFile.permissions?.groups?.length || 0;
+
 
   const canViewInApp = documentFile.fileType === "application/pdf" || documentFile.fileType.startsWith("text/");
 
@@ -120,6 +123,11 @@ export function DocumentListItem({
                 {!documentFile.isPublic && sharedUserCount > 0 && (
                     <Badge variant="outline" className="ml-1 border-blue-500 text-blue-600 text-[10px] px-1 py-0 flex items-center gap-0.5">
                         <Users className="h-2.5 w-2.5"/> {sharedUserCount}
+                    </Badge>
+                )}
+                {!documentFile.isPublic && sharedGroupCount > 0 && (
+                    <Badge variant="outline" className="ml-1 border-purple-500 text-purple-600 text-[10px] px-1 py-0 flex items-center gap-0.5">
+                        <Users className="h-2.5 w-2.5"/> Grupos: {sharedGroupCount}
                     </Badge>
                 )}
               </CardDescription>
@@ -255,3 +263,4 @@ export function DocumentListItem({
     </Card>
   );
 }
+

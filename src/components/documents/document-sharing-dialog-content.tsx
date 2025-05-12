@@ -288,7 +288,7 @@ export function DocumentSharingDialogContent({
       
       <Separator />
 
-      {/* Group Sharing Section (Placeholder) */}
+      {/* Group Sharing Section */}
       <div>
         <h3 className="text-md font-semibold mb-1">Compartir con Grupos</h3>
         <div className="p-2.5 border rounded-md space-y-3">
@@ -390,3 +390,4 @@ export function DocumentSharingDialogContent({
     </div>
   );
 }
+

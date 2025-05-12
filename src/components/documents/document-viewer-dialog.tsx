@@ -36,12 +36,24 @@ export function DocumentViewerDialog({
 
     const fetchTextContent = async () => {
       if (isOpen && documentFile && documentFile.fileType.startsWith("text/")) {
+        // IMPORTANT: For this fetch to work with Firebase Storage URLs,
+        // you MUST configure CORS on your Firebase Storage bucket.
+        // Go to Firebase Console -> Storage -> Rules, and add a CORS configuration
+        // that allows GET requests from your application's origin.
+        // Example CORS config:
+        // [
+        //   {
+        //     "origin": ["http://localhost:3000", "https://your-app-domain.com"],
+        //     "method": ["GET"],
+        //     "maxAgeSeconds": 3600
+        //   }
+        // ]
         if (mounted) {
           setIsLoadingText(true);
           setTextContent(null);
         }
         try {
-          const response = await fetch(documentFile.fileURL); // Line 40 in original error
+          const response = await fetch(documentFile.fileURL);
           if (!response.ok) {
             throw new Error(`Error al cargar el archivo: ${response.statusText}`);
           }
@@ -87,7 +99,7 @@ export function DocumentViewerDialog({
   // More specific check for text types intended for direct rendering
   const isPlainText = documentFile.fileType === "text/plain" || documentFile.fileType === "text/markdown";
   const isCsv = documentFile.fileType === "text/csv";
-  const isTextRenderable = isPlainText || isCsv; // CSV will also attempt to render as text
+  const isTextRenderable = isPlainText || isCsv; 
 
   const isDocx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || documentFile.name.endsWith(".docx");
   const isXlsx = documentFile.fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || documentFile.name.endsWith(".xlsx");
@@ -113,7 +125,7 @@ export function DocumentViewerDialog({
               className="w-full h-full border-0"
               allowFullScreen
             />
-          ) : isTextRenderable ? ( // Use the more specific check
+          ) : isTextRenderable ? ( 
             isLoadingText ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -129,7 +141,7 @@ export function DocumentViewerDialog({
               <FileText className="h-16 w-16 text-blue-500 mb-4" />
               <h3 className="text-lg font-semibold mb-2">Visualización Avanzada Pendiente</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                La visualización en la aplicación para archivos {isDocx ? "DOCX" : "XLSX"} está en desarrollo.
+                La visualización en la aplicación para archivos {isDocx ? "DOCX" : "XLSX"} está en desarrollo y es compleja.
               </p>
               <Button asChild>
                 <a href={documentFile.fileURL} download={documentFile.name} target="_blank" rel="noopener noreferrer">
@@ -163,3 +175,4 @@ export function DocumentViewerDialog({
     </Dialog>
   );
 }
+

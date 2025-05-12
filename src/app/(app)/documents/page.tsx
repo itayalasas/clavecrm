@@ -151,7 +151,7 @@ export default function DocumentsPage() {
         docFile.uploadedByUserId === currentUser.id || // User owns the document
         docFile.permissions?.users?.some(p => p.userId === currentUser.id) || // Document is shared with the user
         // TODO: Implement group-based visibility once currentUser.groups is available
-        // (docFile.permissions?.groups?.some(pg => currentUser.groups?.includes(pg.groupId) && (pg.level === 'view' || pg.level === 'edit'))) ||
+        (docFile.permissions?.groups?.some(pg => currentUser.role === 'admin' || (currentUser as any).groups?.includes(pg.groupId))) || // Placeholder for group check
         docFile.isPublic // Document is public
       );
 
@@ -650,8 +650,8 @@ export default function DocumentsPage() {
             "Compartir y Visualizar Documentos",
             ShareIconLucide,
             "Comparte y visualiza documentos de forma segura.",
-            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Gestión de permisos por grupo (En Desarrollo).", "Visualización en-app de PDFs (Implementado).", "Visualización en-app de archivos de texto (.txt, .md) (Básico Implementado).", "Visualización en-app avanzada para DOCX, XLSX (Pendiente, complejo)."],
-            false, true, true // partiallyImplemented = true, inProgress = true
+            ["Opción para marcar documento como público/privado (Implementado).", "Copiar enlace público si el documento es público (Implementado).", "Gestión de permisos por usuario (ver/editar) (Implementado).", "Gestión de permisos por grupo (En Desarrollo).", "Visualización en-app de PDFs y archivos de texto (.txt, .md) (Implementado).", "Visualización en-app avanzada para DOCX, XLSX (Pendiente)."],
+            false, true, true 
         )}
          {renderFutureFeatureCard(
             "Notificaciones",
@@ -756,3 +756,4 @@ export default function DocumentsPage() {
     </div>
   );
 }
+
