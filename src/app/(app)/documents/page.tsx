@@ -2,12 +2,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { DocumentFile, Lead, Contact, Order, Quote, Ticket } from "@/lib/types";
+import type { DocumentFile, Lead, Contact, Order, Quote, Ticket, LucideIcon as LucideIconType } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FolderKanban, PlusCircle, Search, Filter, UploadCloud, Settings2, Share, GitBranch, Info, History, FileSignature } from "lucide-react";
+import { FolderKanban, PlusCircle, Search, Filter, UploadCloud, Settings2, Share, GitBranch, Info, History, FileSignature, Link as LinkIcon } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -132,7 +132,7 @@ export default function DocumentsPage() {
     (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
   
-  const renderFutureFeatureCard = (title: string, Icon: LucideIcon, description: string, features: string[]) => (
+  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[]) => (
     <Card className="bg-muted/30">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
@@ -164,7 +164,7 @@ export default function DocumentsPage() {
                 Organiza y gestiona todos los documentos relacionados con tus clientes, ventas y proyectos.
                 </CardDescription>
             </div>
-            <Button onClick={() => setIsUploadFormVisible(prev => !prev)}>
+            <Button onClick={() => setIsUploadFormVisible(prev => !prev)} disabled>
                 <PlusCircle className="mr-2 h-4 w-4" /> {isUploadFormVisible ? "Cancelar Subida" : "Subir Documento"}
             </Button>
           </div>
@@ -188,9 +188,10 @@ export default function DocumentsPage() {
                     className="pl-8 w-full"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled
                 />
             </div>
-            <Button variant="outline" disabled> {/* Placeholder for advanced filters */}
+            <Button variant="outline" disabled>
                 <Filter className="mr-2 h-4 w-4" /> Filtrar
             </Button>
           </div>
@@ -214,7 +215,7 @@ export default function DocumentsPage() {
             <div className="text-center py-10 text-muted-foreground">
               <FolderKanban className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <p className="text-lg">No hay documentos.</p>
-              <p>Sube tu primer documento para empezar a gestionar tus archivos.</p>
+              <p>Esta funcionalidad está en desarrollo. Vuelve pronto.</p>
             </div>
           )}
         </CardContent>
@@ -280,3 +281,4 @@ export default function DocumentsPage() {
     </div>
   );
 }
+

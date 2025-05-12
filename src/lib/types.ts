@@ -1,3 +1,6 @@
+
+import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
+
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
 export interface Lead {
@@ -370,3 +373,6 @@ export interface DocumentTemplate {
   createdByUserId: string;
   updatedAt?: string; // ISO string
 }
+
+// LucideIcon type definition, using the renamed import
+export type LucideIcon = LucideIconType;
