@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -53,7 +52,6 @@ export default function DocumentsPage() {
     }
     setIsLoading(true);
     try {
-      // Basic query: fetch all documents. Could be refined to user-specific or based on permissions.
       const q = query(collection(db, "documents"), orderBy("uploadedAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedDocs = querySnapshot.docs.map(docSnap => {
@@ -62,6 +60,7 @@ export default function DocumentsPage() {
           id: docSnap.id,
           ...data,
           uploadedAt: (data.uploadedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+          lastVersionUploadedAt: (data.lastVersionUploadedAt as Timestamp)?.toDate().toISOString() || undefined,
           versionHistory: data.versionHistory?.map((v: any) => ({
             ...v,
             uploadedAt: (v.uploadedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
@@ -114,8 +113,10 @@ export default function DocumentsPage() {
   const handleDeleteDocument = async () => {
     if (!documentToDelete || !currentUser) return;
 
+    // TODO: In a full versioning system, this would iterate through versionHistory
+    // and delete all associated files from storage. For now, it only deletes the current version's file.
     try {
-      // 1. Delete from Firebase Storage
+      // 1. Delete current version from Firebase Storage
       const fileRef = storageRef(storage, documentToDelete.storagePath); 
       await deleteObject(fileRef);
 
@@ -127,7 +128,6 @@ export default function DocumentsPage() {
     } catch (error: any) {
       console.error("Error al eliminar documento:", error);
       if (error.code === 'storage/object-not-found') {
-         // If file not found in storage, still try to delete from Firestore
          try {
             await deleteDoc(doc(db, "documents", documentToDelete.id));
             toast({ title: "Referencia de Documento Eliminada", description: "El archivo no se encontró en el almacenamiento, pero la referencia fue eliminada.", variant: "default" });
@@ -150,12 +150,12 @@ export default function DocumentsPage() {
     (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
   
-  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false) => (
-    <Card className={implemented ? "bg-green-50 border-green-200" : "bg-muted/30"}>
+  const renderFutureFeatureCard = (title: string, Icon: LucideIconType, description: string, features: string[], implemented: boolean = false, partiallyImplemented: boolean = false) => (
+    <Card className={implemented ? "bg-green-50 border-green-200" : (partiallyImplemented ? "bg-yellow-50 border-yellow-200" : "bg-muted/30")}>
       <CardHeader>
-        <CardTitle className={`flex items-center gap-2 text-lg ${implemented ? 'text-green-700' : 'text-amber-500'}`}>
+        <CardTitle className={`flex items-center gap-2 text-lg ${implemented ? 'text-green-700' : (partiallyImplemented ? 'text-yellow-600' : 'text-amber-500')}`}>
           <Icon className="h-5 w-5" />
-          {title} {implemented ? "" : "(Próximamente)"}
+          {title} {implemented ? "" : (partiallyImplemented ? "(Parcialmente Implementado)" : "(Próximamente)")}
         </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
@@ -261,7 +261,9 @@ export default function DocumentsPage() {
             "Control de Versiones",
             History,
             "Mantén un historial de cambios y accede a versiones anteriores.",
-            ["Subir nueva versión de un documento existente.", "Ver historial de versiones.", "Restaurar versión anterior."]
+            ["Estructura básica para versionamiento implementada (v1 inicial).", "Subir nueva versión de un documento existente (Pendiente).", "Ver historial de versiones (Pendiente).", "Restaurar versión anterior (Pendiente)."],
+            false, // Not fully implemented
+            true // Partially implemented
         )}
         {renderFutureFeatureCard(
             "Plantillas de Documentos",
@@ -295,7 +297,8 @@ export default function DocumentsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer. El documento &quot;{documents.find(d => d.id === documentToDelete.id)?.name}&quot; será eliminado permanentemente del almacenamiento y de la base de datos.
+                Esta acción no se puede deshacer. El documento &quot;{documents.find(d => d.id === documentToDelete.id)?.name}&quot; será eliminado permanentemente del almacenamiento y de la base de datos. 
+                Si existen múltiples versiones, todas serán eliminadas (funcionalidad de borrado de versiones pendiente).
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -310,4 +313,3 @@ export default function DocumentsPage() {
     </div>
   );
 }
-

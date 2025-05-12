@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, type ChangeEvent } from "react";
@@ -67,6 +66,8 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
     defaultValues: {
       relatedLeadId: NO_SELECTION_VALUE,
       relatedContactId: NO_SELECTION_VALUE,
+      description: "",
+      tags: "",
     }
   });
 
@@ -114,6 +115,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
         // Upload completed successfully, now get the download URL
         try {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const nowTimestamp = serverTimestamp();
           
           const docData: any = {
             name: fileToUpload.name,
@@ -123,10 +125,17 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
             fileSize: fileToUpload.size,
             description: data.description || "",
             tags: data.tags?.split(',').map(tag => tag.trim()).filter(tag => tag) || [],
-            uploadedAt: serverTimestamp(),
-            uploadedByUserId: currentUser.id,
-            uploadedByUserName: currentUser.name || "Usuario Desconocido",
+            
+            uploadedAt: nowTimestamp, // Upload date of the first version
+            uploadedByUserId: currentUser.id, // User who uploaded the first version
+            uploadedByUserName: currentUser.name || "Usuario Desconocido", // User who uploaded first version
+
+            lastVersionUploadedAt: nowTimestamp, // For new doc, same as uploadedAt
+            lastVersionUploadedByUserId: currentUser.id, // For new doc, same as uploader
+            lastVersionUploadedByUserName: currentUser.name || "Usuario Desconocido", // For new doc
+
             currentVersion: 1, 
+            versionHistory: [], // Initialize with empty history for new documents
           };
 
           if (data.relatedLeadId && data.relatedLeadId !== NO_SELECTION_VALUE) {
@@ -276,7 +285,7 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
                 />
             </div>
             {/* Display the specific error message for the refine condition */}
-            {form.formState.errors.relatedLeadId?.type === 'custom' && <FormMessage>{form.formState.errors.relatedLeadId.message}</FormMessage>}
+            {form.formState.errors.relatedLeadId?.type === 'custom' && form.formState.errors.relatedLeadId.message && <FormMessage>{form.formState.errors.relatedLeadId.message}</FormMessage>}
 
 
             {isUploading && (
@@ -297,4 +306,3 @@ export function DocumentUploadForm({ currentUser, onUploadSuccess, leads = [], c
     </Card>
   );
 }
-

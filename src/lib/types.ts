@@ -1,4 +1,3 @@
-
 import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
@@ -324,41 +323,46 @@ export interface DocumentVersion {
   fileNameInStorage: string;
   uploadedAt: string; // ISO string
   uploadedByUserId: string;
-  notes?: string;
+  uploadedByUserName: string; // Denormalized for display
+  notes?: string; // Optional notes for this specific version
   fileSize: number;
   fileType: string;
 }
+
 export interface DocumentFile {
   id: string;
   name: string; // Original file name presented to user
   fileNameInStorage: string; // Name used in Firebase Storage (e.g., with UUID/timestamp)
-  fileURL: string; // Download URL from Firebase Storage
-  fileType: string; // MIME type
-  fileSize: number; // in bytes
+  fileURL: string; // Download URL from Firebase Storage for the current version
+  fileType: string; // MIME type of the current version
+  fileSize: number; // in bytes of the current version
   description?: string;
   tags?: string[];
   
-  uploadedAt: string; // ISO string
-  uploadedByUserId: string;
-  uploadedByUserName: string; // Denormalized for display
+  uploadedAt: string; // ISO string - upload date of the *first* version
+  uploadedByUserId: string; // User who uploaded the *first* version
+  uploadedByUserName: string; // Denormalized for display - user who uploaded *first* version
+
+  lastVersionUploadedAt?: string; // ISO string - upload date of the *current* version
+  lastVersionUploadedByUserId?: string; // User who uploaded the *current* version
+  lastVersionUploadedByUserName?: string; // Denormalized - user who uploaded *current* version
 
   relatedLeadId?: string;
   relatedContactId?: string;
-  relatedOpportunityId?: string; // Assuming you might add opportunities
+  relatedOpportunityId?: string; 
   relatedOrderId?: string;
   relatedQuoteId?: string;
   relatedTicketId?: string;
-  relatedProjectId?: string; // Assuming you might add projects
+  relatedProjectId?: string; 
 
   currentVersion: number;
-  versionHistory?: DocumentVersion[]; // Array of past versions
+  versionHistory?: DocumentVersion[]; 
 
-  // For future use with sharing
   isPublic?: boolean;
   sharedWithUserIds?: string[];
-  sharedWithGroupIds?: string[]; // If you implement user groups
-  accessLink?: string; // A unique link for sharing if applicable
-  linkExpiresAt?: string; // ISO string for temporary links
+  sharedWithGroupIds?: string[]; 
+  accessLink?: string; 
+  linkExpiresAt?: string; 
 }
 
 export interface DocumentTemplate {

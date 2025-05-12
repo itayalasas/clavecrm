@@ -1,11 +1,10 @@
-
 "use client";
 
 import type { DocumentFile, Lead, Contact } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon } from "lucide-react";
+import { FileText, Download, Trash2, CalendarDays, UserCircle, Tags, LucideIcon, FileType, FileImage, FileAudio, FileVideo, FileArchive, FileQuestion, Link as LinkIcon, History } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -46,11 +45,15 @@ function formatFileSize(bytes: number): string {
 
 export function DocumentListItem({ documentFile, onDelete, leads = [], contacts = [] }: DocumentListItemProps) {
   const FileIcon = getFileIcon(documentFile.fileType);
-  // Construct the full storage path for deletion
+  // Construct the full storage path for deletion (of the current version)
   const storagePath = `documents/${documentFile.uploadedByUserId}/${documentFile.fileNameInStorage}`;
 
   const relatedLead = documentFile.relatedLeadId ? leads.find(l => l.id === documentFile.relatedLeadId) : null;
   const relatedContact = documentFile.relatedContactId ? contacts.find(c => c.id === documentFile.relatedContactId) : null;
+
+  const displayUploadedAt = documentFile.lastVersionUploadedAt || documentFile.uploadedAt;
+  const displayUploadedBy = documentFile.lastVersionUploadedByUserName || documentFile.uploadedByUserName;
+
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -63,7 +66,7 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
                 {documentFile.name}
               </CardTitle>
               <CardDescription className="text-xs truncate">
-                Tipo: {documentFile.fileType} | Tamaño: {formatFileSize(documentFile.fileSize)}
+                Tipo: {documentFile.fileType} | Tamaño: {formatFileSize(documentFile.fileSize)} | Ver: {documentFile.currentVersion}
               </CardDescription>
             </div>
           </div>
@@ -77,9 +80,20 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
                             </a>
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>Descargar</p></TooltipContent>
+                    <TooltipContent><p>Descargar v{documentFile.currentVersion}</p></TooltipContent>
                 </Tooltip>
              </TooltipProvider>
+             {/* Placeholder for future version history button */}
+             {/* <TooltipProvider> 
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => alert('Ver historial - Próximamente')} className="h-8 w-8">
+                            <History className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Ver Historial de Versiones</p></TooltipContent>
+                </Tooltip>
+             </TooltipProvider> */}
             <TooltipProvider>
                  <Tooltip>
                     <TooltipTrigger asChild>
@@ -87,7 +101,7 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
                           <Trash2 className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>Eliminar</p></TooltipContent>
+                    <TooltipContent><p>Eliminar Documento (Todas las versiones)</p></TooltipContent>
                 </Tooltip>
             </TooltipProvider>
           </div>
@@ -97,11 +111,11 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
         {documentFile.description && <p className="line-clamp-2">Descripción: {documentFile.description}</p>}
         <div className="flex items-center gap-1">
           <UserCircle className="h-3 w-3" />
-          Subido por: {documentFile.uploadedByUserName || 'Desconocido'}
+          Subido por: {displayUploadedBy || 'Desconocido'}
         </div>
         <div className="flex items-center gap-1">
           <CalendarDays className="h-3 w-3" />
-          Subido el: {isValid(parseISO(documentFile.uploadedAt)) ? format(parseISO(documentFile.uploadedAt), "PPp", { locale: es }) : 'Fecha inválida'}
+          Última Actualización: {isValid(parseISO(displayUploadedAt)) ? format(parseISO(displayUploadedAt), "PPp", { locale: es }) : 'Fecha inválida'}
         </div>
          {relatedLead && (
             <div className="flex items-center gap-1 text-primary" title={`Asociado al Lead: ${relatedLead.name}`}>
@@ -127,4 +141,3 @@ export function DocumentListItem({ documentFile, onDelete, leads = [], contacts 
     </Card>
   );
 }
-
