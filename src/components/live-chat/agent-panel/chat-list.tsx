@@ -8,9 +8,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNowStrict, isValid, parseISO } from "date-fns"; // Added isValid, parseISO
+import { formatDistanceToNowStrict, isValid, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { UserCheck, MessagesSquare, History } from "lucide-react";
+import { UserCheck, MessagesSquare, History, UserCircle } from "lucide-react";
 
 interface ChatListProps {
   sessions: ChatSession[];
@@ -20,6 +20,24 @@ interface ChatListProps {
   currentAgentId: string | null;
   isHistoryList?: boolean; // New prop
 }
+
+const VisitorDisplayIcon = ({ session }: { session: ChatSession }) => {
+  const isGenericVisitor = !session.visitorName || session.visitorName.startsWith("Visitante ");
+  const visitorName = session.visitorName || "Visitante";
+  const fallbackInitial = (visitorName).substring(0,1).toUpperCase();
+
+  if (isGenericVisitor) {
+    return <UserCircle className="h-9 w-9 mr-3 text-muted-foreground" />;
+  }
+
+  return (
+    <Avatar className="h-9 w-9 mr-3">
+      <AvatarImage src={`https://avatar.vercel.sh/${session.visitorId}.png?size=40`} alt={visitorName} data-ai-hint="visitor avatar" />
+      <AvatarFallback>{fallbackInitial}</AvatarFallback>
+    </Avatar>
+  );
+};
+
 
 export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoading, currentAgentId, isHistoryList = false }: ChatListProps) {
   if (isLoading) {
@@ -62,6 +80,7 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
             if (isValid(lastMessageDate)) {
               timeAgo = formatDistanceToNowStrict(lastMessageDate, { addSuffix: true, locale: es });
             } else {
+               // Fallback for potentially non-ISO string dates, though ideally dates should be consistently ISO
               const attemptParseWithNewDate = new Date(session.lastMessageAt);
               if (isValid(attemptParseWithNewDate)) {
                 timeAgo = formatDistanceToNowStrict(attemptParseWithNewDate, { addSuffix: true, locale: es });
@@ -77,14 +96,11 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
               variant="ghost"
               className={cn(
                 "w-full h-auto justify-start p-2 text-left",
-                selectedSessionId === session.id && "bg-accent text-accent-foreground"
+                selectedSessionId === session.id && "bg-primary/10 text-primary" // Changed selected style
               )}
               onClick={() => onSelectSession(session)}
             >
-              <Avatar className="h-9 w-9 mr-3">
-                <AvatarImage src={`https://avatar.vercel.sh/${session.visitorId}.png?size=40`} alt={session.visitorName || "Visitante"} data-ai-hint="visitor avatar" />
-                <AvatarFallback>{(session.visitorName || "V").substring(0,1).toUpperCase()}</AvatarFallback>
-              </Avatar>
+              <VisitorDisplayIcon session={session} />
               <div className="flex-grow min-w-0">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium truncate">{session.visitorName || `Visitante ${session.visitorId.substring(0,6)}`}</p>
@@ -114,3 +130,4 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
     </ScrollArea>
   );
 }
+

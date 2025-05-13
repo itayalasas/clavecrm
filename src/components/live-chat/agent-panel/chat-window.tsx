@@ -31,6 +31,24 @@ interface ChatWindowProps {
   linkedTicket: Ticket | null;
 }
 
+const ChatWindowHeaderIcon = ({ session }: { session: ChatSession }) => {
+  const isGenericVisitor = !session.visitorName || session.visitorName.startsWith("Visitante ");
+  const visitorName = session.visitorName || "Visitante";
+  const fallbackInitial = (visitorName).substring(0,1).toUpperCase();
+
+  if (isGenericVisitor) {
+    return <UserCircle className="h-8 w-8 text-muted-foreground" />;
+  }
+
+  return (
+    <Avatar className="h-8 w-8">
+      <AvatarImage src={`https://avatar.vercel.sh/${session.visitorId}.png?size=32`} alt={visitorName} data-ai-hint="visitor avatar"/>
+      <AvatarFallback>{fallbackInitial}</AvatarFallback>
+    </Avatar>
+  );
+};
+
+
 export function ChatWindow({
   session,
   messages,
@@ -88,7 +106,7 @@ export function ChatWindow({
     <div className="flex flex-col h-full">
       <CardHeader className="p-3 border-b flex-row items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <UserCircle className="h-8 w-8 text-muted-foreground" /> {/* Visitor Icon */}
+          <ChatWindowHeaderIcon session={session} />
           <div className="min-w-0">
             <CardTitle className="text-base truncate">
               {isReadOnly && <History className="inline h-4 w-4 mr-1.5 text-muted-foreground" />}
@@ -145,14 +163,14 @@ export function ChatWindow({
                   className={cn(
                     "p-2.5 rounded-lg max-w-[70%] text-sm shadow-sm",
                     msg.senderType === 'agent'
-                      ? "bg-secondary text-secondary-foreground rounded-br-none" // Changed agent bubble color
+                      ? "bg-secondary text-secondary-foreground rounded-br-none" 
                       : "bg-background border rounded-bl-none"
                   )}
                 >
                   <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                    <p className={cn(
                        "text-xs mt-1",
-                       msg.senderType === 'agent' ? "text-muted-foreground/80 text-right" : "text-muted-foreground/80 text-left" // Adjusted agent timestamp color
+                       msg.senderType === 'agent' ? "text-muted-foreground/80 text-right" : "text-muted-foreground/80 text-left" 
                     )}>
                         {format(new Date(msg.timestamp), "p", { locale: es })}
                     </p>
@@ -202,3 +220,4 @@ export function ChatWindow({
     </div>
   );
 }
+
