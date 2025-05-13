@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChatSession, Lead, Ticket } from "@/lib/types";
@@ -74,7 +75,7 @@ export function VisitorInfo({
                         <Users className="h-3 w-3 text-primary"/> Lead: {linkedLead.name}
                     </span>
                     <Button variant="ghost" size="icon" className="h-5 w-5" asChild>
-                        <Link href={`/pipeline?lead=${linkedLead.id}`} target="_blank"><ExternalLink className="h-3 w-3"/></Link>
+                        <Link href={`/pipeline?lead=${linkedLead.id}`}><ExternalLink className="h-3 w-3"/></Link>
                     </Button>
                 </div>
             ) : session.relatedLeadId && <p className="text-xs text-muted-foreground">ID Lead Vinculado: {session.relatedLeadId.substring(0,8)}...</p>
@@ -85,7 +86,7 @@ export function VisitorInfo({
                         <ListChecks className="h-3 w-3 text-primary"/> Ticket: {linkedTicket.title}
                     </span>
                      <Button variant="ghost" size="icon" className="h-5 w-5" asChild>
-                        <Link href={`/tickets?ticket=${linkedTicket.id}`} target="_blank"><ExternalLink className="h-3 w-3"/></Link>
+                        <Link href={`/tickets?ticket=${linkedTicket.id}`}><ExternalLink className="h-3 w-3"/></Link>
                     </Button>
                 </div>
             ) : session.relatedTicketId && <p className="text-xs text-muted-foreground mt-1">ID Ticket Vinculado: {session.relatedTicketId.substring(0,8)}...</p>
@@ -114,3 +115,4 @@ export function VisitorInfo({
     </Card>
   );
 }
+
