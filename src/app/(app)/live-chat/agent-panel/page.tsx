@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -82,7 +83,7 @@ export default function AgentPanelPage() {
       setLiveSessions(sessions);
       setIsLoadingLiveSessions(false);
     }, (error) => {
-      console.error("Error fetching live chat sessions: ", error);
+      console.error("Error al obtener sesiones de chat en vivo: ", error);
       toast({ title: "Error al cargar chats en vivo", description: "No se pudieron obtener las sesiones de chat.", variant: "destructive" });
       setIsLoadingLiveSessions(false);
     });
@@ -111,7 +112,7 @@ export default function AgentPanelPage() {
       });
       setHistorySessions(sessions);
     } catch (error) {
-      console.error("Error fetching chat history: ", error);
+      console.error("Error al obtener historial de chat: ", error);
       toast({ title: "Error al cargar historial", description: "No se pudo obtener el historial de chats.", variant: "destructive" });
     } finally {
       setIsLoadingHistorySessions(false);
@@ -141,7 +142,7 @@ export default function AgentPanelPage() {
       setUsers(usersData);
       setTickets(ticketsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Ticket)));
     } catch (error) {
-      console.error("Error fetching CRM data:", error);
+      console.error("Error al obtener datos CRM:", error);
       toast({ title: "Error al cargar datos CRM", variant: "destructive" });
     } finally {
       setIsLoadingSupportData(false);
@@ -173,7 +174,7 @@ export default function AgentPanelPage() {
         setMessages(fetchedMessages);
         setIsLoadingMessages(false);
       }, (error) => {
-        console.error(`Error fetching messages for session ${selectedSession.id}: `, error);
+        console.error(`Error al obtener mensajes para la sesión ${selectedSession.id}: `, error);
         toast({ title: "Error al cargar mensajes", description: "No se pudieron obtener los mensajes del chat.", variant: "destructive" });
         setIsLoadingMessages(false);
       });
@@ -195,7 +196,7 @@ export default function AgentPanelPage() {
         });
         toast({ title: "Chat Asignado", description: `Te has asignado al chat con ${session.visitorName || session.visitorId}` });
       } catch (error) {
-        console.error("Error assigning chat:", error);
+        console.error("Error al asignar chat:", error);
         toast({ title: "Error al asignar chat", variant: "destructive" });
       }
     }
@@ -216,7 +217,7 @@ export default function AgentPanelPage() {
         lastMessageAt: serverTimestamp()
       });
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error al enviar mensaje:", error);
       toast({ title: "Error al enviar mensaje", variant: "destructive"});
     }
   };
@@ -240,7 +241,7 @@ export default function AgentPanelPage() {
       }
 
     } catch (error) {
-      console.error("Error closing chat:", error);
+      console.error("Error al cerrar chat:", error);
       toast({ title: "Error al cerrar chat", variant: "destructive"});
     }
   };
@@ -264,9 +265,16 @@ export default function AgentPanelPage() {
         const firestoreSafeLead = {
             ...leadData,
             id: leadId,
-            createdAt: Timestamp.now(), // New lead created now
+            createdAt: leadData.createdAt ? Timestamp.fromDate(new Date(leadData.createdAt)) : Timestamp.now(),
             updatedAt: Timestamp.now(),
             expectedCloseDate: leadData.expectedCloseDate ? Timestamp.fromDate(new Date(leadData.expectedCloseDate)) : null,
+            email: leadData.email || null,
+            phone: leadData.phone || null,
+            company: leadData.company || null,
+            details: leadData.details || null,
+            value: leadData.value || 0, 
+            score: leadData.score || 0,
+            probability: leadData.probability || 0,
         };
         await setDoc(leadDocRef, firestoreSafeLead, { merge: true });
         
@@ -291,10 +299,10 @@ export default function AgentPanelPage() {
     setTicketInitialData({
         title: `Ticket desde Chat: ${session.visitorName || session.visitorId.substring(0,6)}`,
         description: `Chat iniciado el ${new Date(session.createdAt).toLocaleString()}.\nID Sesión: ${session.id}\nMensaje inicial del visitante:\n${session.initialMessage || 'El visitante no proveyó un mensaje inicial.'}`,
-        reporterUserId: session.visitorId, // Or a generic "Visitor" user if preferred
+        reporterUserId: session.visitorId, 
         status: 'Abierto',
         priority: 'Media',
-        assigneeUserId: currentUser?.id, // Auto-assign to current agent
+        assigneeUserId: currentUser?.id, 
     });
     setSessionToLink(session);
     setIsAddTicketDialogOpen(true);
@@ -308,9 +316,11 @@ export default function AgentPanelPage() {
         const firestoreSafeTicket = {
             ...ticketData,
             id: ticketId,
-            createdAt: Timestamp.now(),
+            createdAt: ticketData.createdAt ? Timestamp.fromDate(new Date(ticketData.createdAt)) : Timestamp.now(),
             updatedAt: Timestamp.now(),
-            reporterUserId: sessionToLink.visitorId, // Use visitorId or map to a generic "website visitor" user
+            reporterUserId: sessionToLink.visitorId, 
+            relatedLeadId: ticketData.relatedLeadId || null, // Ensure null if undefined
+            assigneeUserId: ticketData.assigneeUserId || null, // Ensure null if undefined
         };
         await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
         
@@ -499,19 +509,19 @@ export default function AgentPanelPage() {
        {/* Dialogs for CRM Integration */}
       {isAddLeadDialogOpen && selectedSession && (
         <AddEditLeadDialog
-          trigger={<></>} // Dialog is controlled by isOpen state
+          trigger={<span />} 
           isOpen={isAddLeadDialogOpen}
           onOpenChange={setIsAddLeadDialogOpen}
           stages={pipelineStages}
-          leadToEdit={leadInitialData} // Use initialData to pre-fill
+          leadToEdit={leadInitialData} 
           onSave={handleSaveLeadFromChat}
-          isSubmitting={isLoadingSupportData} // You might want a more specific submitting state
+          isSubmitting={isLoadingSupportData} 
         />
       )}
 
       {isAddTicketDialogOpen && selectedSession && currentUser && (
          <AddEditTicketDialog
-            trigger={<></>}
+            trigger={<span />}
             isOpen={isAddTicketDialogOpen}
             onOpenChange={setIsAddTicketDialogOpen}
             ticketToEdit={ticketInitialData}
@@ -535,3 +545,4 @@ export default function AgentPanelPage() {
     </div>
   );
 }
+

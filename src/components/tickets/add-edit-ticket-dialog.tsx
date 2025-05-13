@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useId } from "react";
@@ -37,8 +38,8 @@ import { Card, CardContent, CardDescription as CardDescUi, CardHeader as CardHea
 
 
 interface AddEditTicketDialogProps {
-  trigger: React.ReactNode;
-  ticketToEdit?: Ticket | Partial<Ticket> | null; // Allow Partial<Ticket> for initialData
+  trigger?: React.ReactNode; // Make trigger optional
+  ticketToEdit?: Ticket | Partial<Ticket> | null; 
   leads: Lead[];
   users: User[];
   onSave: (ticket: Ticket) => Promise<void>; 
@@ -81,7 +82,14 @@ export function AddEditTicketDialog({
 }: AddEditTicketDialogProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
-  const setIsOpen = controlledOnOpenChange || setInternalIsOpen;
+  
+  const setIsOpen = (open: boolean) => {
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(open);
+    } else {
+      setInternalIsOpen(open);
+    }
+  };
   
   const { currentUser } = useAuth();
   const { toast } = useToast();
@@ -253,6 +261,7 @@ export function AddEditTicketDialog({
     
     await onSave(ticketDataToSave);
     setIsUploading(false);
+    setIsOpen(false); // Ensure dialog closes after save
   };
   
   let assigneeNameDisplay = "Selecciona un usuario (opcional)";
@@ -274,7 +283,7 @@ export function AddEditTicketDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild onClick={() => !isOpen && setIsOpen(true)}>{trigger}</DialogTrigger>
+      {trigger && <DialogTrigger asChild onClick={() => !isOpen && setIsOpen(true)}>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{ticketToEdit && 'id' in ticketToEdit ? "Editar Ticket" : "Abrir Nuevo Ticket"}</DialogTitle>
@@ -497,3 +506,4 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
+
