@@ -1,13 +1,12 @@
-
 "use client";
 
 import type { Ticket, Lead, User, TicketPriority, TicketStatus, Comment } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase, X } from "lucide-react";
+import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase, X, Brain, SmilePlus, Info } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { es } from 'date-fns/locale'; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -216,7 +215,7 @@ export function TicketItem({
   const handleSaveSolution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (solutionStatus !== 'En Progreso' && !solutionDescription.trim() && !solutionFile && currentSolutionAttachments.length === 0) {
-      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant:"destructive" });
+      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant:"destructive"});
       return;
     }
     if (!currentUser || !isAssignee) return;
@@ -227,8 +226,8 @@ export function TicketItem({
       setIsUploadingSolutionAttachment(true);
       setSolutionUploadProgress(0);
       const filePath = `ticket-solutions/${ticket.id}/${currentUser.id}/${Date.now()}-${solutionFile.name}`;
-      const fileStorageRef = storageRef(storage, filePath); // Corrected ref to use filePath
-      const uploadTask = uploadBytesResumable(fileStorageRef, solutionFile); // Corrected to use solutionFile
+      const fileStorageRef = storageRef(storage, filePath); 
+      const uploadTask = uploadBytesResumable(fileStorageRef, solutionFile); 
 
       try {
         await new Promise<void>((resolve, reject) => {
@@ -340,6 +339,20 @@ export function TicketItem({
                 </div>
               )}
             </div>
+             {(ticket.slaId || ticket.queueId) && (
+                <div className="mt-2 pt-2 border-t grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {ticket.slaId && (
+                         <div className="flex items-center gap-1.5" title="SLA Aplicado">
+                            <ShieldCheck className="h-4 w-4 text-green-600" /> SLA: {ticket.slaId}
+                        </div>
+                    )}
+                    {ticket.queueId && (
+                         <div className="flex items-center gap-1.5" title="Cola de Soporte">
+                            <LayersIcon className="h-4 w-4 text-indigo-600" /> Cola: {ticket.queueId}
+                        </div>
+                    )}
+                </div>
+            )}
           </CardContent>
           <AccordionContent className="px-4 pb-4 space-y-4">
             {ticket.description && ticket.description.length > 150 && (
@@ -469,6 +482,23 @@ export function TicketItem({
                 )}
               </div>
             )}
+            
+            <div className="pt-3 border-t space-y-2">
+                <Button variant="ghost" size="sm" className="text-xs" disabled>
+                    <Brain className="mr-1.5 h-3.5 w-3.5"/> Sugerir Artículo KB (Próx.)
+                </Button>
+                 {(ticket.status === 'Resuelto' || ticket.status === 'Cerrado') && (
+                    <Button variant="ghost" size="sm" className="text-xs" disabled>
+                        <SmilePlus className="mr-1.5 h-3.5 w-3.5"/> Enviar Encuesta de Satisfacción (Próx.)
+                    </Button>
+                )}
+                 {(ticket.status === 'Resuelto' || ticket.status === 'Cerrado') && ticket.satisfactionRating && (
+                    <div className="text-xs text-muted-foreground p-2 bg-blue-50 rounded-md">
+                        <p><strong>Satisfacción Cliente:</strong> {ticket.satisfactionRating}/5</p>
+                        {ticket.satisfactionComment && <p>"{ticket.satisfactionComment}"</p>}
+                    </div>
+                 )}
+            </div>
 
             <div className="pt-3 border-t">
               <h4 className="text-sm font-semibold text-primary flex items-center gap-1 mb-2"><MessageCircle className="h-4 w-4"/>Comentarios ({internalComments.length || 0})</h4>

@@ -1,15 +1,14 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Ticket, Lead, User, TicketStatus, TicketPriority, Comment, SLA, SupportQueue } from "@/lib/types";
-import { NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
+import { NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES, INITIAL_SLAS, INITIAL_SUPPORT_QUEUES } from "@/lib/constants";
 import { TicketItem } from "@/components/tickets/ticket-item";
 import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList, Layers, ShieldAlertIcon, RotateCcw } from "lucide-react";
+import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList, LayersIcon, ShieldAlertIcon, RotateCcw, HelpCircleIcon, SmilePlus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -29,13 +28,14 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [slas, setSlas] = useState<SLA[]>([]); // Placeholder for SLAs
-  const [supportQueues, setSupportQueues] = useState<SupportQueue[]>([]); // Placeholder for Support Queues
+  const [slas, setSlas] = useState<SLA[]>(INITIAL_SLAS); // Use initial data for now
+  const [supportQueues, setSupportQueues] = useState<SupportQueue[]>(INITIAL_SUPPORT_QUEUES); // Use initial
 
 
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
+  const [isLoadingSlasAndQueues, setIsLoadingSlasAndQueues] = useState(true);
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -60,7 +60,7 @@ export default function TicketsPage() {
   const fetchTickets = useCallback(async () => {
     if (!currentUser) {
       setIsLoadingTickets(false);
-      return undefined; // Return undefined if no user
+      return undefined; 
     }
     setIsLoadingTickets(true);
     try {
@@ -82,11 +82,17 @@ export default function TicketsPage() {
             assigneeUserId: data.assigneeUserId || undefined,
             relatedLeadId: data.relatedLeadId || undefined,
             attachments: data.attachments || [],
-            comments: data.comments || [],
+            comments: data.comments || [], // Firestore subcollections need separate fetching if not embedded
             solutionDescription: data.solutionDescription || undefined,
             solutionAttachments: data.solutionAttachments || [],
             slaId: data.slaId || undefined,
             queueId: data.queueId || undefined,
+            resolvedAt: (data.resolvedAt as Timestamp)?.toDate().toISOString() || undefined,
+            closedAt: (data.closedAt as Timestamp)?.toDate().toISOString() || undefined,
+            firstResponseAt: (data.firstResponseAt as Timestamp)?.toDate().toISOString() || undefined,
+            satisfactionSurveySentAt: (data.satisfactionSurveySentAt as Timestamp)?.toDate().toISOString() || undefined,
+            satisfactionRating: data.satisfactionRating || undefined,
+            satisfactionComment: data.satisfactionComment || undefined,
           } as Ticket;
         });
         setTickets(fetchedTickets);
@@ -102,7 +108,7 @@ export default function TicketsPage() {
         setIsLoadingTickets(false);
       });
 
-      return unsubscribe; // Return the unsubscribe function
+      return unsubscribe; 
 
     } catch (error) {
       console.error("Error al configurar la escucha de tickets:", error);
@@ -112,7 +118,7 @@ export default function TicketsPage() {
         variant: "destructive",
       });
       setIsLoadingTickets(false);
-      return undefined; // Return undefined on error
+      return undefined; 
     }
   }, [currentUser, toast]);
 
@@ -155,16 +161,34 @@ export default function TicketsPage() {
     }
   }, [toast]);
 
+  const fetchSlasAndQueues = useCallback(async () => {
+    setIsLoadingSlasAndQueues(true);
+    try {
+      // Simulating fetch for now, replace with actual Firestore queries
+      // const slasSnapshot = await getDocs(query(collection(db, "slas"), orderBy("name")));
+      // setSlas(slasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SLA)));
+      // const queuesSnapshot = await getDocs(query(collection(db, "supportQueues"), orderBy("name")));
+      // setSupportQueues(queuesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupportQueue)));
+      setSlas(INITIAL_SLAS);
+      setSupportQueues(INITIAL_SUPPORT_QUEUES);
+    } catch (error) {
+        console.error("Error fetching SLAs or Queues:", error);
+        toast({ title: "Error al cargar SLAs/Colas", variant: "destructive" });
+    } finally {
+        setIsLoadingSlasAndQueues(false);
+    }
+  }, [toast]);
+
+
   useEffect(() => {
     let unsubscribeTickets: (() => void) | undefined;
     if (!authLoading) {
         fetchUsers();
         fetchLeads();
-        // TODO: Fetch SLAs and SupportQueues when implemented
-        // fetchSlas(); fetchSupportQueues();
+        fetchSlasAndQueues();
         if (currentUser) {
           fetchTickets().then(unsub => {
-            if (typeof unsub === 'function') { // Ensure unsub is a function before assigning
+            if (typeof unsub === 'function') { 
                 unsubscribeTickets = unsub;
             }
           });
@@ -178,7 +202,7 @@ export default function TicketsPage() {
         unsubscribeTickets();
       }
     };
-  }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTickets]);
+  }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTickets, fetchSlasAndQueues]);
 
   useEffect(() => {
     const ticketIdFromQuery = searchParams.get('ticketId');
@@ -186,8 +210,6 @@ export default function TicketsPage() {
         const exists = tickets.some(t => t.id === ticketIdFromQuery);
         if (exists) {
             setTicketToOpen(ticketIdFromQuery);
-            // Optional: remove query param after use
-            // router.replace('/tickets', { scroll: false }); 
         } else {
             setTicketToOpen(null);
         }
@@ -209,6 +231,14 @@ export default function TicketsPage() {
       solutionAttachments: ticketData.solutionAttachments || [],
       updatedAt: new Date().toISOString(),
     };
+     // Add resolvedAt or closedAt based on status
+    if (ticketData.status === 'Resuelto' && (!ticketData.resolvedAt || !isEditing)) {
+        ticketToSave.resolvedAt = new Date().toISOString();
+    }
+    if (ticketData.status === 'Cerrado' && (!ticketData.closedAt || !isEditing)) {
+        ticketToSave.closedAt = new Date().toISOString();
+    }
+
 
     try {
       const ticketDocRef = doc(db, "tickets", ticketToSave.id);
@@ -218,6 +248,10 @@ export default function TicketsPage() {
         ...ticketDataForFirestore,
         createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
         updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
+        resolvedAt: ticketToSave.resolvedAt ? Timestamp.fromDate(new Date(ticketToSave.resolvedAt)) : null,
+        closedAt: ticketToSave.closedAt ? Timestamp.fromDate(new Date(ticketToSave.closedAt)) : null,
+        firstResponseAt: ticketToSave.firstResponseAt ? Timestamp.fromDate(new Date(ticketToSave.firstResponseAt)) : null,
+        satisfactionSurveySentAt: ticketToSave.satisfactionSurveySentAt ? Timestamp.fromDate(new Date(ticketToSave.satisfactionSurveySentAt)) : null,
         assigneeUserId: ticketToSave.assigneeUserId || null,
         relatedLeadId: ticketToSave.relatedLeadId || null,
         solutionDescription: ticketToSave.solutionDescription || "",
@@ -318,6 +352,8 @@ export default function TicketsPage() {
       toast({title: "Error", description: "Debes iniciar sesión para comentar.", variant: "destructive"});
       return;
     }
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
 
     const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = {
       userId: currentUser.id,
@@ -333,11 +369,14 @@ export default function TicketsPage() {
       await setDoc(commentDocRef, newComment);
 
       const ticketDocRef = doc(db, "tickets", ticketId);
-      await updateDoc(ticketDocRef, {
-        updatedAt: Timestamp.now(),
-        // Optionally, update status if comment implies progress
-        // status: 'En Progreso' // Example
-      });
+      const updateData: Partial<Ticket> = { updatedAt: new Date().toISOString() };
+      if (currentUser.id !== ticket.reporterUserId && !ticket.firstResponseAt) {
+        updateData.firstResponseAt = new Date().toISOString();
+      }
+      if (ticket.status === 'Abierto' && currentUser.id === ticket.assigneeUserId) {
+         updateData.status = 'En Progreso';
+      }
+      await updateDoc(ticketDocRef, updateData);
 
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
     } catch (error) {
@@ -362,21 +401,32 @@ export default function TicketsPage() {
        return;
     }
 
-    if (currentUser.id !== ticketToUpdate.assigneeUserId && currentUser.role !== 'admin' && currentUser.role !== 'supervisor') {
+    if (currentUser.id !== ticketToUpdate.assigneeUserId && currentUser?.role !== 'admin' && currentUser?.role !== 'supervisor') {
         toast({title: "Acción no permitida", description: "Solo el usuario asignado o un administrador/supervisor puede registrar la solución.", variant: "destructive"});
         return;
     }
 
-    const updatedTicketData = {
+    const updatedTicketData: Partial<Pick<Ticket, 'solutionDescription' | 'solutionAttachments' | 'status' | 'updatedAt' | 'resolvedAt' | 'closedAt'>> = {
         solutionDescription: solutionDescriptionParam,
         solutionAttachments: solutionAttachmentsParam,
         status: statusParam,
-        updatedAt: Timestamp.now(),
+        updatedAt: new Date().toISOString(),
     };
+
+    if (statusParam === 'Resuelto' && !ticketToUpdate.resolvedAt) {
+      updatedTicketData.resolvedAt = new Date().toISOString();
+    }
+    if (statusParam === 'Cerrado' && !ticketToUpdate.closedAt) {
+      updatedTicketData.closedAt = new Date().toISOString();
+      if (!updatedTicketData.resolvedAt && ticketToUpdate.status !== 'Resuelto') { // If closing directly without resolving first
+        updatedTicketData.resolvedAt = new Date().toISOString();
+      }
+    }
+
 
     try {
         const ticketDocRef = doc(db, "tickets", ticketId);
-        await updateDoc(ticketDocRef, updatedTicketData as any); 
+        await updateDoc(ticketDocRef, updatedTicketData ); 
         toast({title: "Solución Actualizada", description: `La solución para el ticket "${ticketToUpdate.title}" ha sido guardada.`});
     } catch (error) {
         console.error("Error al actualizar la solución del ticket:", error);
@@ -422,7 +472,7 @@ export default function TicketsPage() {
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
 
-  const isLoading = authLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads;
+  const isLoading = authLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads || isLoadingSlasAndQueues;
 
   return (
     <div className="flex flex-col gap-6">
@@ -534,8 +584,8 @@ export default function TicketsPage() {
         ticketToEdit={editingTicket}
         leads={leads}
         users={users}
-        slas={slas} // Pass SLAs
-        supportQueues={supportQueues} // Pass Support Queues
+        slas={slas} 
+        supportQueues={supportQueues} 
         onSave={handleSaveTicket}
       />
 
@@ -550,30 +600,28 @@ export default function TicketsPage() {
           <ul className="list-disc list-inside space-y-2">
             <li>
               <strong>Acuerdos de Nivel de Servicio (SLA):</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-              <p className="text-xs pl-5">Definir tiempos de respuesta y resolución, y generar alertas.</p>
-              <p className="text-xs pl-5"> (Se añadió campo en formulario, lógica de backend y UI completa pendiente)</p>
+              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Implementado (Básico)</Badge>
+              <p className="text-xs pl-5">Gestión básica de SLAs (CRUD) y selección en ticket implementada. Alertas y aplicación de reglas de negocio (backend) pendiente.</p>
             </li>
             <li>
               <strong>Colas de Soporte:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-              <p className="text-xs pl-5">Organizar tickets en colas personalizadas para diferentes equipos o tipos de problemas.</p>
-              <p className="text-xs pl-5"> (Se añadió campo en formulario, lógica de backend y UI completa pendiente)</p>
+              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Implementado (Básico)</Badge>
+              <p className="text-xs pl-5">Gestión básica de Colas (CRUD) y selección en ticket implementada. Reglas de asignación automática (backend) pendiente.</p>
             </li>
             <li>
               <strong>Escalados Automáticos:</strong>
               <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-              <p className="text-xs pl-5">Reglas para escalar tickets automáticamente si no se cumplen los SLA.</p>
+              <p className="text-xs pl-5">Reglas para escalar tickets automáticamente (backend pendiente).</p>
             </li>
              <li>
                 <strong>Base de Conocimiento (Knowledge Base):</strong> 
                 <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-                <p className="text-xs pl-5">Integrar con una base de conocimiento para sugerir artículos de ayuda.</p>
+                <p className="text-xs pl-5">Sugerir artículos de ayuda (UI placeholder añadido en TicketItem). Creación/gestión de KB pendiente.</p>
             </li>
             <li>
                 <strong>Encuestas de Satisfacción:</strong> 
                 <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-                <p className="text-xs pl-5">Enviar encuestas CSAT/NPS tras la resolución del ticket.</p>
+                <p className="text-xs pl-5">Enviar encuestas CSAT/NPS (UI placeholder añadido en TicketItem). Creación/envío de encuestas pendiente.</p>
             </li>
           </ul>
           <p className="mt-4 font-semibold">Estas funcionalidades se implementarán progresivamente para mejorar la gestión avanzada de tickets.</p>
@@ -603,6 +651,7 @@ export default function TicketsPage() {
     </div>
   );
 }
+
 
 
 

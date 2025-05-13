@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useId } from "react";
@@ -25,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Paperclip, UploadCloud, X, ShieldCheck, ListChecks } from "lucide-react";
+import { Check, ChevronsUpDown, Paperclip, UploadCloud, X, ShieldCheck, ListChecks, LayersIcon } from "lucide-react";
 import { TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
@@ -42,8 +41,8 @@ interface AddEditTicketDialogProps {
   ticketToEdit?: Ticket | Partial<Ticket> | null; 
   leads: Lead[];
   users: User[];
-  slas?: SLA[]; // Optional for now
-  supportQueues?: SupportQueue[]; // Optional for now
+  slas: SLA[]; 
+  supportQueues: SupportQueue[]; 
   onSave: (ticket: Ticket) => Promise<void>; 
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -85,8 +84,8 @@ export function AddEditTicketDialog({
   ticketToEdit,
   leads,
   users,
-  slas = [], // Default to empty array
-  supportQueues = [], // Default to empty array
+  slas = [], 
+  supportQueues = [], 
   onSave,
   isOpen: controlledIsOpen,
   onOpenChange: controlledOnOpenChange,
@@ -179,7 +178,14 @@ export function AddEditTicketDialog({
     } else if (name === 'slaId') {
         setFormData((prev) => ({...prev, slaId: value === NO_SLA_SELECTED_VALUE ? undefined : value }));
     } else if (name === 'queueId') {
-        setFormData((prev) => ({...prev, queueId: value === NO_QUEUE_SELECTED_VALUE ? undefined : value }));
+        const selectedQueue = supportQueues.find(q => q.id === value);
+        setFormData((prev) => ({
+            ...prev, 
+            queueId: value === NO_QUEUE_SELECTED_VALUE ? undefined : value,
+            // Auto-populate assignee and SLA if queue has defaults and fields are not already set
+            assigneeUserId: (prev.assigneeUserId === undefined || prev.assigneeUserId === NO_USER_SELECTED_VALUE) && selectedQueue?.defaultAssigneeUserId ? selectedQueue.defaultAssigneeUserId : prev.assigneeUserId,
+            slaId: (prev.slaId === undefined || prev.slaId === NO_SLA_SELECTED_VALUE) && selectedQueue?.defaultSlaId ? selectedQueue.defaultSlaId : prev.slaId,
+        }));
     }
     else {
         setFormData((prev) => ({ ...prev, [name]: value as TicketStatus | TicketPriority }));
@@ -290,7 +296,7 @@ export function AddEditTicketDialog({
     
     await onSave(ticketDataToSave);
     setIsUploading(false);
-    setIsOpen(false); // Ensure dialog closes after save
+    setIsOpen(false); 
   };
   
   let assigneeNameDisplay = "Selecciona un usuario (opcional)";
@@ -444,30 +450,10 @@ export function AddEditTicketDialog({
             </Select>
           </div>
 
-          {/* Placeholder for SLA and Queue Selection */}
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor={`${dialogId}-slaId`} className="text-right">SLA Aplicable</Label>
-            <Select
-              name="slaId"
-              value={formData.slaId || NO_SLA_SELECTED_VALUE}
-              onValueChange={(value) => handleSelectChange('slaId', value)}
-              disabled={isUploading || !canEditCoreFields || slas.length === 0}
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder={slas.length === 0 ? "No hay SLAs definidos" : "Selecciona un SLA (opcional)"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SLA_SELECTED_VALUE}>Ninguno</SelectItem>
-                {slas.map((sla) => (
-                  <SelectItem key={sla.id} value={sla.id}>
-                    {sla.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor={`${dialogId}-queueId`} className="text-right">Cola de Soporte</Label>
+            <Label htmlFor={`${dialogId}-queueId`} className="text-right flex items-center gap-1">
+                <LayersIcon className="h-4 w-4 text-muted-foreground"/> Cola
+            </Label>
             <Select
               name="queueId"
               value={formData.queueId || NO_QUEUE_SELECTED_VALUE}
@@ -482,6 +468,29 @@ export function AddEditTicketDialog({
                 {supportQueues.map((queue) => (
                   <SelectItem key={queue.id} value={queue.id}>
                     {queue.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor={`${dialogId}-slaId`} className="text-right flex items-center gap-1">
+                 <ShieldCheck className="h-4 w-4 text-muted-foreground"/>SLA
+            </Label>
+            <Select
+              name="slaId"
+              value={formData.slaId || NO_SLA_SELECTED_VALUE}
+              onValueChange={(value) => handleSelectChange('slaId', value)}
+              disabled={isUploading || !canEditCoreFields || slas.length === 0}
+            >
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder={slas.length === 0 ? "No hay SLAs definidos" : "Selecciona un SLA (opcional)"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SLA_SELECTED_VALUE}>Ninguno</SelectItem>
+                {slas.map((sla) => (
+                  <SelectItem key={sla.id} value={sla.id}>
+                    {sla.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -580,6 +589,7 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
+
 
 
 

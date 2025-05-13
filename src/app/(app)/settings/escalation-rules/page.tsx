@@ -2,12 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS } from "@/lib/constants";
-import { Brain, AlertTriangle, Link as LinkIcon } from "lucide-react";
+import { ClockIcon, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export default function KnowledgeBasePage() {
-  const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/knowledge-base');
-  const PageIcon = navItem?.icon || Brain;
+export default function EscalationRulesPage() {
+  const navItem = NAV_ITEMS.flatMap(item => item.subItems || []).find(item => item.href === '/settings/escalation-rules');
+  const PageIcon = navItem?.icon || ClockIcon;
 
   return (
     <div className="flex flex-col gap-6">
@@ -15,10 +15,10 @@ export default function KnowledgeBasePage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
             <PageIcon className="h-6 w-6 text-primary" />
-            {navItem?.label || "Base de Conocimiento"}
+            Reglas de Escalado de Tickets
           </CardTitle>
           <CardDescription>
-            Crea y gestiona artículos de ayuda internos y/o públicos para mejorar el autoservicio y la eficiencia del soporte.
+            Define reglas para escalar tickets automáticamente si no se cumplen los SLAs o permanecen inactivos.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -28,20 +28,15 @@ export default function KnowledgeBasePage() {
               <h3 className="text-lg font-semibold">Funcionalidad en Desarrollo</h3>
             </div>
             <p className="text-sm text-amber-600">
-              La gestión completa de la Base de Conocimiento (creación de artículos, categorías, búsqueda) está planeada y se implementará próximamente.
+              La gestión completa de reglas de escalado (creación, edición, y lógica de ejecución en backend) está planeada y se implementará próximamente.
             </p>
             <div className="mt-3">
               <h4 className="font-medium text-amber-700">Características Planeadas:</h4>
               <ul className="list-disc list-inside text-sm text-amber-600 space-y-1 mt-1">
-                <li>Creación y edición de artículos con formato enriquecido.</li>
-                <li>Organización por categorías y etiquetas.</li>
-                <li>Búsqueda potente de artículos.</li>
-                <li>Control de visibilidad (interno/público).</li>
-                <li>Sistema de valoración y comentarios de artículos.</li>
-                <li>
-                  <LinkIcon className="inline h-4 w-4 mr-1"/>
-                  Vinculación de artículos a tickets de soporte y sugerencias automáticas (UI placeholder en tickets implementado).
-                </li>
+                <li>Definición de condiciones de escalado (ej. tiempo de inactividad, incumplimiento de SLA).</li>
+                <li>Configuración de acciones automáticas (ej. notificar supervisor, cambiar prioridad, reasignar).</li>
+                <li>Ordenamiento y priorización de reglas.</li>
+                <li>Logs de escalados ejecutados.</li>
               </ul>
             </div>
             <Badge variant="outline" className="mt-3 border-amber-500 text-amber-700">Próximamente</Badge>

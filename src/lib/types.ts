@@ -78,6 +78,12 @@ export interface Ticket {
   solutionAttachments?: { name: string, url: string }[]; // Attachments for the solution
   slaId?: string; // Optional: ID of the applied SLA
   queueId?: string; // Optional: ID of the support queue it belongs to
+  resolvedAt?: string; // ISO string, when status changed to 'Resuelto'
+  closedAt?: string; // ISO string, when status changed to 'Cerrado'
+  firstResponseAt?: string; // ISO string, when first comment by an agent (not reporter) was made
+  satisfactionSurveySentAt?: string; // ISO string
+  satisfactionRating?: number; // e.g., 1-5
+  satisfactionComment?: string;
 }
 
 // Sales Management Types
@@ -498,18 +504,23 @@ export interface SLA {
   responseTimeTargetMinutes: number; // e.g., 60 minutes for first response
   resolutionTimeTargetHours: number; // e.g., 8 hours for resolution
   appliesToPriority?: TicketPriority[]; // e.g., only for 'Alta'
-  appliesToType?: string[]; // If you have ticket types/categories
-  businessHoursOnly?: boolean; // True if SLA applies only during business hours
-  // ... other SLA conditions
+  appliesToQueues?: string[]; // Which queues this SLA applies to by default
+  businessHoursId?: string; // Link to a business hours definition (future)
+  escalationRuleIds?: string[]; // Rules triggered on breach
+  isEnabled: boolean;
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
 }
 
 export interface SupportQueue {
   id: string;
   name: string;
   description?: string;
-  // assignmentRules?: Rule[]; // Rules to auto-assign tickets to this queue (e.g., based on keyword, reporter group)
-  defaultAssigneeUserId?: string; // Optional default agent for this queue
-  associatedSlaId?: string; // Optional default SLA for this queue
+  defaultAssigneeUserId?: string | null; // Optional default agent for this queue
+  defaultSlaId?: string | null; // Optional default SLA for this queue
+  memberUserIds?: string[]; // Users part of this queue
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
 }
 
 export type EscalationConditionType = 'sla_response_breached' | 'sla_resolution_breached' | 'ticket_idle_for_x_hours';
@@ -523,5 +534,35 @@ export interface EscalationRule {
   conditionValue?: number; // e.g., hours for 'ticket_idle_for_x_hours'
   actionType: EscalationActionType;
   actionTargetId?: string; // userId, groupId, queueId, or new priority value
-  isActive: boolean;
+  actionTargetValue?: string; // e.g. the new priority level
+  order: number; // Execution order for rules
+  isEnabled: boolean;
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+}
+
+// Knowledge Base & Surveys (Placeholders - to be detailed later)
+export interface KnowledgeBaseArticle {
+    id: string;
+    title: string;
+    content: string; // Rich text or Markdown
+    category?: string;
+    tags?: string[];
+    visibility: 'internal' | 'public';
+    createdAt: string;
+    updatedAt?: string;
+    authorId: string;
+    viewCount?: number;
+    helpfulVotes?: number;
+    unhelpfulVotes?: number;
+}
+
+export interface SatisfactionSurvey {
+    id: string;
+    ticketId: string; // Link to the resolved ticket
+    userId: string; // User who submitted the survey
+    rating: number; // e.g., 1-5 CSAT or 0-10 NPS
+    comment?: string;
+    submittedAt: string;
+    type: 'CSAT' | 'NPS';
 }

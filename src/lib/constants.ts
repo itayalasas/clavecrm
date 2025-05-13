@@ -1,5 +1,5 @@
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle } from 'lucide-react';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -67,9 +67,19 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
       { href: '/settings', label: 'Configuración General', icon: Settings },
       { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle },
+      { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck },
+      { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon },
+      { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon, disabled: true },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
     ],
-    parentActiveIf: (pathname) => ['/user-management', '/settings', '/audit-log'].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/live-chat-widget'),
+    parentActiveIf: (pathname) => [
+        '/user-management', 
+        '/settings', 
+        '/audit-log',
+        '/settings/slas',
+        '/settings/support-queues',
+        '/settings/escalation-rules'
+    ].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/live-chat-widget'),
   },
 ];
 
@@ -215,7 +225,7 @@ export const MEETING_STATUSES: MeetingStatus[] = ['Programada', 'Confirmada', 'C
 
 export const ACTIVITY_LOG_USER_ACTIVITY_TYPES: readonly ActivityLogUserActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'] as const;
 
-export const AUDIT_ACTION_TYPES: readonly ActivityLogSystemAuditActionType[] = ['create', 'update', 'delete', 'login', 'logout', 'config_change', 'access_change', 'file_upload', 'file_download'] as const;
+export const AUDIT_ACTION_TYPES: readonly ActivityLogSystemAuditActionType[] = ['create', 'update', 'delete', 'login', 'logout', 'config_change', 'access_change', 'file_upload' | 'file_download'] as const;
 
 
 export const INITIAL_RESOURCES: Resource[] = [
@@ -236,15 +246,21 @@ export const DOCUMENT_TEMPLATE_CATEGORIES: string[] = [
   "Otros",
 ];
 
-// Placeholder for actual SLA and SupportQueue data.
-// In a real app, these would likely be fetched from Firestore.
+// Initial placeholder data. In a real app, this would be fetched.
 export const INITIAL_SLAS: SLA[] = [
-    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], businessHoursOnly: true },
-    { id: 'sla-2', name: 'Urgente (4 Horas Resolución)', responseTimeTargetMinutes: 30, resolutionTimeTargetHours: 4, appliesToPriority: ['Alta'], businessHoursOnly: false },
+    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], businessHoursId: 'biz-hours-std', isEnabled: true, createdAt: new Date().toISOString() },
+    { id: 'sla-2', name: 'Urgente (4 Horas Resolución)', responseTimeTargetMinutes: 30, resolutionTimeTargetHours: 4, appliesToPriority: ['Alta'], businessHoursOnly: false, isEnabled: true, createdAt: new Date().toISOString() },
+    { id: 'sla-3', name: 'VIP (2 Horas Respuesta)', responseTimeTargetMinutes: 120, resolutionTimeTargetHours: 24, appliesToQueues: ['q-vip'], isEnabled: true, createdAt: new Date().toISOString()},
 ];
 
 export const INITIAL_SUPPORT_QUEUES: SupportQueue[] = [
-    { id: 'q-general', name: 'Soporte General', description: 'Cola por defecto para nuevos tickets.' },
-    { id: 'q-tech', name: 'Soporte Técnico', description: 'Para problemas técnicos y de producto.', defaultAssigneeUserId: 'user-tech-lead-id', associatedSlaId: 'sla-2' },
-    { id: 'q-billing', name: 'Consultas de Facturación', description: 'Para temas relacionados con pagos y facturas.' },
+    { id: 'q-general', name: 'Soporte General', description: 'Cola por defecto para nuevos tickets.', memberUserIds:[], createdAt: new Date().toISOString() },
+    { id: 'q-tech', name: 'Soporte Técnico', description: 'Para problemas técnicos y de producto.', defaultAssigneeUserId: null, associatedSlaId: 'sla-2', memberUserIds:[], createdAt: new Date().toISOString() },
+    { id: 'q-billing', name: 'Consultas de Facturación', description: 'Para temas relacionados con pagos y facturas.', memberUserIds:[], createdAt: new Date().toISOString() },
+    { id: 'q-vip', name: 'Soporte VIP', description: 'Atención prioritaria para clientes VIP.', defaultAssigneeUserId: null, associatedSlaId: 'sla-3', memberUserIds:[], createdAt: new Date().toISOString() },
+];
+
+export const INITIAL_ESCALATION_RULES: EscalationRule[] = [
+  { id: 'rule-1', name: 'Escalar ticket sin respuesta en 2h', conditionType: 'ticket_idle_for_x_hours', conditionValue: 2, actionType: 'notify_user', actionTargetId: 'supervisor-user-id', order: 1, isEnabled: true, createdAt: new Date().toISOString() },
+  { id: 'rule-2', name: 'Escalar ticket Alta prioridad sin resolver en 3h', conditionType: 'sla_resolution_breached', actionType: 'change_priority', actionTargetValue: 'Alta', order: 2, isEnabled: true, createdAt: new Date().toISOString(), description: 'Si un ticket de Alta prioridad no se resuelve según SLA, notificar al supervisor.'},
 ];
