@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect, useId } from "react";
-import type { Ticket, Lead, User, TicketStatus, TicketPriority } from "@/lib/types";
+import type { Ticket, Lead, User, TicketStatus, TicketPriority, SLA, SupportQueue } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Paperclip, UploadCloud, X } from "lucide-react";
+import { Check, ChevronsUpDown, Paperclip, UploadCloud, X, ShieldCheck, ListChecks } from "lucide-react";
 import { TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,8 @@ interface AddEditTicketDialogProps {
   ticketToEdit?: Ticket | Partial<Ticket> | null; 
   leads: Lead[];
   users: User[];
+  slas?: SLA[]; // Optional for now
+  supportQueues?: SupportQueue[]; // Optional for now
   onSave: (ticket: Ticket) => Promise<void>; 
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -57,10 +60,15 @@ const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'c
   attachments: [],
   solutionDescription: "",
   solutionAttachments: [],
+  slaId: undefined,
+  queueId: undefined,
 };
 
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
 const NO_USER_SELECTED_VALUE = "__no_user_selected__";
+const NO_SLA_SELECTED_VALUE = "__no_sla_selected__";
+const NO_QUEUE_SELECTED_VALUE = "__no_queue_selected__";
+
 
 function generateTicketId(): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -77,6 +85,8 @@ export function AddEditTicketDialog({
   ticketToEdit,
   leads,
   users,
+  slas = [], // Default to empty array
+  supportQueues = [], // Default to empty array
   onSave,
   isOpen: controlledIsOpen,
   onOpenChange: controlledOnOpenChange,
@@ -121,6 +131,8 @@ export function AddEditTicketDialog({
           attachments: ticketToEdit.attachments || [],
           solutionDescription: ticketToEdit.solutionDescription || "",
           solutionAttachments: ticketToEdit.solutionAttachments || [],
+          slaId: ticketToEdit.slaId || undefined,
+          queueId: ticketToEdit.queueId || undefined,
         });
         setCurrentAttachments(ticketToEdit.attachments || []);
       } else if (ticketToEdit) { // Creating new ticket with initial data (e.g. from chat)
@@ -131,6 +143,8 @@ export function AddEditTicketDialog({
             attachments: ticketToEdit.attachments || [],
             solutionDescription: ticketToEdit.solutionDescription || "",
             solutionAttachments: ticketToEdit.solutionAttachments || [],
+            slaId: ticketToEdit.slaId || undefined,
+            queueId: ticketToEdit.queueId || undefined,
         });
         setCurrentAttachments(ticketToEdit.attachments || []);
       }
@@ -141,6 +155,8 @@ export function AddEditTicketDialog({
             attachments: [],
             solutionDescription: "",
             solutionAttachments: [],
+            slaId: undefined,
+            queueId: undefined,
         });
         setCurrentAttachments([]);
       }
@@ -155,11 +171,15 @@ export function AddEditTicketDialog({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: 'status' | 'priority' | 'assigneeUserId' | 'relatedLeadId', value: string | undefined) => {
+  const handleSelectChange = (name: 'status' | 'priority' | 'assigneeUserId' | 'relatedLeadId' | 'slaId' | 'queueId', value: string | undefined) => {
     if (name === 'assigneeUserId') {
         setFormData((prev) => ({ ...prev, assigneeUserId: value === NO_USER_SELECTED_VALUE ? undefined : value }));
     } else if (name === 'relatedLeadId') {
         setFormData((prev) => ({ ...prev, relatedLeadId: value === NO_LEAD_SELECTED_VALUE ? undefined : value }));
+    } else if (name === 'slaId') {
+        setFormData((prev) => ({...prev, slaId: value === NO_SLA_SELECTED_VALUE ? undefined : value }));
+    } else if (name === 'queueId') {
+        setFormData((prev) => ({...prev, queueId: value === NO_QUEUE_SELECTED_VALUE ? undefined : value }));
     }
     else {
         setFormData((prev) => ({ ...prev, [name]: value as TicketStatus | TicketPriority }));
@@ -264,6 +284,8 @@ export function AddEditTicketDialog({
       comments: (ticketToEdit && 'comments' in ticketToEdit && ticketToEdit.comments) ? ticketToEdit.comments : [], 
       solutionDescription: formData.solutionDescription || "",
       solutionAttachments: formData.solutionAttachments || [],
+      slaId: formData.slaId === NO_SLA_SELECTED_VALUE ? undefined : formData.slaId,
+      queueId: formData.queueId === NO_QUEUE_SELECTED_VALUE ? undefined : formData.queueId,
     };
     
     await onSave(ticketDataToSave);
@@ -422,6 +444,51 @@ export function AddEditTicketDialog({
             </Select>
           </div>
 
+          {/* Placeholder for SLA and Queue Selection */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor={`${dialogId}-slaId`} className="text-right">SLA Aplicable</Label>
+            <Select
+              name="slaId"
+              value={formData.slaId || NO_SLA_SELECTED_VALUE}
+              onValueChange={(value) => handleSelectChange('slaId', value)}
+              disabled={isUploading || !canEditCoreFields || slas.length === 0}
+            >
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder={slas.length === 0 ? "No hay SLAs definidos" : "Selecciona un SLA (opcional)"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SLA_SELECTED_VALUE}>Ninguno</SelectItem>
+                {slas.map((sla) => (
+                  <SelectItem key={sla.id} value={sla.id}>
+                    {sla.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor={`${dialogId}-queueId`} className="text-right">Cola de Soporte</Label>
+            <Select
+              name="queueId"
+              value={formData.queueId || NO_QUEUE_SELECTED_VALUE}
+              onValueChange={(value) => handleSelectChange('queueId', value)}
+              disabled={isUploading || !canEditCoreFields || supportQueues.length === 0}
+            >
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder={supportQueues.length === 0 ? "No hay colas definidas" : "Selecciona una cola (opcional)"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_QUEUE_SELECTED_VALUE}>Ninguna</SelectItem>
+                {supportQueues.map((queue) => (
+                  <SelectItem key={queue.id} value={queue.id}>
+                    {queue.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+
           <div className="grid grid-cols-4 items-start gap-4">
             <Label htmlFor={`${dialogId}-attachments`} className="text-right pt-2">Adjuntos</Label>
             <div className="col-span-3 space-y-2">
@@ -513,5 +580,6 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
+
 
 

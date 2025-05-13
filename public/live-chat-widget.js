@@ -48,8 +48,78 @@
 
   function setupWidget() {
     visitorId = getOrSetVisitorId();
+    appendToggleButton();
     appendElementsToBody();
-    updateAgentHeader();
+    showWelcomeMessages();
+  }
+
+  function showWelcomeMessages() {
+    addAgentMessage("Nuestros expertos están aquí para ayudarte. ¿Estás buscando algo o necesitas ayuda?");
+    addAgentMessage("Mientras te conecto con alguien, ¿podrías por favor darme más detalles sobre lo que estás buscando?");
+  }
+
+  function addAgentMessage(text) {
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "flex-start";
+    wrap.style.marginBottom = "10px";
+  
+    const avatar = document.createElement("img");
+    avatar.src = assignedAgent.avatar;
+    avatar.style.width = "24px";
+    avatar.style.height = "24px";
+    avatar.style.borderRadius = "50%";
+    avatar.style.marginRight = "8px";
+  
+    const bubble = document.createElement("div");
+    bubble.style.background = "#e5f1fb";
+    bubble.style.color = "#333";
+    bubble.style.padding = "10px";
+    bubble.style.borderRadius = "10px";
+    bubble.style.maxWidth = "80%";
+    bubble.innerText = text;
+  
+    const time = document.createElement("div");
+    time.style.fontSize = "10px";
+    time.style.color = "#555";
+    time.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  
+    const content = document.createElement("div");
+    content.appendChild(bubble);
+    content.appendChild(time);
+  
+    wrap.appendChild(avatar);
+    wrap.appendChild(content);
+    chatBody.appendChild(wrap);
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+  
+
+  function appendToggleButton() {
+    const chatToggle = document.createElement("button");
+    chatToggle.id = "chat-toggle-btn";
+    chatToggle.innerText = "💬";
+    chatToggle.style.position = "fixed";
+    chatToggle.style.bottom = "20px";
+    chatToggle.style.right = "20px";
+    chatToggle.style.backgroundColor = settings.primaryColor || "#29ABE2";
+    chatToggle.style.color = "white";
+    chatToggle.style.border = "none";
+    chatToggle.style.borderRadius = "50%";
+    chatToggle.style.width = "56px";
+    chatToggle.style.height = "56px";
+    chatToggle.style.fontSize = "24px";
+    chatToggle.style.cursor = "pointer";
+    chatToggle.style.zIndex = "10000";
+  
+    document.body.appendChild(chatToggle);
+  
+    chatToggle.addEventListener("click", function () {
+      const chat = document.getElementById("crm-chat");
+      if (!chat) return;
+      const isHidden = chat.style.display === "none";
+      chat.style.display = isHidden ? "flex" : "none";
+    });
   }
 
   function updateAgentHeader() {

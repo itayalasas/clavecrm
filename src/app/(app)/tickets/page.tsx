@@ -1,14 +1,15 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import type { Ticket, Lead, User, TicketStatus, TicketPriority, Comment } from "@/lib/types";
+import type { Ticket, Lead, User, TicketStatus, TicketPriority, Comment, SLA, SupportQueue } from "@/lib/types";
 import { NAV_ITEMS, TICKET_STATUSES, TICKET_PRIORITIES } from "@/lib/constants";
 import { TicketItem } from "@/components/tickets/ticket-item";
 import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList } from "lucide-react";
+import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList, Layers, ShieldAlertIcon, RotateCcw } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -28,6 +29,9 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [slas, setSlas] = useState<SLA[]>([]); // Placeholder for SLAs
+  const [supportQueues, setSupportQueues] = useState<SupportQueue[]>([]); // Placeholder for Support Queues
+
 
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
@@ -81,6 +85,8 @@ export default function TicketsPage() {
             comments: data.comments || [],
             solutionDescription: data.solutionDescription || undefined,
             solutionAttachments: data.solutionAttachments || [],
+            slaId: data.slaId || undefined,
+            queueId: data.queueId || undefined,
           } as Ticket;
         });
         setTickets(fetchedTickets);
@@ -154,6 +160,8 @@ export default function TicketsPage() {
     if (!authLoading) {
         fetchUsers();
         fetchLeads();
+        // TODO: Fetch SLAs and SupportQueues when implemented
+        // fetchSlas(); fetchSupportQueues();
         if (currentUser) {
           fetchTickets().then(unsub => {
             if (typeof unsub === 'function') { // Ensure unsub is a function before assigning
@@ -215,6 +223,8 @@ export default function TicketsPage() {
         solutionDescription: ticketToSave.solutionDescription || "",
         solutionAttachments: ticketToSave.solutionAttachments || [],
         comments: ticketToSave.comments || [],
+        slaId: ticketToSave.slaId || null,
+        queueId: ticketToSave.queueId || null,
       };
 
       await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
@@ -524,6 +534,8 @@ export default function TicketsPage() {
         ticketToEdit={editingTicket}
         leads={leads}
         users={users}
+        slas={slas} // Pass SLAs
+        supportQueues={supportQueues} // Pass Support Queues
         onSave={handleSaveTicket}
       />
 
@@ -540,16 +552,28 @@ export default function TicketsPage() {
               <strong>Acuerdos de Nivel de Servicio (SLA):</strong>
               <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
               <p className="text-xs pl-5">Definir tiempos de respuesta y resolución, y generar alertas.</p>
+              <p className="text-xs pl-5"> (Se añadió campo en formulario, lógica de backend y UI completa pendiente)</p>
             </li>
             <li>
               <strong>Colas de Soporte:</strong>
               <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
               <p className="text-xs pl-5">Organizar tickets en colas personalizadas para diferentes equipos o tipos de problemas.</p>
+              <p className="text-xs pl-5"> (Se añadió campo en formulario, lógica de backend y UI completa pendiente)</p>
             </li>
             <li>
               <strong>Escalados Automáticos:</strong>
               <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
               <p className="text-xs pl-5">Reglas para escalar tickets automáticamente si no se cumplen los SLA.</p>
+            </li>
+             <li>
+                <strong>Base de Conocimiento (Knowledge Base):</strong> 
+                <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
+                <p className="text-xs pl-5">Integrar con una base de conocimiento para sugerir artículos de ayuda.</p>
+            </li>
+            <li>
+                <strong>Encuestas de Satisfacción:</strong> 
+                <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
+                <p className="text-xs pl-5">Enviar encuestas CSAT/NPS tras la resolución del ticket.</p>
             </li>
           </ul>
           <p className="mt-4 font-semibold">Estas funcionalidades se implementarán progresivamente para mejorar la gestión avanzada de tickets.</p>
@@ -579,5 +603,6 @@ export default function TicketsPage() {
     </div>
   );
 }
+
 
 

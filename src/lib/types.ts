@@ -76,6 +76,8 @@ export interface Ticket {
   attachments?: { name: string, url: string }[]; // Attachments for the ticket itself
   solutionDescription?: string; // Description of the solution provided by assignee
   solutionAttachments?: { name: string, url: string }[]; // Attachments for the solution
+  slaId?: string; // Optional: ID of the applied SLA
+  queueId?: string; // Optional: ID of the support queue it belongs to
 }
 
 // Sales Management Types
@@ -488,3 +490,38 @@ export interface CannedResponse {
   // category?: string; // Optional: for organizing responses
 }
 
+// Advanced Ticket Management Types
+export interface SLA {
+  id: string;
+  name: string;
+  description?: string;
+  responseTimeTargetMinutes: number; // e.g., 60 minutes for first response
+  resolutionTimeTargetHours: number; // e.g., 8 hours for resolution
+  appliesToPriority?: TicketPriority[]; // e.g., only for 'Alta'
+  appliesToType?: string[]; // If you have ticket types/categories
+  businessHoursOnly?: boolean; // True if SLA applies only during business hours
+  // ... other SLA conditions
+}
+
+export interface SupportQueue {
+  id: string;
+  name: string;
+  description?: string;
+  // assignmentRules?: Rule[]; // Rules to auto-assign tickets to this queue (e.g., based on keyword, reporter group)
+  defaultAssigneeUserId?: string; // Optional default agent for this queue
+  associatedSlaId?: string; // Optional default SLA for this queue
+}
+
+export type EscalationConditionType = 'sla_response_breached' | 'sla_resolution_breached' | 'ticket_idle_for_x_hours';
+export type EscalationActionType = 'notify_user' | 'notify_group' | 'change_priority' | 'assign_to_user' | 'assign_to_queue';
+
+export interface EscalationRule {
+  id: string;
+  name: string;
+  description?: string;
+  conditionType: EscalationConditionType;
+  conditionValue?: number; // e.g., hours for 'ticket_idle_for_x_hours'
+  actionType: EscalationActionType;
+  actionTargetId?: string; // userId, groupId, queueId, or new priority value
+  isActive: boolean;
+}

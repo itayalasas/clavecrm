@@ -1,4 +1,4 @@
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource } from './types';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
@@ -234,4 +234,17 @@ export const DOCUMENT_TEMPLATE_CATEGORIES: string[] = [
   "Cartas de Presentación",
   "Informes de Progreso",
   "Otros",
+];
+
+// Placeholder for actual SLA and SupportQueue data.
+// In a real app, these would likely be fetched from Firestore.
+export const INITIAL_SLAS: SLA[] = [
+    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], businessHoursOnly: true },
+    { id: 'sla-2', name: 'Urgente (4 Horas Resolución)', responseTimeTargetMinutes: 30, resolutionTimeTargetHours: 4, appliesToPriority: ['Alta'], businessHoursOnly: false },
+];
+
+export const INITIAL_SUPPORT_QUEUES: SupportQueue[] = [
+    { id: 'q-general', name: 'Soporte General', description: 'Cola por defecto para nuevos tickets.' },
+    { id: 'q-tech', name: 'Soporte Técnico', description: 'Para problemas técnicos y de producto.', defaultAssigneeUserId: 'user-tech-lead-id', associatedSlaId: 'sla-2' },
+    { id: 'q-billing', name: 'Consultas de Facturación', description: 'Para temas relacionados con pagos y facturas.' },
 ];
