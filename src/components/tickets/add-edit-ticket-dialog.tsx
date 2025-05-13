@@ -47,7 +47,7 @@ interface AddEditTicketDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'comments' | 'solutionDescription' | 'solutionAttachments'> = {
+const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'comments'> = {
   title: "",
   description: "",
   status: "Abierto",
@@ -56,6 +56,8 @@ const defaultTicketBase: Omit<Ticket, 'id' | 'createdAt' | 'reporterUserId' | 'c
   relatedLeadId: undefined,
   updatedAt: undefined,
   attachments: [],
+  solutionDescription: "",
+  solutionAttachments: [],
 };
 
 const NO_LEAD_SELECTED_VALUE = "__no_lead_selected__";
@@ -118,6 +120,8 @@ export function AddEditTicketDialog({
           relatedLeadId: ticketToEdit.relatedLeadId || undefined,
           updatedAt: ticketToEdit.updatedAt,
           attachments: ticketToEdit.attachments || [],
+          solutionDescription: ticketToEdit.solutionDescription || "",
+          solutionAttachments: ticketToEdit.solutionAttachments || [],
         });
         setCurrentAttachments(ticketToEdit.attachments || []);
       } else if (ticketToEdit) { // Creating new ticket with initial data (e.g. from chat)
@@ -126,6 +130,8 @@ export function AddEditTicketDialog({
             ...ticketToEdit, // Spread initial data
             assigneeUserId: ticketToEdit.assigneeUserId || currentUser?.id || undefined,
             attachments: ticketToEdit.attachments || [],
+            solutionDescription: ticketToEdit.solutionDescription || "",
+            solutionAttachments: ticketToEdit.solutionAttachments || [],
         });
         setCurrentAttachments(ticketToEdit.attachments || []);
       }
@@ -134,6 +140,8 @@ export function AddEditTicketDialog({
             ...defaultTicketBase,
             assigneeUserId: currentUser?.id || undefined, 
             attachments: [],
+            solutionDescription: "",
+            solutionAttachments: [],
         });
         setCurrentAttachments([]);
       }
@@ -255,8 +263,8 @@ export function AddEditTicketDialog({
       relatedLeadId: formData.relatedLeadId === NO_LEAD_SELECTED_VALUE ? undefined : formData.relatedLeadId,
       attachments: finalAttachments,
       comments: (ticketToEdit && 'comments' in ticketToEdit && ticketToEdit.comments) ? ticketToEdit.comments : [], 
-      solutionDescription: (ticketToEdit && 'solutionDescription' in ticketToEdit) ? ticketToEdit.solutionDescription : undefined,
-      solutionAttachments: (ticketToEdit && 'solutionAttachments' in ticketToEdit) ? ticketToEdit.solutionAttachments : [],
+      solutionDescription: formData.solutionDescription || "",
+      solutionAttachments: formData.solutionAttachments || [],
     };
     
     await onSave(ticketDataToSave);

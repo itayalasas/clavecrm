@@ -308,32 +308,49 @@ export default function AgentPanelPage() {
     setIsAddTicketDialogOpen(true);
   };
 
-  const handleSaveTicketFromChat = async (ticketData: Ticket) => {
+  const handleSaveTicketFromChat = async (ticketData: Partial<Ticket>) => {
      if (!currentUser || !sessionToLink) return;
     const ticketId = ticketData.id || doc(collection(db, "tickets")).id;
     try {
         const ticketDocRef = doc(db, "tickets", ticketId);
-        const firestoreSafeTicket = {
-            ...ticketData,
+        const firestoreSafeTicket: Ticket = {
             id: ticketId,
-            createdAt: ticketData.createdAt ? Timestamp.fromDate(new Date(ticketData.createdAt)) : Timestamp.now(),
-            updatedAt: Timestamp.now(),
+            title: ticketData.title || `Ticket desde Chat ${sessionToLink.visitorId.substring(0,6)}`,
+            description: ticketData.description || "",
+            status: ticketData.status || 'Abierto',
+            priority: ticketData.priority || 'Media',
+            createdAt: ticketData.createdAt ? ticketData.createdAt : new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             reporterUserId: sessionToLink.visitorId, 
-            relatedLeadId: ticketData.relatedLeadId || null, // Ensure null if undefined
-            assigneeUserId: ticketData.assigneeUserId || null, // Ensure null if undefined
+            assigneeUserId: ticketData.assigneeUserId || currentUser?.id || undefined,
+            relatedLeadId: ticketData.relatedLeadId || undefined,
+            attachments: ticketData.attachments || [],
+            solutionDescription: ticketData.solutionDescription || "",
+            solutionAttachments: ticketData.solutionAttachments || [],
+            comments: ticketData.comments || [],
         };
-        await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
+        
+        // Convert dates to Timestamps for Firestore
+        const dataToSave = {
+            ...firestoreSafeTicket,
+            createdAt: Timestamp.fromDate(new Date(firestoreSafeTicket.createdAt)),
+            updatedAt: Timestamp.fromDate(new Date(firestoreSafeTicket.updatedAt!)),
+            assigneeUserId: firestoreSafeTicket.assigneeUserId || null,
+            relatedLeadId: firestoreSafeTicket.relatedLeadId || null,
+        }
+
+        await setDoc(ticketDocRef, dataToSave, { merge: true });
         
         await updateDoc(doc(db, "chatSessions", sessionToLink.id), {
           relatedTicketId: ticketId,
           lastMessageAt: serverTimestamp()
         });
-        toast({ title: "Ticket Creado y Vinculado", description: `Ticket "${ticketData.title}" creado y vinculado al chat.` });
+        toast({ title: "Ticket Creado y Vinculado", description: `Ticket "${firestoreSafeTicket.title}" creado y vinculado al chat.` });
         fetchCRMSData(); // Refresh tickets
         setSelectedSession(prev => prev ? {...prev, relatedTicketId: ticketId} : null);
     } catch (error) {
         console.error("Error al guardar ticket desde chat:", error);
-        toast({ title: "Error al Guardar Ticket", variant: "destructive" });
+        toast({ title: "Error al Guardar Ticket", variant: "destructive", description: String(error) });
     }
     setIsAddTicketDialogOpen(false);
     setTicketInitialData(null);
