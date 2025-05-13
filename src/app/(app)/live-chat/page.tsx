@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -101,22 +102,22 @@ export default function LiveChatPage() {
             "Asignación de chats pendientes (Implementado).",
             "Envío y recepción de mensajes en tiempo real (Implementado).",
             "Cierre de chats (Implementado).",
-            "Respuestas predefinidas (canned responses) (Planeado).",
-            "Información básica del visitante (si está disponible) (Planeado).",
+            "Respuestas predefinidas (canned responses) (En desarrollo).",
+            "Información básica del visitante (si está disponible) (En desarrollo).",
             "Transferencia de chat entre agentes (Planeado).",
           ],
-          "parcial" // Changed from "desarrollo"
+          "parcial" 
         )}
         {renderFeatureCard(
           "Historial de Conversaciones",
           History,
           "Almacena y revisa todas las conversaciones de chat.",
           [
-            "Listado de conversaciones pasadas (Básico implementado con el estado 'cerrado').",
-            "Búsqueda y filtrado de historial (Planeado).",
+            "Listado de conversaciones pasadas (Básico implementado).",
+            "Búsqueda y filtrado de historial (En desarrollo).",
             "Transcripciones de chat (Planeado).",
           ],
-          "parcial" // Changed status as basic listing of closed chats can serve as history
+          "parcial" 
         )}
         {renderFeatureCard(
           "Integración CRM",
@@ -138,7 +139,7 @@ export default function LiveChatPage() {
             "Opciones de ramificación simple.",
             "Captura de información básica (nombre, email).",
           ],
-          "planeado"
+          "desarrollo" // Status changed
         )}
          {renderFeatureCard(
           "Transferencia Bot a Humano",
@@ -147,8 +148,9 @@ export default function LiveChatPage() {
           [
             "Definir disparadores para la transferencia (ej. palabras clave, opción de usuario).",
             "Notificar a agentes disponibles sobre la transferencia.",
+            "Interfaz para configurar reglas de transferencia.",
           ],
-          "planeado"
+          "desarrollo" // Status changed
         )}
         {renderFeatureCard(
           "Integración con WhatsApp Business API",
@@ -165,3 +167,4 @@ export default function LiveChatPage() {
     </div>
   );
 }
+
