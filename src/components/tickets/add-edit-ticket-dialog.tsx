@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useId } from "react";
@@ -11,7 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger, // Keep DialogTrigger for internal use if a trigger prop is provided
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +37,7 @@ import { Card, CardContent, CardDescription as CardDescUi, CardHeader as CardHea
 
 
 interface AddEditTicketDialogProps {
-  trigger?: React.ReactNode; // Make trigger optional
+  trigger?: React.ReactNode; 
   ticketToEdit?: Ticket | Partial<Ticket> | null; 
   leads: Lead[];
   users: User[];
@@ -291,7 +290,7 @@ export function AddEditTicketDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      {trigger && <DialogTrigger asChild onClick={() => !isOpen && setIsOpen(true)}>{trigger}</DialogTrigger>}
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{ticketToEdit && 'id' in ticketToEdit ? "Editar Ticket" : "Abrir Nuevo Ticket"}</DialogTitle>
@@ -514,4 +513,5 @@ export function AddEditTicketDialog({
     </Dialog>
   );
 }
+
 

@@ -1,90 +1,153 @@
-
 (function() {
-  if (typeof window.CRMRapidoChatSettings === 'undefined') {
-    console.error("CRM Rápido: Configuración del widget de chat no encontrada. Asegúrate de que window.CRMRapidoChatSettings esté definido antes de cargar este script.");
-    return;
-  }
-
+  if (typeof window.CRMRapidoChatSettings === 'undefined') return;
   const settings = window.CRMRapidoChatSettings;
+  if (!settings.widgetEnabled) return;
 
-  if (!settings.widgetEnabled) {
-    console.log("CRM Rápido: El widget de chat está deshabilitado.");
-    return;
-  }
-
-  console.log("CRM Rápido: Widget de Chat en Vivo JS cargado.", settings);
-
-  let isChatWindowOpen = false;
   let visitorId = null;
   let currentSessionId = null;
   let db = null;
   let unsubscribeMessages = null;
 
-  // --- START FIREBASE CONFIG ---
-  const firebaseConfig = {
-    apiKey:      "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
-    authDomain:  "minicrm-express.firebaseapp.com",
-    projectId:   "minicrm-express",
-    storageBucket:"minicrm-express.firebasestorage.app",
-    messagingSenderId:"600153365017",
-    appId:       "1:600153365017:web:7be7b7109ddc0ccab4e888",
-    measurementId:"G-XXXXXXXXXX"
+  let assignedAgent = {
+    name: "Asistente Virtual",
+    avatar: "https://cdn-icons-png.flaticon.com/512/4712/4712027.png"
   };
-  // --- END FIREBASE CONFIG ---
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
+    authDomain: "minicrm-express.firebaseapp.com",
+    projectId: "minicrm-express",
+    storageBucket: "minicrm-express.firebasestorage.app",
+    messagingSenderId: "600153365017",
+    appId: "1:600153365017:web:7be7b7109ddc0ccab4e888",
+    measurementId: "G-XXXXXXXXXX"
+  };
 
   function initializeFirebase() {
-    if (
-      firebaseConfig.apiKey     === "TU_API_KEY_DE_FIREBASE" ||
-      firebaseConfig.authDomain === "TU_AUTH_DOMAIN_DE_FIREBASE" ||
-      firebaseConfig.projectId  === "TU_PROJECT_ID_DE_FIREBASE"
-    ) {
-      console.error("CRM Rápido: ERROR CRÍTICO - Aún faltan placeholders por reemplazar en firebaseConfig.");
-      alert("Error de configuración del chat. Por favor, contacta al administrador del sitio. (FIREBASE_NOT_CONFIGURED)");
-      return false;
-    }
-
-    if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
-      console.warn("CRM Rápido: Firebase SDK no está cargado. Intentando cargar dinámicamente...");
-      const firebaseScript = document.createElement('script');
-      firebaseScript.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js";
-      firebaseScript.onload = () => {
-        const firestoreScript = document.createElement('script');
-        firestoreScript.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js";
-        firestoreScript.onload = () => {
-          try {
-            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-            db = firebase.firestore();
-            setupWidget();
-          } catch (e) {
-            console.error("CRM Rápido: Error inicializando Firebase tras carga dinámica.", e);
-            alert("Error al inicializar el chat. (INIT_FAIL_DYNAMIC)");
-          }
+    if (typeof firebase === 'undefined') {
+      const script = document.createElement('script');
+      script.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js";
+      script.onload = () => {
+        const script2 = document.createElement('script');
+        script2.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js";
+        script2.onload = () => {
+          firebase.initializeApp(firebaseConfig);
+          db = firebase.firestore();
+          setupWidget();
         };
-        document.head.appendChild(firestoreScript);
+        document.head.appendChild(script2);
       };
-      document.head.appendChild(firebaseScript);
+      document.head.appendChild(script);
       return false;
-    }
-
-    try {
-      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    } else {
+      firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
-      console.log("CRM Rápido: Firebase inicializado exitosamente.");
       return true;
-    } catch (e) {
-      console.error("CRM Rápido: Error al inicializar Firebase.", e);
-      alert("Error al inicializar el chat. (INIT_FAIL_STATIC)");
-      return false;
     }
   }
 
   function setupWidget() {
-    if (!db) return;
     visitorId = getOrSetVisitorId();
     appendElementsToBody();
+    updateAgentHeader();
   }
 
-  if (initializeFirebase()) setupWidget();
+  function updateAgentHeader() {
+    if (!headerText) return;
+    headerText.textContent = assignedAgent.name;
+    let existingAvatar = document.getElementById("crm-rapido-agent-avatar");
+    if (!existingAvatar) {
+      const avatarImg = document.createElement("img");
+      avatarImg.id = "crm-rapido-agent-avatar";
+      avatarImg.style.width = "24px";
+      avatarImg.style.height = "24px";
+      avatarImg.style.borderRadius = "50%";
+      avatarImg.style.marginRight = "8px";
+      avatarImg.src = assignedAgent.avatar;
+      headerText.prepend(avatarImg);
+    } else {
+      existingAvatar.src = assignedAgent.avatar;
+    }
+  }
+
+  async function listenForAgentAssignment(sessionId) {
+    if (!db || !sessionId) return;
+    const sessionRef = db.collection("chatSessions").doc(sessionId);
+    sessionRef.onSnapshot((doc) => {
+      const data = doc.data();
+      if (data && data.agentId && data.agentName && data.agentAvatar) {
+        assignedAgent.name = data.agentName;
+        assignedAgent.avatar = data.agentAvatar;
+        updateAgentHeader();
+        addMessageToUI(`Hola, soy ${data.agentName}. ¿En qué puedo ayudarte hoy?`, "agent", new Date());
+      }
+    });
+  }
+
+  async function getOrCreateChatSession(initialMessageText) {
+    const sessionRef = db.collection("chatSessions")
+      .where("visitorId", "==", visitorId)
+      .where("status", "in", ["pending", "active"]);
+    const snapshot = await sessionRef.get();
+    if (!snapshot.empty) {
+      currentSessionId = snapshot.docs[0].id;
+      listenForAgentAssignment(currentSessionId);
+      return currentSessionId;
+    }
+    const newSession = {
+      visitorId,
+      status: "pending",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    const docRef = await db.collection("chatSessions").add(newSession);
+    currentSessionId = docRef.id;
+    addInitialBotMessages();
+    listenForAgentAssignment(currentSessionId);
+    return currentSessionId;
+  }
+
+  function addInitialBotMessages() {
+    addMessageToUI("Nuestros expertos están aquí para ayudarte. ¿Estás buscando algo o necesitas ayuda?", "agent", new Date());
+    addMessageToUI("Mientras te conecto con alguien, ¿podrías por favor darme más detalles sobre lo que estás buscando?", "agent", new Date());
+  }
+
+  async function handleSendMessage() {
+    const message = chatInput.value.trim();
+    if (!message) return;
+    chatInput.value = "";
+    addMessageToUI(message, "visitor", new Date());
+    const sessionId = await getOrCreateChatSession();
+    await db.collection("chatSessions").doc(sessionId).collection("messages").add({
+      text: message,
+      senderType: "visitor",
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    addMessageToUI("Gracias. Hemos pasado esta información. Un miembro de nuestro equipo se pondrá en contacto contigo en breve.", "agent", new Date());
+  }
+
+  function addMessageToUI(text, senderType, timestamp) {
+    const div = document.createElement("div");
+    div.className = `chat-message ${senderType}`;
+    const p = document.createElement("p");
+    p.textContent = text;
+    const time = document.createElement("div");
+    time.className = "timestamp";
+    time.textContent = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    div.appendChild(p);
+    div.appendChild(time);
+    chatBody.appendChild(div);
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+
+  function getOrSetVisitorId() {
+    let id = localStorage.getItem('crmRapidoVisitorId');
+    if (!id) {
+      id = 'xxxxxxx'.replace(/[x]/g, () => Math.floor(Math.random() * 16).toString(16));
+      localStorage.setItem('crmRapidoVisitorId', id);
+    }
+    return id;
+  }
 
 
   // --- Create Chat Button ---
@@ -485,7 +548,8 @@
     document.body.appendChild(chatButton);
     document.body.appendChild(chatWindow);
   }
-
+  
+  if (initializeFirebase()) setupWidget();
 })();
     
 

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -429,20 +428,9 @@ export default function TicketsPage() {
                 Gestiona solicitudes de soporte, asigna responsables y haz seguimiento hasta la resolución.
               </CardDescription>
             </div>
-            <AddEditTicketDialog
-                trigger={
-                  <Button onClick={openNewTicketDialog} disabled={isLoadingUsers || isSubmittingTicket}>
-                    <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
-                  </Button>
-                }
-                isOpen={isTicketDialogOpen}
-                onOpenChange={setIsTicketDialogOpen}
-                ticketToEdit={editingTicket}
-                leads={leads}
-                users={users}
-                onSave={handleSaveTicket}
-                key={editingTicket ? `edit-${editingTicket.id}` : 'new-ticket-dialog'}
-              />
+             <Button onClick={openNewTicketDialog} disabled={isLoadingUsers || isSubmittingTicket}>
+                <PlusCircle className="mr-2 h-5 w-5" /> Abrir Nuevo Ticket
+             </Button>
           </div>
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <div className="relative md:col-span-1">
@@ -529,6 +517,15 @@ export default function TicketsPage() {
           )}
         </CardContent>
       </Card>
+      
+      <AddEditTicketDialog
+        isOpen={isTicketDialogOpen}
+        onOpenChange={setIsTicketDialogOpen}
+        ticketToEdit={editingTicket}
+        leads={leads}
+        users={users}
+        onSave={handleSaveTicket}
+      />
 
       <Card className="mt-4 bg-amber-50 border-amber-200">
         <CardHeader>
@@ -582,4 +579,5 @@ export default function TicketsPage() {
     </div>
   );
 }
+
 
