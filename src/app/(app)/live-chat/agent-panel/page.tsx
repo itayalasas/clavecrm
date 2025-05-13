@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -229,7 +228,7 @@ export default function AgentPanelPage() {
         status: "closed",
         lastMessageAt: serverTimestamp()
       });
-      toast({ title: "Chat Cerrado", description: `La conversación con ${selectedSession.visitorName || session.visitorId} ha sido cerrada.`});
+      toast({ title: "Chat Cerrado", description: `La conversación con ${session.visitorName || session.visitorId} ha sido cerrada.`});
       const justClosedSessionId = selectedSession.id;
       setSelectedSession(null);
       setMessages([]);
@@ -564,5 +563,4 @@ export default function AgentPanelPage() {
     </div>
   );
 }
-
 

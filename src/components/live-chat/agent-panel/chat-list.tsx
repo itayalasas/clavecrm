@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChatSession } from "@/lib/types";
@@ -97,4 +96,3 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
     </ScrollArea>
   );
 }
-
