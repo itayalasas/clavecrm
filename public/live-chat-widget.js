@@ -22,37 +22,44 @@
   let unsubscribeMessages = null; // To stop listening to messages when chat closes
 
   // --- START FIREBASE CONFIG ---
-  // IMPORTANT: Replace with your actual Firebase config object
+  // IMPORTANTE: Reemplaza esto con tu objeto de configuración real de Firebase.
+  // Puedes obtenerlo desde la consola de Firebase de tu proyecto:
+  // Configuración del proyecto > General > Tus apps > Configuración de SDK (selecciona CDN).
   const firebaseConfig = {
-    apiKey: "YOUR_API_KEY", // REPLACE
-    authDomain: "YOUR_AUTH_DOMAIN", // REPLACE
-    projectId: "YOUR_PROJECT_ID", // REPLACE
-    storageBucket: "YOUR_STORAGE_BUCKET", // REPLACE
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // REPLACE
-    appId: "YOUR_APP_ID", // REPLACE
-    measurementId: "YOUR_MEASUREMENT_ID" // Optional
+    apiKey: "TU_API_KEY", // REEMPLAZAR
+    authDomain: "TU_AUTH_DOMAIN", // REEMPLAZAR
+    projectId: "TU_PROJECT_ID", // REEMPLAZAR
+    storageBucket: "TU_STORAGE_BUCKET", // REEMPLAZAR
+    messagingSenderId: "TU_MESSAGING_SENDER_ID", // REEMPLAZAR
+    appId: "TU_APP_ID", // REEMPLAZAR
+    measurementId: "TU_MEASUREMENT_ID" // Opcional
   };
   // --- END FIREBASE CONFIG ---
 
   function initializeFirebase() {
     if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
-      console.error("CRM Rápido: Firebase SDK no está cargado. Intenta incluirlo en tu página antes de este script.");
-      // Attempt to load Firebase SDK dynamically if not present
+      console.warn("CRM Rápido: Firebase SDK no está cargado. Intentando cargar dinámicamente...");
       const firebaseScript = document.createElement('script');
-      firebaseScript.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"; // Use compat for easier syntax in plain JS
+      firebaseScript.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js";
       firebaseScript.onload = () => {
         const firestoreScript = document.createElement('script');
         firestoreScript.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js";
         firestoreScript.onload = () => {
           console.log("CRM Rápido: Firebase SDK cargado dinámicamente.");
-          firebase.initializeApp(firebaseConfig);
-          db = firebase.firestore();
-          setupWidget();
+          try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log("CRM Rápido: Firebase inicializado después de carga dinámica.");
+            setupWidget();
+          } catch (e) {
+            console.error("CRM Rápido: Error inicializando Firebase tras carga dinámica. Verifica firebaseConfig.", e);
+            alert("Error al inicializar el chat. Por favor, verifica la configuración de Firebase o contacta al soporte del sitio.");
+          }
         };
         document.head.appendChild(firestoreScript);
       };
       document.head.appendChild(firebaseScript);
-      return false;
+      return false; // Initialization will happen asynchronously
     }
     
     try {
@@ -70,19 +77,23 @@
   }
 
   function setupWidget() {
+    if (!db) {
+        console.error("CRM Rápido: Firestore (db) no está inicializado. El widget no puede funcionar.");
+        // Optionally, display a message to the user inside the widget placeholder or hide it.
+        return;
+    }
     visitorId = getOrSetVisitorId();
     console.log("CRM Rápido: Visitor ID:", visitorId);
     appendElementsToBody();
   }
   
-  if (initializeFirebase()) {
+  if (initializeFirebase()) { // If Firebase SDK was already present and initialized successfully
     setupWidget();
-  }
+  } // If not, setupWidget will be called by the dynamic loader's callback
 
 
   // --- Create Chat Button ---
   const chatButton = document.createElement('button');
-  // ... (chatButton styles and icon setup - no changes needed here for Firebase integration) ...
   chatButton.id = 'crm-rapido-chat-button';
   chatButton.setAttribute('aria-label', settings.chatHeaderText || 'Abrir chat');
   chatButton.style.position = 'fixed';
@@ -117,7 +128,6 @@
 
   // --- Create Chat Window ---
   const chatWindow = document.createElement('div');
-  // ... (chatWindow styles - no changes here) ...
   chatWindow.id = 'crm-rapido-chat-window';
   chatWindow.style.position = 'fixed';
   chatWindow.style.zIndex = '9998';
@@ -145,7 +155,6 @@
 
   // Chat Window Header
   const chatHeader = document.createElement('div');
-  // ... (chatHeader styles - no changes) ...
   chatHeader.style.backgroundColor = settings.primaryColor || '#29ABE2';
   chatHeader.style.color = 'white';
   chatHeader.style.padding = '12px 15px';
@@ -157,15 +166,12 @@
 
   const headerText = document.createElement('h3');
   headerText.textContent = settings.chatHeaderText || 'Chatea con Nosotros';
-  // ... (headerText styles - no changes) ...
   headerText.style.fontSize = '16px';
   headerText.style.fontWeight = '600';
   headerText.style.margin = '0';
   headerText.style.lineHeight = '1.2';
 
-
   const closeButtonHeader = document.createElement('button');
-  // ... (closeButtonHeader styles - no changes) ...
   closeButtonHeader.innerHTML = '&times;';
   closeButtonHeader.style.background = 'none';
   closeButtonHeader.style.border = 'none';
@@ -182,29 +188,20 @@
   // Chat Window Body
   const chatBody = document.createElement('div');
   chatBody.id = 'crm-rapido-chat-body';
-  // ... (chatBody styles - no changes) ...
   chatBody.style.flexGrow = '1';
   chatBody.style.padding = '15px';
   chatBody.style.overflowY = 'auto';
   chatBody.style.backgroundColor = '#f9f9f9';
   
-  const welcomeMessageP = document.createElement('p');
-  // ... (welcomeMessageP styles - no changes) ...
-  welcomeMessageP.textContent = settings.welcomeMessage || '¡Hola! ¿En qué podemos ayudarte hoy?';
-  welcomeMessageP.style.fontSize = '14px';
-  welcomeMessageP.style.color = '#333';
-  welcomeMessageP.style.padding = '10px';
-  welcomeMessageP.style.backgroundColor = '#e9f5ff';
-  welcomeMessageP.style.borderRadius = '8px 8px 8px 0';
-  welcomeMessageP.style.maxWidth = '80%';
-  welcomeMessageP.style.wordWrap = 'break-word';
-
-  chatBody.appendChild(welcomeMessageP);
+  // Welcome Message will be the first system message in Firestore if we adopt that pattern
+  // For now, it's static in the UI or replaced by fetched messages.
+  // Let's clear the initial static welcome message if messages will be fetched.
+  // chatBody.appendChild(welcomeMessageP); // This line can be removed if messages are always fetched
   chatWindow.appendChild(chatBody);
+
 
   // Chat Window Input Area
   const chatInputContainer = document.createElement('div');
-  // ... (chatInputContainer styles - no changes) ...
   chatInputContainer.style.padding = '15px';
   chatInputContainer.style.borderTop = '1px solid #e0e0e0';
   chatInputContainer.style.backgroundColor = 'white';
@@ -214,7 +211,6 @@
   const chatInput = document.createElement('input');
   chatInput.type = 'text';
   chatInput.placeholder = 'Escribe tu mensaje...';
-  // ... (chatInput styles - no changes) ...
   chatInput.style.flexGrow = '1';
   chatInput.style.padding = '10px';
   chatInput.style.border = '1px solid #ccc';
@@ -222,9 +218,7 @@
   chatInput.style.fontSize = '14px';
   chatInput.style.outline = 'none';
 
-
   const sendButton = document.createElement('button');
-  // ... (sendButton styles and icon - no changes) ...
   sendButton.style.marginLeft = '10px';
   sendButton.style.padding = '10px';
   sendButton.style.border = 'none';
@@ -274,7 +268,7 @@
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
-  function generateUUID() { // Simple UUID generator
+  function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
@@ -291,17 +285,17 @@
   }
   
   async function getOrCreateChatSession(initialMessageText) {
-    if (!db) { console.error("Firestore not initialized"); return null; }
+    if (!db) { console.error("CRM Rápido: Firestore no inicializado al intentar obtener sesión."); return null; }
     if (currentSessionId) {
-        // Check if session still exists and is active/pending
         const sessionDoc = await db.collection('chatSessions').doc(currentSessionId).get();
         if (sessionDoc.exists && (sessionDoc.data().status === 'pending' || sessionDoc.data().status === 'active')) {
             return currentSessionId;
         }
-        currentSessionId = null; // Reset if session is closed or doesn't exist
+        currentSessionId = null; 
+        if(unsubscribeMessages) unsubscribeMessages(); // Stop listening to old session
+        chatBody.innerHTML = ''; // Clear chat body for new/re-established session
     }
-
-    // Try to find an existing pending/active session for this visitor
+    
     const existingSessionsQuery = db.collection('chatSessions')
         .where('visitorId', '==', visitorId)
         .where('status', 'in', ['pending', 'active'])
@@ -312,40 +306,47 @@
         const querySnapshot = await existingSessionsQuery.get();
         if (!querySnapshot.empty) {
             currentSessionId = querySnapshot.docs[0].id;
-            console.log("CRM Rápido: Found existing session:", currentSessionId);
-            listenForMessages(currentSessionId);
+            console.log("CRM Rápido: Encontrada sesión existente:", currentSessionId);
+            loadAndListenForMessages(currentSessionId);
             return currentSessionId;
         }
     } catch(error) {
-        console.error("CRM Rápido: Error finding existing session:", error);
+        console.error("CRM Rápido: Error buscando sesión existente:", error);
     }
 
-
-    // No active/pending session found, create a new one
+    console.log("CRM Rápido: Creando nueva sesión de chat.");
     const newSession = {
       visitorId: visitorId,
-      visitorName: settings.defaultVisitorName || `Visitante ${visitorId.substring(0,4)}`, // Optional: Get visitor name
+      visitorName: settings.defaultVisitorName || `Visitante ${visitorId.substring(0,4)}`,
       agentId: null,
       status: 'pending',
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-      initialMessage: initialMessageText,
+      initialMessage: initialMessageText || settings.welcomeMessage,
       currentPageUrl: window.location.href,
     };
 
     try {
       const docRef = await db.collection('chatSessions').add(newSession);
       currentSessionId = docRef.id;
-      console.log("CRM Rápido: New chat session created:", currentSessionId);
-      listenForMessages(currentSessionId);
+      console.log("CRM Rápido: Nueva sesión de chat creada:", currentSessionId);
+      
+      // Add the welcome message as the first system message if not already handled by initialMessage
+      if(settings.welcomeMessage && initialMessageText !== settings.welcomeMessage){
+        addMessageToUI(settings.welcomeMessage, 'system');
+      } else if (settings.welcomeMessage) {
+        addMessageToUI(settings.welcomeMessage, 'system');
+      }
+
+      loadAndListenForMessages(currentSessionId);
       return currentSessionId;
     } catch (error) {
-      console.error("CRM Rápido: Error creating new chat session:", error);
+      console.error("CRM Rápido: Error creando nueva sesión de chat:", error);
       return null;
     }
   }
 
-  function addMessageToUI(text, senderType) {
+  function addMessageToUI(text, senderType, timestamp) {
     const messageContainer = document.createElement('div');
     messageContainer.style.display = 'flex';
     messageContainer.style.marginBottom = '10px';
@@ -357,37 +358,71 @@
     messageP.style.maxWidth = '70%';
     messageP.style.wordWrap = 'break-word';
 
+    const timeP = document.createElement('span');
+    timeP.style.fontSize = '10px';
+    timeP.style.display = 'block';
+    timeP.style.marginTop = '4px';
+
+    if (timestamp) {
+        try {
+            let dateObj = timestamp;
+            if(timestamp.toDate) { // Firestore Timestamp object
+                dateObj = timestamp.toDate();
+            } else if (typeof timestamp === 'string') {
+                dateObj = new Date(timestamp);
+            }
+            timeP.textContent = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'});
+        } catch (e) {
+            console.warn("CRM Rápido: Error formateando timestamp del mensaje", e);
+            timeP.textContent = "ahora";
+        }
+    }
+
+
     if (senderType === 'visitor') {
       messageContainer.style.justifyContent = 'flex-end';
       messageP.style.backgroundColor = settings.primaryColor || '#29ABE2';
       messageP.style.color = 'white';
       messageP.style.borderRadius = '15px 15px 0 15px';
-    } else { // agent
+      timeP.style.color = 'rgba(255,255,255,0.7)';
+      timeP.style.textAlign = 'right';
+    } else if (senderType === 'agent') {
       messageContainer.style.justifyContent = 'flex-start';
       messageP.style.backgroundColor = '#e9e9eb';
       messageP.style.color = '#333';
       messageP.style.borderRadius = '15px 15px 15px 0';
+      timeP.style.color = '#666';
+    } else { // system message
+      messageContainer.style.justifyContent = 'center';
+      messageP.style.backgroundColor = 'transparent';
+      messageP.style.color = '#555';
+      messageP.style.fontStyle = 'italic';
+      messageP.style.fontSize = '12px';
+      messageP.style.borderRadius = '0';
+      messageP.style.textAlign = 'center';
+      timeP.style.display = 'none'; // No timestamp for system messages usually
     }
     
+    messageP.appendChild(timeP);
     messageContainer.appendChild(messageP);
     chatBody.appendChild(messageContainer);
     chatBody.scrollTop = chatBody.scrollHeight;
   }
 
-
   async function handleSendMessage() {
-    if (!db) { console.error("Firestore not initialized"); return; }
+    if (!db) { console.error("CRM Rápido: Firestore no inicializado al enviar mensaje."); return; }
     const messageText = chatInput.value.trim();
     if (messageText === "") return;
 
-    const sessionId = await getOrCreateChatSession(messageText);
+    const sessionId = await getOrCreateChatSession(messageText); // Ensures session exists
     if (!sessionId) {
       console.error("CRM Rápido: No se pudo obtener o crear la sesión de chat.");
       alert("Error al enviar mensaje. Intenta de nuevo.");
       return;
     }
     
-    addMessageToUI(messageText, 'visitor'); // Add visitor message to UI immediately
+    // Don't add visitor message to UI immediately if relying solely on Firestore listener
+    // addMessageToUI(messageText, 'visitor', new Date()); 
 
     const messageData = {
       sessionId: sessionId,
@@ -402,50 +437,70 @@
       await db.collection('chatSessions').doc(sessionId).collection('messages').add(messageData);
       await db.collection('chatSessions').doc(sessionId).update({
         lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-        ...(currentSessionId ? {} : {initialMessage: messageText}) // Update initial message only if it's a new session effectively
+        ...(currentSessionId && db.collection('chatSessions').doc(currentSessionId).get().then(doc => !doc.data().initialMessage) ? {initialMessage: messageText} : {}) 
       });
       chatInput.value = "";
     } catch (error) {
       console.error("CRM Rápido: Error enviando mensaje a Firestore:", error);
-      // Optionally, display an error to the user in the chat window
+      addMessageToUI("Error al enviar tu mensaje. Intenta de nuevo.", 'system');
     }
   }
   
-  function listenForMessages(sessionId) {
+  function loadAndListenForMessages(sessionId) {
     if (unsubscribeMessages) {
-      unsubscribeMessages(); // Stop listening to previous session if any
+      unsubscribeMessages(); 
     }
-    if (!db) { console.error("Firestore not initialized for listening"); return; }
+    if (!db) { console.error("CRM Rápido: Firestore no inicializado para escuchar mensajes."); return; }
+    
+    chatBody.innerHTML = ''; // Clear previous messages
+    if (settings.welcomeMessage && sessionId === currentSessionId) { // Show welcome only if it's truly a new session UI-wise
+        addMessageToUI(settings.welcomeMessage, 'system');
+    }
 
-    unsubscribeMessages = db.collection('chatSessions').doc(sessionId).collection('messages')
-      .orderBy('timestamp', 'asc') // Get messages in order
-      .onSnapshot(snapshot => {
-        snapshot.docChanges().forEach(change => {
-          if (change.type === 'added') {
-            const messageData = change.doc.data();
-            // Avoid re-adding the visitor's own messages if they were added optimistically
-            if (messageData.senderType === 'agent') {
-                // Check if message already displayed (simple check based on text and approx time)
-                // This is a basic way to avoid duplicates if UI updated before Firestore echo.
-                // A more robust way would be to use local IDs and reconcile.
-                const existingMessages = chatBody.querySelectorAll('p');
-                let alreadyDisplayed = false;
-                existingMessages.forEach(p => {
-                    if(p.textContent === messageData.text) { // Super simple check
-                        alreadyDisplayed = true;
-                    }
-                });
-                if(!alreadyDisplayed) {
-                    addMessageToUI(messageData.text, 'agent');
-                }
-            }
-          }
+
+    // Initial load of messages
+    db.collection('chatSessions').doc(sessionId).collection('messages')
+      .orderBy('timestamp', 'asc')
+      .get()
+      .then(snapshot => {
+        snapshot.forEach(doc => {
+          const messageData = doc.data();
+          addMessageToUI(messageData.text, messageData.senderType, messageData.timestamp);
         });
-      }, error => {
-        console.error("CRM Rápido: Error escuchando mensajes:", error);
+        // After initial load, start listening for new messages
+        unsubscribeMessages = db.collection('chatSessions').doc(sessionId).collection('messages')
+          .orderBy('timestamp', 'asc')
+          .where('timestamp', '>', firebase.firestore.Timestamp.now()) // Listen for messages newer than now
+          .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+              if (change.type === 'added') {
+                const messageData = change.doc.data();
+                 // Avoid re-adding the visitor's own messages if they were added optimistically
+                 // Check based on sender and a small time window or a unique local ID if implemented
+                if (!(messageData.senderType === 'visitor' && messageData.senderId === visitorId)) {
+                    addMessageToUI(messageData.text, messageData.senderType, messageData.timestamp);
+                } else {
+                    // If it's the visitor's own message that was not added optimistically, add it now.
+                    // This is a simplified check. Ideally, use message IDs.
+                    const existingMessages = Array.from(chatBody.querySelectorAll('p'));
+                    const alreadyDisplayed = existingMessages.some(p => 
+                        p.textContent.startsWith(messageData.text) && 
+                        (p.parentElement.style.justifyContent === 'flex-end')
+                    );
+                    if (!alreadyDisplayed) {
+                         addMessageToUI(messageData.text, messageData.senderType, messageData.timestamp);
+                    }
+                }
+              }
+            });
+          }, error => {
+            console.error("CRM Rápido: Error escuchando mensajes:", error);
+          });
+      })
+      .catch(error => {
+        console.error("CRM Rápido: Error cargando mensajes iniciales:", error);
       });
   }
-
 
   function toggleChatWindow() {
     isChatWindowOpen = !isChatWindowOpen;
@@ -459,19 +514,22 @@
       chatButton.appendChild(iconCloseSvg);
       chatButton.style.transform = 'scale(0.95) rotate(180deg)';
       
-      // If opening for the first time and there's no active session ID,
-      // or if trying to get an existing session.
-      if (!currentSessionId) {
-          getOrCreateChatSession("Chat iniciado por el visitante").then(sessionId => {
-              if (sessionId) {
-                // Messages for new or existing session will be loaded by listenForMessages
-              } else {
-                // Could display an error in chat window if session can't be established
-              }
-          });
-      } else {
-        listenForMessages(currentSessionId); // Ensure listener is active if window re-opened
+      if (!db) {
+          console.warn("CRM Rápido: Firestore no está listo al abrir ventana. Intentando inicializar...");
+          if (initializeFirebase()) setupWidget(); // Try to init again
+          if (!db) { // If still not initialized after attempt
+              addMessageToUI("El servicio de chat no está disponible en este momento. Por favor, inténtalo más tarde.", 'system');
+              return;
+          }
       }
+
+      getOrCreateChatSession(null).then(sessionId => { // Pass null for initialMessage here as it's handled by the function
+          if (sessionId) {
+            // Messages for new or existing session will be loaded by loadAndListenForMessages
+          } else {
+            addMessageToUI("No se pudo iniciar la sesión de chat. Intenta de nuevo.", 'system');
+          }
+      });
 
     } else {
       chatWindow.style.opacity = '0';
@@ -483,7 +541,7 @@
       chatButton.appendChild(iconOpenSvg);
       chatButton.style.transform = 'scale(1) rotate(0deg)';
       if (unsubscribeMessages) {
-        unsubscribeMessages(); // Stop listening when chat is closed
+        unsubscribeMessages(); 
         unsubscribeMessages = null;
       }
     }
@@ -501,11 +559,12 @@
   
   // --- Append to body ---
   function appendElementsToBody() {
-    if (document.getElementById('crm-rapido-chat-button')) return; // Avoid appending multiple times
+    if (document.getElementById('crm-rapido-chat-button')) return; 
     document.body.appendChild(chatButton);
     document.body.appendChild(chatWindow);
   }
 
 })();
+    
 
     
