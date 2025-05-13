@@ -23,14 +23,15 @@ import { TICKET_STATUSES } from "@/lib/constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label }
 from "@/components/ui/label";
+import { useAuth } from "@/contexts/auth-context";
 
 interface TicketItemProps {
   ticket: Ticket;
   leads: Lead[];
   users: User[];
   currentUser: User | null;
-  onEdit: (ticket: Ticket) => void; 
-  onDelete: (ticketId: string) => void; 
+  onEdit: (ticket: Ticket) => void;
+  onDelete: (ticketId: string) => void;
   onAddComment: (ticketId: string, commentText: string, attachments: {name: string, url: string}[]) => Promise<void>;
   onUpdateTicketSolution: (ticketId: string, solutionDescription: string, solutionAttachments: { name: string; url: string }[], status: TicketStatus) => Promise<void>;
   defaultOpen?: boolean; // New prop to control initial open state
@@ -60,13 +61,13 @@ const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, l
     );
 };
 
-export function TicketItem({ 
-  ticket, 
-  leads, 
-  users, 
-  currentUser, 
-  onEdit, 
-  onDelete, 
+export function TicketItem({
+  ticket,
+  leads,
+  users,
+  currentUser,
+  onEdit,
+  onDelete,
   onAddComment,
   onUpdateTicketSolution,
   defaultOpen = false, // Default to false
@@ -80,7 +81,7 @@ export function TicketItem({
   const [commentFile, setCommentFile] = useState<File | null>(null);
   const [isUploadingCommentAttachment, setIsUploadingCommentAttachment] = useState(false);
   const [commentUploadProgress, setCommentUploadProgress] = useState(0);
-  
+
   const [solutionDescription, setSolutionDescription] = useState(ticket.solutionDescription || "");
   const [solutionFile, setSolutionFile] = useState<File | null>(null);
   const [isUploadingSolutionAttachment, setIsUploadingSolutionAttachment] = useState(false);
@@ -117,7 +118,11 @@ export function TicketItem({
       setInternalComments(fetchedComments);
     }, (error) => {
       console.error(`Error al obtener comentarios para ticket ${ticket.id}: `, error);
-      toast({ title: "Error al Cargar Comentarios", description: "No se pudieron actualizar los comentarios en tiempo real.", variant = "destructive"});
+      toast({
+        title: "Error al Cargar Comentarios",
+        description: "No se pudieron actualizar los comentarios en tiempo real.",
+        variant: "destructive"
+      });
     });
 
     return () => unsubscribe();
@@ -142,7 +147,7 @@ export function TicketItem({
       default: return <Badge variant="outline">{status}</Badge>;
     }
   };
-  
+
   const handleCommentFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setCommentFile(event.target.files[0]);
@@ -154,7 +159,7 @@ export function TicketItem({
   const handleNewCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommentText.trim() && !commentFile) {
-      toast({title: "Comentario Vacío", description: "Escribe un comentario o adjunta un archivo.", variant="destructive"});
+      toast({title: "Comentario Vacío", description: "Escribe un comentario o adjunta un archivo.", variant:"destructive"});
       return;
     }
     if (!currentUser) return;
@@ -178,7 +183,7 @@ export function TicketItem({
             },
             (error) => {
               console.error("Error al subir adjunto de comentario:", error);
-              toast({ title: "Error al Subir Adjunto de Comentario", description: error.message, variant = "destructive" });
+              toast({ title: "Error al Subir Adjunto de Comentario", description: error.message, variant : "destructive" });
               setIsUploadingCommentAttachment(false);
               reject(error);
             },
@@ -186,16 +191,16 @@ export function TicketItem({
               const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
               uploadedAttachments.push({ name: commentFile.name, url: downloadURL });
               setIsUploadingCommentAttachment(false);
-              setCommentFile(null); 
+              setCommentFile(null);
               resolve();
             }
           );
         });
       } catch (error) {
-        return; 
+        return;
       }
     }
-    
+
     await onAddComment(ticket.id, newCommentText, uploadedAttachments);
     setNewCommentText("");
   };
@@ -211,7 +216,7 @@ export function TicketItem({
   const handleSaveSolution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (solutionStatus !== 'En Progreso' && !solutionDescription.trim() && !solutionFile && currentSolutionAttachments.length === 0) {
-      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant="destructive" });
+      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant:"destructive" });
       return;
     }
     if (!currentUser || !isAssignee) return;
@@ -222,8 +227,8 @@ export function TicketItem({
       setIsUploadingSolutionAttachment(true);
       setSolutionUploadProgress(0);
       const filePath = `ticket-solutions/${ticket.id}/${currentUser.id}/${Date.now()}-${solutionFile.name}`;
-      const fileStorageRef = storageRef(storage, filePath);
-      const uploadTask = uploadBytesResumable(fileStorageRef, fileStorageRef);
+      const fileStorageRef = storageRef(storage, filePath); // Corrected ref to use filePath
+      const uploadTask = uploadBytesResumable(fileStorageRef, solutionFile); // Corrected to use solutionFile
 
       try {
         await new Promise<void>((resolve, reject) => {
@@ -235,7 +240,7 @@ export function TicketItem({
             },
             (error) => {
               console.error("Error al subir adjunto de solución:", error);
-              toast({ title: "Error al Subir Adjunto de Solución", description: error.message, variant = "destructive" });
+              toast({ title: "Error al Subir Adjunto de Solución", description: error.message, variant : "destructive" });
               setIsUploadingSolutionAttachment(false);
               reject(error);
             },
@@ -249,12 +254,12 @@ export function TicketItem({
           );
         });
       } catch (error) {
-        return; 
+        return;
       }
     }
-    
+
     await onUpdateTicketSolution(ticket.id, solutionDescription, newSolutionAttachments, solutionStatus);
-    setCurrentSolutionAttachments(newSolutionAttachments); 
+    setCurrentSolutionAttachments(newSolutionAttachments);
   };
 
   const handleRemoveSolutionAttachment = async (attachmentUrlToRemove: string) => {
@@ -264,11 +269,11 @@ export function TicketItem({
         await deleteObject(fileRef);
         const updatedAttachments = currentSolutionAttachments.filter(att => att.url !== attachmentUrlToRemove);
         setCurrentSolutionAttachments(updatedAttachments);
-        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status); 
+        await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status);
         toast({ title: "Adjunto de solución eliminado" });
     } catch (error: any) {
         console.error("Error eliminando adjunto de solución:", error);
-        toast({ title: "Error al eliminar adjunto de solución", description: error.message, variant = "destructive" });
+        toast({ title: "Error al eliminar adjunto de solución", description: error.message, variant : "destructive" });
     }
   };
 
@@ -303,7 +308,7 @@ export function TicketItem({
             <p className={`text-sm mt-1 mb-3 ${ticket.status === 'Cerrado' ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
               {ticket.description.length > 150 ? `${ticket.description.substring(0, 147)}...` : ticket.description}
             </p>
-            
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5" title="Estado">
                 {getStatusBadge(ticket.status)}
@@ -322,7 +327,7 @@ export function TicketItem({
                 </div>
               )}
               <UserAvatarNameTooltip user={reporter} label="Reportado por" icon={UserIconLk} />
-              {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" icon={UserIconLk} /> : 
+              {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" icon={UserIconLk} /> :
                 <div className="flex items-center gap-1.5" title="Asignado a">
                     <UserIconLk className="h-4 w-4 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">Sin asignar</span>
@@ -349,16 +354,16 @@ export function TicketItem({
                 <ul className="list-none space-y-1 text-sm">
                   {ticket.attachments.map((att, index) => (
                      <li key={index}>
-                       <a 
-                         href={att.url} 
-                         target="_blank" 
-                         rel="noopener noreferrer" 
+                       <a
+                         href={att.url}
+                         target="_blank"
+                         rel="noopener noreferrer"
                          className="text-primary hover:underline flex items-center gap-1 break-all"
                          title={`Descargar ${att.name}`}
                         >
                          <Paperclip className="h-3 w-3 shrink-0"/> {att.name}
                        </a>
-                     </li> 
+                     </li>
                   ))}
                 </ul>
               </div>
@@ -373,7 +378,7 @@ export function TicketItem({
                   <form onSubmit={handleSaveSolution} className="space-y-3">
                     <div>
                       <Label htmlFor={`solution-desc-${ticket.id}`} className="text-xs font-medium">Descripción de la Solución</Label>
-                      <Textarea 
+                      <Textarea
                         id={`solution-desc-${ticket.id}`}
                         value={solutionDescription}
                         onChange={(e) => setSolutionDescription(e.target.value)}
@@ -384,13 +389,13 @@ export function TicketItem({
                     </div>
                     <div>
                       <Label htmlFor={`solution-files-${ticket.id}`} className="text-xs font-medium">Adjuntos de la Solución</Label>
-                      <Input 
+                      <Input
                         id={`solution-files-${ticket.id}`}
-                        type="file" 
-                        onChange={handleSolutionFileChange} 
+                        type="file"
+                        onChange={handleSolutionFileChange}
                         className="text-xs mt-1"
                         disabled={isUploadingSolutionAttachment}
-                        accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar" 
+                        accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar"
                       />
                       {isUploadingSolutionAttachment && (
                         <div className="space-y-1 mt-1">
@@ -421,8 +426,8 @@ export function TicketItem({
                     </div>
                     <div>
                         <Label htmlFor={`solution-status-${ticket.id}`} className="text-xs font-medium">Actualizar Estado del Ticket</Label>
-                        <Select 
-                            value={solutionStatus} 
+                        <Select
+                            value={solutionStatus}
                             onValueChange={(value: TicketStatus) => setSolutionStatus(value)}
                             disabled={isUploadingSolutionAttachment}
                         >
@@ -503,19 +508,19 @@ export function TicketItem({
                 <p className="text-xs text-muted-foreground">No hay comentarios aún.</p>
               )}
               <form onSubmit={handleNewCommentSubmit} className="mt-4 space-y-2">
-                <Textarea 
-                  value={newCommentText} 
+                <Textarea
+                  value={newCommentText}
                   onChange={(e) => setNewCommentText(e.target.value)}
                   placeholder="Escribe un comentario..."
                   rows={2}
                   disabled={isUploadingCommentAttachment}
                 />
-                <Input 
-                  type="file" 
-                  onChange={handleCommentFileChange} 
+                <Input
+                  type="file"
+                  onChange={handleCommentFileChange}
                   className="text-xs"
                   disabled={isUploadingCommentAttachment}
-                  accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar" 
+                  accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar"
                 />
                  {isUploadingCommentAttachment && (
                   <div className="space-y-1">
@@ -539,3 +544,4 @@ export function TicketItem({
   );
 }
 
+    
