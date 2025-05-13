@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceToNowStrict, isValid, parseISO } from "date-fns"; // Added isValid, parseISO
 import { es } from "date-fns/locale";
 import { UserCheck, MessagesSquare, History } from "lucide-react";
 
@@ -54,44 +54,64 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
   return (
     <ScrollArea className="h-full">
       <div className="space-y-1">
-        {sessions.map((session) => (
-          <Button
-            key={session.id}
-            variant="ghost"
-            className={cn(
-              "w-full h-auto justify-start p-2 text-left",
-              selectedSessionId === session.id && "bg-accent text-accent-foreground"
-            )}
-            onClick={() => onSelectSession(session)}
-          >
-            <Avatar className="h-9 w-9 mr-3">
-              <AvatarImage src={`https://avatar.vercel.sh/${session.visitorId}.png?size=40`} alt={session.visitorName || "Visitante"} data-ai-hint="visitor avatar" />
-              <AvatarFallback>{(session.visitorName || "V").substring(0,1).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div className="flex-grow min-w-0">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium truncate">{session.visitorName || `Visitante ${session.visitorId.substring(0,6)}`}</p>
-                <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                  {formatDistanceToNowStrict(new Date(session.lastMessageAt), { addSuffix: true, locale: es })}
-                </span>
+        {sessions.map((session) => {
+          let timeAgo = "hace un momento"; // Default fallback
+          if (session.lastMessageAt) {
+            // Assuming session.lastMessageAt is an ISO string
+            const lastMessageDate = parseISO(session.lastMessageAt);
+            if (isValid(lastMessageDate)) {
+              timeAgo = formatDistanceToNowStrict(lastMessageDate, { addSuffix: true, locale: es });
+            } else {
+              // Fallback for potentially invalid date strings that new Date() might handle differently or error on
+              // This case should be rare if data is consistently ISO strings from Firestore Timestamps
+              const attemptParseWithNewDate = new Date(session.lastMessageAt);
+              if (isValid(attemptParseWithNewDate)) {
+                timeAgo = formatDistanceToNowStrict(attemptParseWithNewDate, { addSuffix: true, locale: es });
+              } else {
+                 console.warn(`Invalid lastMessageAt for session ${session.id}: ${session.lastMessageAt}`);
+              }
+            }
+          }
+
+          return (
+            <Button
+              key={session.id}
+              variant="ghost"
+              className={cn(
+                "w-full h-auto justify-start p-2 text-left",
+                selectedSessionId === session.id && "bg-accent text-accent-foreground"
+              )}
+              onClick={() => onSelectSession(session)}
+            >
+              <Avatar className="h-9 w-9 mr-3">
+                <AvatarImage src={`https://avatar.vercel.sh/${session.visitorId}.png?size=40`} alt={session.visitorName || "Visitante"} data-ai-hint="visitor avatar" />
+                <AvatarFallback>{(session.visitorName || "V").substring(0,1).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div className="flex-grow min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium truncate">{session.visitorName || `Visitante ${session.visitorId.substring(0,6)}`}</p>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                    {timeAgo}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  {session.status === 'pending' && !isHistoryList ? (
+                    <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">Pendiente</Badge>
+                  ) : session.agentId === currentAgentId && !isHistoryList ? (
+                    <Badge variant="default" className="text-xs bg-green-500 hover:bg-green-600">Asignado a ti</Badge>
+                  ) : session.agentId && !isHistoryList ? (
+                     <Badge variant="secondary" className="text-xs">Asignado</Badge>
+                  ) : session.status === 'closed' ? (
+                      <Badge variant="outline" className="text-xs">Cerrado</Badge>
+                  ) : (
+                      <Badge variant="outline" className="text-xs">{session.status}</Badge>
+                  )}
+                  {session.initialMessage && <p className="text-xs text-muted-foreground truncate">{session.initialMessage.substring(0,25)}...</p>}
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                {session.status === 'pending' && !isHistoryList ? (
-                  <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">Pendiente</Badge>
-                ) : session.agentId === currentAgentId && !isHistoryList ? (
-                  <Badge variant="default" className="text-xs bg-green-500 hover:bg-green-600">Asignado a ti</Badge>
-                ) : session.agentId && !isHistoryList ? (
-                   <Badge variant="secondary" className="text-xs">Asignado</Badge>
-                ) : session.status === 'closed' ? (
-                    <Badge variant="outline" className="text-xs">Cerrado</Badge>
-                ) : (
-                    <Badge variant="outline" className="text-xs">{session.status}</Badge>
-                )}
-                {session.initialMessage && <p className="text-xs text-muted-foreground truncate">{session.initialMessage.substring(0,25)}...</p>}
-              </div>
-            </div>
-          </Button>
-        ))}
+            </Button>
+          );
+        })}
       </div>
     </ScrollArea>
   );
