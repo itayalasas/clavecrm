@@ -13,6 +13,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Copy } from "lucide-react";
 
 const DEFAULT_WIDGET_SETTINGS: LiveChatWidgetSettings = {
   widgetEnabled: true,
@@ -25,6 +27,7 @@ const DEFAULT_WIDGET_SETTINGS: LiveChatWidgetSettings = {
 export default function LiveChatWidgetSettingsPage() {
   const [settings, setSettings] = useState<LiveChatWidgetSettings>(DEFAULT_WIDGET_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
+  const [embedScript, setEmbedScript] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -52,49 +55,47 @@ export default function LiveChatWidgetSettingsPage() {
     fetchSettings();
   }, [toast]);
 
+  useEffect(() => {
+    // Dynamically determine the base URL for the script
+    // In development, this will be localhost. In production, this will be your deployed domain.
+    const scriptBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    
+    const generatedEmbedScript = `
+<script>
+  (function() {
+    // Define settings for the widget
+    window.CRMRapidoChatSettings = ${JSON.stringify(settings, null, 2)};
+
+    // Create a script tag to load the main widget logic
+    var script = document.createElement('script');
+    script.src = "${scriptBaseUrl}/live-chat-widget.js"; // Loads from the public folder of your CRM app
+    script.async = true;
+    document.body.appendChild(script);
+
+    console.log("CRM Rápido: Cargador del widget de chat inicializado. Cargando widget desde:", script.src);
+  })();
+</script>
+  `.trim();
+    setEmbedScript(generatedEmbedScript);
+  }, [settings]);
+
+
   const handleSettingsSaved = (newSettings: LiveChatWidgetSettings) => {
     setSettings(newSettings);
   };
   
-  // Placeholder for a more dynamic script generation
-  const embedScript = `
-<script>
-  (function() {
-    // This is a placeholder for the actual widget loading script.
-    // In a real scenario, this would load a JS bundle for the chat widget.
-    console.log("CRM Rápido Live Chat Widget Loader Initialized");
-    
-    // Widget settings would be passed here or fetched by the widget script
-    window.CRMRapidoChatSettings = ${JSON.stringify(settings, null, 2)};
-
-    // Example: Create a simple button to represent the widget
-    var widgetButton = document.createElement('button');
-    widgetButton.id = 'crm-rapido-chat-button';
-    widgetButton.innerText = 'Chat';
-    widgetButton.style.position = 'fixed';
-    widgetButton.style.${settings.widgetPosition === 'bottom-right' ? 'right' : 'left'} = '20px';
-    widgetButton.style.bottom = '20px';
-    widgetButton.style.padding = '10px 15px';
-    widgetButton.style.backgroundColor = '${settings.primaryColor}';
-    widgetButton.style.color = 'white';
-    widgetButton.style.border = 'none';
-    widgetButton.style.borderRadius = '50px';
-    widgetButton.style.cursor = 'pointer';
-    widgetButton.style.zIndex = '9999';
-    widgetButton.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-    widgetButton.onclick = function() { alert('Chat iniciado (simulado) con mensaje: ${settings.welcomeMessage.replace(/'/g, "\\'")}') };
-    
-    if (${settings.widgetEnabled}) {
-      document.body.appendChild(widgetButton);
+  const handleCopyToClipboard = () => {
+    if (embedScript) {
+      navigator.clipboard.writeText(embedScript)
+        .then(() => {
+          toast({ title: "¡Copiado al Portapapeles!", description: "Script de incrustación copiado." });
+        })
+        .catch(err => {
+          console.error('Error al copiar: ', err);
+          toast({ title: "Error al Copiar", description: "No se pudo copiar al portapapeles.", variant: "destructive" });
+        });
     }
-
-    // The actual widget JS (e.g., loaded from your CRM domain) would handle:
-    // - Creating the chat interface
-    // - Connecting to Firebase for real-time messaging
-    // - Displaying the welcome message, header, etc.
-  })();
-</script>
-  `.trim();
+  };
 
 
   return (
@@ -145,7 +146,7 @@ export default function LiveChatWidgetSettingsPage() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-64 w-full" />
+                <Skeleton className="h-80 w-full" /> 
               ) : (
                 <ChatWidgetPreview settings={settings} />
               )}
@@ -169,9 +170,12 @@ export default function LiveChatWidgetSettingsPage() {
                 className="h-48 font-mono text-xs bg-muted"
                 rows={10}
               />
+               <Button onClick={handleCopyToClipboard} className="mt-2 w-full" variant="outline" size="sm" disabled={!embedScript}>
+                <Copy className="mr-2 h-4 w-4" /> Copiar Script
+              </Button>
               <p className="text-xs text-muted-foreground mt-2">
-                Nota: La funcionalidad completa del chat en vivo y las notificaciones a agentes están en desarrollo.
-                Este script es un ejemplo básico y se actualizará a medida que se implementen más características.
+                Nota: La funcionalidad completa del chat en vivo (conexión a Firebase, mensajería en tiempo real)
+                se implementará en `live-chat-widget.js`. Este script solo carga el widget.
               </p>
             </CardContent>
           </Card>
