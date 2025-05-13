@@ -18,6 +18,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, addDoc, 
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isValid, parseISO } from "date-fns"; // For robust date checking
+import { logSystemEvent } from "@/lib/auditLogger";
 
 // Helper function to map Firestore document data to ChatSession
 const mapDocToChatSession = (docSnap: QueryDocumentSnapshot | DocumentSnapshot): ChatSession => {
@@ -253,13 +254,22 @@ export default function AgentPanelPage() {
   };
   
   const handleCloseChat = async () => {
-    if (!selectedSession || activeTab === 'history') return;
+    if (!selectedSession || activeTab === 'history' || !currentUser) return;
     try {
       await updateDoc(doc(db, "chatSessions", selectedSession.id), {
         status: "closed",
         lastMessageAt: serverTimestamp()
       });
       toast({ title: "Chat Cerrado", description: `La conversación con ${selectedSession.visitorName || selectedSession.visitorId} ha sido cerrada.`});
+      
+      await logSystemEvent(
+        currentUser,
+        'update',
+        'ChatSession',
+        selectedSession.id,
+        `Chat con "${selectedSession.visitorName || selectedSession.visitorId}" cerrado por agente ${currentUser.name}.`
+      );
+      
       const justClosedSessionId = selectedSession.id;
       setSelectedSession(null);
       setMessages([]);
@@ -309,12 +319,20 @@ export default function AgentPanelPage() {
         
         await updateDoc(doc(db, "chatSessions", sessionToLink.id), {
           relatedLeadId: leadId,
+          visitorName: leadData.name, // Update visitorName in chat session
           lastMessageAt: serverTimestamp() 
         });
 
         toast({ title: "Lead Creado y Vinculado", description: `Lead "${leadData.name}" creado y vinculado al chat.` });
         fetchCRMSData(); 
-        setSelectedSession(prev => prev ? {...prev, relatedLeadId: leadId} : null); 
+        setSelectedSession(prev => prev ? {...prev, relatedLeadId: leadId, visitorName: leadData.name } : null); 
+         await logSystemEvent(
+            currentUser,
+            'create',
+            'Lead',
+            leadId,
+            `Lead "${leadData.name}" creado desde chat con ${sessionToLink.visitorName || sessionToLink.visitorId} (ID Sesión: ${sessionToLink.id}). Chat vinculado.`
+         );
     } catch (error) {
         console.error("Error al guardar lead desde chat:", error);
         toast({ title: "Error al Guardar Lead", variant: "destructive" });
@@ -373,11 +391,19 @@ export default function AgentPanelPage() {
         
         await updateDoc(doc(db, "chatSessions", sessionToLink.id), {
           relatedTicketId: ticketId,
+          // visitorName could also be updated here if desired, e.g. if a contact is found for the ticket reporter
           lastMessageAt: serverTimestamp()
         });
         toast({ title: "Ticket Creado y Vinculado", description: `Ticket "${firestoreSafeTicket.title}" creado y vinculado al chat.` });
         fetchCRMSData(); 
         setSelectedSession(prev => prev ? {...prev, relatedTicketId: ticketId} : null);
+        await logSystemEvent(
+            currentUser,
+            'create',
+            'Ticket',
+            ticketId,
+            `Ticket "${firestoreSafeTicket.title}" creado desde chat con ${sessionToLink.visitorName || sessionToLink.visitorId} (ID Sesión: ${sessionToLink.id}). Chat vinculado.`
+         );
     } catch (error) {
         console.error("Error al guardar ticket desde chat:", error);
         toast({ title: "Error al Guardar Ticket", variant: "destructive", description: String(error) });
@@ -393,15 +419,43 @@ export default function AgentPanelPage() {
   };
 
   const handleLinkEntityToChat = async (sessionId: string, entityType: 'lead' | 'contact', entityId: string) => {
+    if (!currentUser || !sessionToLink) {
+        toast({ title: "Error de autenticación o sesión", description: "No se pudo verificar el usuario o la sesión de chat.", variant: "destructive"});
+        return;
+    }
     try {
       const firestoreUpdate: any = { lastMessageAt: serverTimestamp() };
-      if (entityType === 'lead') firestoreUpdate.relatedLeadId = entityId;
-      if (entityType === 'contact') firestoreUpdate.relatedContactId = entityId;
+      let newVisitorName = sessionToLink.visitorName || `Visitante ${sessionToLink.visitorId.substring(0,6)}`;
+      let linkedEntityName = "";
+      let linkedEntityTypeDisplay = "";
+
+      if (entityType === 'lead') {
+        firestoreUpdate.relatedLeadId = entityId;
+        const lead = leads.find(l => l.id === entityId);
+        if (lead) {
+            newVisitorName = lead.name;
+            linkedEntityName = lead.name;
+            linkedEntityTypeDisplay = "Lead";
+            firestoreUpdate.visitorName = newVisitorName;
+        }
+      }
+      if (entityType === 'contact') {
+        firestoreUpdate.relatedContactId = entityId;
+        const contact = contacts.find(c => c.id === entityId);
+        if (contact) {
+            newVisitorName = `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || contact.email;
+            linkedEntityName = newVisitorName;
+            linkedEntityTypeDisplay = "Contacto";
+            firestoreUpdate.visitorName = newVisitorName;
+        }
+      }
 
       await updateDoc(doc(db, "chatSessions", sessionId), firestoreUpdate);
-      toast({ title: "Chat Vinculado", description: `El chat ha sido vinculado exitosamente.` });
       
-      const localUpdate: Partial<ChatSession> = { lastMessageAt: new Date().toISOString() };
+      const successMessage = `El chat ha sido vinculado exitosamente a ${linkedEntityTypeDisplay} "${linkedEntityName}". El visitante ahora se muestra como "${newVisitorName}".`;
+      toast({ title: "Chat Vinculado", description: successMessage });
+      
+      const localUpdate: Partial<ChatSession> = { lastMessageAt: new Date().toISOString(), visitorName: newVisitorName };
       if (entityType === 'lead') localUpdate.relatedLeadId = entityId;
       if (entityType === 'contact') localUpdate.relatedContactId = entityId;
       
@@ -416,9 +470,17 @@ export default function AgentPanelPage() {
       setLiveSessions(updateList);
       setHistorySessions(updateList);
 
+      await logSystemEvent(
+        currentUser,
+        'update',
+        'ChatSession',
+        sessionId,
+        `Chat vinculado a ${linkedEntityTypeDisplay} "${linkedEntityName}" (ID: ${entityId}). Nombre del visitante actualizado a "${newVisitorName}".`
+      );
+
     } catch (error) {
       console.error("Error vinculando entidad al chat:", error);
-      toast({ title: "Error al Vincular", variant: "destructive"});
+      toast({ title: "Error al Vincular", description: "No se pudo vincular la entidad al chat.", variant: "destructive"});
     }
     setIsLinkEntityDialogOpen(false);
     setSessionToLink(null);
