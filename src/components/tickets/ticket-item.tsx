@@ -33,6 +33,7 @@ interface TicketItemProps {
   onDelete: (ticketId: string) => void; 
   onAddComment: (ticketId: string, commentText: string, attachments: {name: string, url: string}[]) => Promise<void>;
   onUpdateTicketSolution: (ticketId: string, solutionDescription: string, solutionAttachments: { name: string; url: string }[], status: TicketStatus) => Promise<void>;
+  defaultOpen?: boolean; // New prop to control initial open state
 }
 
 const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, label: string, icon?: React.ElementType }) => {
@@ -67,7 +68,8 @@ export function TicketItem({
   onEdit, 
   onDelete, 
   onAddComment,
-  onUpdateTicketSolution 
+  onUpdateTicketSolution,
+  defaultOpen = false, // Default to false
 }: TicketItemProps) {
   const relatedLead = ticket.relatedLeadId ? leads.find(l => l.id === ticket.relatedLeadId) : null;
   const reporter = users.find(u => u.id === ticket.reporterUserId);
@@ -115,7 +117,7 @@ export function TicketItem({
       setInternalComments(fetchedComments);
     }, (error) => {
       console.error(`Error al obtener comentarios para ticket ${ticket.id}: `, error);
-      toast({ title: "Error al Cargar Comentarios", description: "No se pudieron actualizar los comentarios en tiempo real.", variant: "destructive"});
+      toast({ title: "Error al Cargar Comentarios", description: "No se pudieron actualizar los comentarios en tiempo real.", variant = "destructive"});
     });
 
     return () => unsubscribe();
@@ -152,7 +154,7 @@ export function TicketItem({
   const handleNewCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommentText.trim() && !commentFile) {
-      toast({title: "Comentario Vacío", description: "Escribe un comentario o adjunta un archivo.", variant: "destructive"});
+      toast({title: "Comentario Vacío", description: "Escribe un comentario o adjunta un archivo.", variant="destructive"});
       return;
     }
     if (!currentUser) return;
@@ -176,7 +178,7 @@ export function TicketItem({
             },
             (error) => {
               console.error("Error al subir adjunto de comentario:", error);
-              toast({ title: "Error al Subir Adjunto de Comentario", description: error.message, variant: "destructive" });
+              toast({ title: "Error al Subir Adjunto de Comentario", description: error.message, variant = "destructive" });
               setIsUploadingCommentAttachment(false);
               reject(error);
             },
@@ -209,7 +211,7 @@ export function TicketItem({
   const handleSaveSolution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (solutionStatus !== 'En Progreso' && !solutionDescription.trim() && !solutionFile && currentSolutionAttachments.length === 0) {
-      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant: "destructive" });
+      toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant="destructive" });
       return;
     }
     if (!currentUser || !isAssignee) return;
@@ -221,7 +223,7 @@ export function TicketItem({
       setSolutionUploadProgress(0);
       const filePath = `ticket-solutions/${ticket.id}/${currentUser.id}/${Date.now()}-${solutionFile.name}`;
       const fileStorageRef = storageRef(storage, filePath);
-      const uploadTask = uploadBytesResumable(fileStorageRef, solutionFile);
+      const uploadTask = uploadBytesResumable(fileStorageRef, fileStorageRef);
 
       try {
         await new Promise<void>((resolve, reject) => {
@@ -233,7 +235,7 @@ export function TicketItem({
             },
             (error) => {
               console.error("Error al subir adjunto de solución:", error);
-              toast({ title: "Error al Subir Adjunto de Solución", description: error.message, variant: "destructive" });
+              toast({ title: "Error al Subir Adjunto de Solución", description: error.message, variant = "destructive" });
               setIsUploadingSolutionAttachment(false);
               reject(error);
             },
@@ -266,14 +268,14 @@ export function TicketItem({
         toast({ title: "Adjunto de solución eliminado" });
     } catch (error: any) {
         console.error("Error eliminando adjunto de solución:", error);
-        toast({ title: "Error al eliminar adjunto de solución", description: error.message, variant: "destructive" });
+        toast({ title: "Error al eliminar adjunto de solución", description: error.message, variant = "destructive" });
     }
   };
 
 
   return (
-    <Card className={`transition-all duration-200 shadow-sm hover:shadow-md ${ticket.status === 'Cerrado' ? 'bg-muted/50 opacity-80' : 'bg-card'}`}>
-      <Accordion type="single" collapsible className="w-full">
+    <Card id={`ticket-item-${ticket.id}`} className={`transition-all duration-200 shadow-sm hover:shadow-md ${ticket.status === 'Cerrado' ? 'bg-muted/50 opacity-80' : 'bg-card'}`}>
+      <Accordion type="single" collapsible className="w-full" defaultValue={defaultOpen ? `ticket-${ticket.id}-details` : undefined}>
         <AccordionItem value={`ticket-${ticket.id}-details`} className="border-b-0">
           <CardHeader className="p-4 pb-0">
             <div className="flex items-start justify-between gap-2">

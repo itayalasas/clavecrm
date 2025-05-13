@@ -25,8 +25,9 @@ import { useToast }
 from "@/hooks/use-toast";
 import { Skeleton }
 from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/auth-context"; // Import useAuth
-import { logSystemEvent } from "@/lib/auditLogger"; // Import audit logger
+import { useAuth } from "@/contexts/auth-context";
+import { logSystemEvent } from "@/lib/auditLogger";
+import { useSearchParams, useRouter } from "next/navigation"; // Added useSearchParams and useRouter
 
 export default function PipelinePage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -34,10 +35,13 @@ export default function PipelinePage() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
   const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false); // Added state for dialog
 
   const pipelineNavItem = NAV_ITEMS.find(item => item.href === '/pipeline');
   const { toast } = useToast();
-  const { currentUser } = useAuth(); // Get currentUser
+  const { currentUser } = useAuth(); 
+  const searchParams = useSearchParams(); // For reading query parameters
+  const router = useRouter(); // For potentially clearing query params
 
   const fetchLeads = useCallback(async () => {
     setIsLoadingLeads(true);
@@ -55,6 +59,7 @@ export default function PipelinePage() {
         } as Lead;
       });
       setLeads(fetchedLeads);
+      return fetchedLeads; // Return fetched leads for immediate use
     } catch (error) {
       console.error("Error al obtener leads:", error);
       toast({
@@ -62,6 +67,7 @@ export default function PipelinePage() {
         description: "No se pudieron cargar los leads del embudo.",
         variant: "destructive",
       });
+      return []; // Return empty array on error
     } finally {
       setIsLoadingLeads(false);
     }
@@ -69,8 +75,19 @@ export default function PipelinePage() {
 
   useEffect(() => {
     setStages(INITIAL_PIPELINE_STAGES.sort((a, b) => a.order - b.order));
-    fetchLeads();
-  }, [fetchLeads]);
+    fetchLeads().then(fetchedLeads => {
+      const leadIdFromQuery = searchParams.get('leadId');
+      if (leadIdFromQuery && fetchedLeads) {
+        const leadToOpen = fetchedLeads.find(l => l.id === leadIdFromQuery);
+        if (leadToOpen) {
+          setEditingLead(leadToOpen);
+          setIsLeadDialogOpen(true);
+          // Optional: remove query param after use
+          // router.replace('/pipeline', { scroll: false }); 
+        }
+      }
+    });
+  }, [fetchLeads, searchParams, router]);
 
   const handleSaveLead = async (leadData: Lead) => {
     if (!currentUser) {
@@ -102,7 +119,6 @@ export default function PipelinePage() {
           description: `El lead "${leadData.name}" ha sido guardado exitosamente.`,
         });
 
-        // Log audit event
         const actionType = isEditing ? 'update' : 'create';
         const actionDetails = isEditing ? 
           `Lead "${leadData.name}" actualizado.` : 
@@ -110,6 +126,7 @@ export default function PipelinePage() {
         await logSystemEvent(currentUser, actionType, 'Lead', leadId, actionDetails);
 
         setEditingLead(null);
+        setIsLeadDialogOpen(false); // Close dialog on save
     } catch (error) {
         console.error("Error al guardar lead:", error);
         toast({
@@ -124,10 +141,12 @@ export default function PipelinePage() {
 
   const handleEditLead = (lead: Lead) => {
     setEditingLead(lead);
+    setIsLeadDialogOpen(true); // Open dialog for editing
   };
   
   const openNewLeadDialog = () => {
     setEditingLead(null); 
+    setIsLeadDialogOpen(true); // Open dialog for new lead
   };
 
 
@@ -135,18 +154,9 @@ export default function PipelinePage() {
     <div className="flex flex-col h-[calc(100vh-var(--header-height,4rem)-2rem)]">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-semibold">{pipelineNavItem ? pipelineNavItem.label : "Embudo de Ventas"}</h2>
-        <AddEditLeadDialog
-          trigger={
-            <Button onClick={openNewLeadDialog} disabled={isSubmittingLead}>
-              <PlusCircle className="mr-2 h-5 w-5" /> Añadir Lead
-            </Button>
-          }
-          stages={stages}
-          leadToEdit={editingLead}
-          onSave={handleSaveLead}
-          isSubmitting={isSubmittingLead}
-          key={editingLead ? editingLead.id : "new-lead"}
-        />
+        <Button onClick={openNewLeadDialog} disabled={isSubmittingLead}>
+          <PlusCircle className="mr-2 h-5 w-5" /> Añadir Lead
+        </Button>
       </div>
       
       {isLoadingLeads ? (
@@ -172,6 +182,15 @@ export default function PipelinePage() {
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
       )}
+      <AddEditLeadDialog
+          isOpen={isLeadDialogOpen} // Control dialog visibility
+          onOpenChange={setIsLeadDialogOpen} // Control dialog visibility
+          stages={stages}
+          leadToEdit={editingLead}
+          onSave={handleSaveLead}
+          isSubmitting={isSubmittingLead}
+          // Removed trigger as it's now controlled by isLeadDialogOpen
+        />
     </div>
   );
 }

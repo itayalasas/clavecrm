@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserCircle, Link as LinkIconLucide, Users, ListChecks, PlusCircle, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
+import { useRouter } from "next/navigation"; // Import useRouter
 
 interface VisitorInfoProps {
   session: ChatSession | null;
@@ -25,6 +25,8 @@ export function VisitorInfo({
     linkedLead,
     linkedTicket
 }: VisitorInfoProps) {
+  const router = useRouter(); // Initialize router
+
   if (!session) {
     return (
       <Card className="h-full flex flex-col">
@@ -40,6 +42,14 @@ export function VisitorInfo({
       </Card>
     );
   }
+
+  const handleNavigateToLead = (leadId: string) => {
+    router.push(`/pipeline?leadId=${leadId}`);
+  };
+
+  const handleNavigateToTicket = (ticketId: string) => {
+    router.push(`/tickets?ticketId=${ticketId}`);
+  };
 
   return (
     <Card className="h-full flex flex-col">
@@ -74,8 +84,8 @@ export function VisitorInfo({
                     <span className="flex items-center gap-1">
                         <Users className="h-3 w-3 text-primary"/> Lead: {linkedLead.name}
                     </span>
-                    <Button variant="ghost" size="icon" className="h-5 w-5" asChild>
-                        <Link href={`/pipeline?lead=${linkedLead.id}`}><ExternalLink className="h-3 w-3"/></Link>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleNavigateToLead(linkedLead.id)}>
+                        <ExternalLink className="h-3 w-3"/>
                     </Button>
                 </div>
             ) : session.relatedLeadId && <p className="text-xs text-muted-foreground">ID Lead Vinculado: {session.relatedLeadId.substring(0,8)}...</p>
@@ -85,8 +95,8 @@ export function VisitorInfo({
                      <span className="flex items-center gap-1">
                         <ListChecks className="h-3 w-3 text-primary"/> Ticket: {linkedTicket.title}
                     </span>
-                     <Button variant="ghost" size="icon" className="h-5 w-5" asChild>
-                        <Link href={`/tickets?ticket=${linkedTicket.id}`}><ExternalLink className="h-3 w-3"/></Link>
+                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleNavigateToTicket(linkedTicket.id)}>
+                        <ExternalLink className="h-3 w-3"/>
                     </Button>
                 </div>
             ) : session.relatedTicketId && <p className="text-xs text-muted-foreground mt-1">ID Ticket Vinculado: {session.relatedTicketId.substring(0,8)}...</p>

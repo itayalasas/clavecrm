@@ -9,7 +9,7 @@ import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList } from "lucide-react"; // Added icons
+import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList } from "lucide-react"; 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -22,6 +22,7 @@ import { es } from 'date-fns/locale';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useSearchParams, useRouter } from "next/navigation"; // Added useSearchParams and useRouter
 
 
 export default function TicketsPage() {
@@ -44,11 +45,14 @@ export default function TicketsPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | TicketStatus>("Todos");
   const [filterPriority, setFilterPriority] = useState<"Todas" | TicketPriority>("Todas");
   const [filterAssignee, setFilterAssignee] = useState<"Todos" | string>("Todos");
+  const [ticketToOpen, setTicketToOpen] = useState<string | null>(null); // For opening a specific ticket
 
   const { toast } = useToast();
   const { getAllUsers, currentUser, loading: authLoading } = useAuth(); 
   const ticketsNavItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/tickets');
   const PageIcon = ticketsNavItem?.icon || ClipboardList;
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const fetchTickets = useCallback(async () => {
     if (!currentUser) { 
@@ -81,6 +85,18 @@ export default function TicketsPage() {
         });
         setTickets(fetchedTickets);
         setIsLoadingTickets(false);
+
+        // Check for ticketId in query params after tickets are fetched
+        const ticketIdFromQuery = searchParams.get('ticketId');
+        if (ticketIdFromQuery) {
+          const exists = fetchedTickets.some(t => t.id === ticketIdFromQuery);
+          if (exists) {
+            setTicketToOpen(ticketIdFromQuery);
+            // Optional: remove query param after use
+            // router.replace('/tickets', { scroll: false }); 
+          }
+        }
+
       }, (error) => {
         console.error("Error al obtener tickets en tiempo real:", error);
         toast({
@@ -102,7 +118,7 @@ export default function TicketsPage() {
       });
       setIsLoadingTickets(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, toast, searchParams, router]);
 
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
@@ -188,6 +204,8 @@ export default function TicketsPage() {
         updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
         assigneeUserId: ticketToSave.assigneeUserId || null, 
         relatedLeadId: ticketToSave.relatedLeadId || null, 
+        solutionDescription: ticketToSave.solutionDescription || "",
+        solutionAttachments: ticketToSave.solutionAttachments || [],
       };
       
       await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true }); 
@@ -220,10 +238,9 @@ export default function TicketsPage() {
     const ticketId = ticketToDelete.id;
     const ticketTitle = ticketToDelete.title;
     
-    setIsDeleteDialogOpen(false); // Close dialog first
+    setIsDeleteDialogOpen(false); 
 
     try {
-      // Delete ticket attachments
       if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
         for (const attachment of ticketToDelete.attachments) {
           try {
@@ -231,7 +248,6 @@ export default function TicketsPage() {
           } catch (e) { console.warn("Falló al eliminar adjunto del ticket", attachment.url, e); }
         }
       }
-      // Delete solution attachments
       if (ticketToDelete.solutionAttachments && ticketToDelete.solutionAttachments.length > 0) {
         for (const attachment of ticketToDelete.solutionAttachments) {
            try {
@@ -381,7 +397,6 @@ export default function TicketsPage() {
         if (filterAssignee === "unassigned") return !ticket.assigneeUserId;
         return ticket.assigneeUserId === filterAssignee;
       });
-      // Search term filtering is now handled by TicketItem's visibility logic or can be added here if global search is preferred
   }, [tickets, filterStatus, filterPriority, filterAssignee, currentUser]); 
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
@@ -469,7 +484,7 @@ export default function TicketsPage() {
               <Skeleton className="h-24 w-full" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : filteredTickets.filter(ticket => // Apply search term filter here
+          ) : filteredTickets.filter(ticket => 
                 ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
@@ -490,6 +505,7 @@ export default function TicketsPage() {
                   onDelete={() => confirmDeleteTicket(ticket)}
                   onAddComment={handleAddComment}
                   onUpdateTicketSolution={handleUpdateTicketSolution}
+                  defaultOpen={ticket.id === ticketToOpen} // Pass prop to open accordion
                 />
               ))}
             </div>
