@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, XCircle, Users, Info, MessageSquareDashed, Loader2, LogOut, ArrowLeftCircle, History } from "lucide-react";
+import { Send, XCircle, Users, Info, MessageSquareDashed, Loader2, LogOut, ArrowLeftCircle, History, UserCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { VisitorInfo } from "./visitor-info";
@@ -73,16 +74,12 @@ export function ChatWindow({
     return "Desconocido";
   };
 
-  const getSenderAvatar = (senderId: string, senderType: 'visitor' | 'agent') => {
-    if (senderType === 'visitor') return `https://avatar.vercel.sh/${senderId}.png?size=32`;
-    if (senderType === 'agent') {
-        if (currentAgent?.id === senderId && currentAgent.avatarUrl) return currentAgent.avatarUrl;
-        return `https://avatar.vercel.sh/${getSenderName(senderId, senderType)}.png?size=32`; 
-    }
-    return `https://avatar.vercel.sh/unknown.png?size=32`;
+  const getAgentAvatar = (senderId: string) => {
+    if (currentAgent?.id === senderId && currentAgent.avatarUrl) return currentAgent.avatarUrl;
+    return `https://avatar.vercel.sh/${getSenderName(senderId, 'agent')}.png?size=32`; 
   };
-   const getSenderAvatarFallback = (senderId: string, senderType: 'visitor' | 'agent') => {
-    const name = getSenderName(senderId, senderType);
+   const getAgentAvatarFallback = (senderId: string) => {
+    const name = getSenderName(senderId, 'agent');
     return name.substring(0,1).toUpperCase();
   }
 
@@ -91,10 +88,7 @@ export function ChatWindow({
     <div className="flex flex-col h-full">
       <CardHeader className="p-3 border-b flex-row items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={`https://avatar.vercel.sh/${session.visitorId}.png?size=40`} alt={session.visitorName || "Visitante"} data-ai-hint="visitor avatar"/>
-            <AvatarFallback>{(session.visitorName || "V").substring(0,1).toUpperCase()}</AvatarFallback>
-          </Avatar>
+          <UserCircle className="h-8 w-8 text-muted-foreground" /> {/* Visitor Icon */}
           <div className="min-w-0">
             <CardTitle className="text-base truncate">
               {isReadOnly && <History className="inline h-4 w-4 mr-1.5 text-muted-foreground" />}
@@ -145,31 +139,28 @@ export function ChatWindow({
                 )}
               >
                 {msg.senderType === 'visitor' && (
-                  <Avatar className="h-7 w-7 self-start">
-                    <AvatarImage src={getSenderAvatar(msg.senderId, msg.senderType)} alt={getSenderName(msg.senderId, msg.senderType)} data-ai-hint="visitor chat avatar"/>
-                    <AvatarFallback>{getSenderAvatarFallback(msg.senderId, msg.senderType)}</AvatarFallback>
-                  </Avatar>
+                  <UserCircle className="h-7 w-7 self-start text-muted-foreground" />
                 )}
                 <div
                   className={cn(
                     "p-2.5 rounded-lg max-w-[70%] text-sm shadow-sm",
                     msg.senderType === 'agent'
-                      ? "bg-primary text-primary-foreground rounded-br-none"
+                      ? "bg-secondary text-secondary-foreground rounded-br-none" // Changed agent bubble color
                       : "bg-background border rounded-bl-none"
                   )}
                 >
                   <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                    <p className={cn(
                        "text-xs mt-1",
-                       msg.senderType === 'agent' ? "text-primary-foreground/70 text-right" : "text-muted-foreground/80 text-left"
+                       msg.senderType === 'agent' ? "text-muted-foreground/80 text-right" : "text-muted-foreground/80 text-left" // Adjusted agent timestamp color
                     )}>
                         {format(new Date(msg.timestamp), "p", { locale: es })}
                     </p>
                 </div>
                  {msg.senderType === 'agent' && (
                   <Avatar className="h-7 w-7 self-start">
-                    <AvatarImage src={getSenderAvatar(msg.senderId, msg.senderType)} alt={getSenderName(msg.senderId, msg.senderType)} data-ai-hint="agent chat avatar" />
-                     <AvatarFallback>{getSenderAvatarFallback(msg.senderId, msg.senderType)}</AvatarFallback>
+                    <AvatarImage src={getAgentAvatar(msg.senderId)} alt={getSenderName(msg.senderId, 'agent')} data-ai-hint="agent chat avatar" />
+                     <AvatarFallback>{getAgentAvatarFallback(msg.senderId)}</AvatarFallback>
                   </Avatar>
                 )}
               </div>

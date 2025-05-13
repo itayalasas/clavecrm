@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChatSession } from "@/lib/types";
@@ -55,15 +56,12 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
     <ScrollArea className="h-full">
       <div className="space-y-1">
         {sessions.map((session) => {
-          let timeAgo = "hace un momento"; // Default fallback
+          let timeAgo = "hace un momento"; 
           if (session.lastMessageAt) {
-            // Assuming session.lastMessageAt is an ISO string
             const lastMessageDate = parseISO(session.lastMessageAt);
             if (isValid(lastMessageDate)) {
               timeAgo = formatDistanceToNowStrict(lastMessageDate, { addSuffix: true, locale: es });
             } else {
-              // Fallback for potentially invalid date strings that new Date() might handle differently or error on
-              // This case should be rare if data is consistently ISO strings from Firestore Timestamps
               const attemptParseWithNewDate = new Date(session.lastMessageAt);
               if (isValid(attemptParseWithNewDate)) {
                 timeAgo = formatDistanceToNowStrict(attemptParseWithNewDate, { addSuffix: true, locale: es });
@@ -98,7 +96,7 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
                   {session.status === 'pending' && !isHistoryList ? (
                     <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">Pendiente</Badge>
                   ) : session.agentId === currentAgentId && !isHistoryList ? (
-                    <Badge variant="default" className="text-xs bg-green-500 hover:bg-green-600">Asignado a ti</Badge>
+                    <Badge variant="default" className="text-xs bg-primary text-primary-foreground">Asignado a ti</Badge>
                   ) : session.agentId && !isHistoryList ? (
                      <Badge variant="secondary" className="text-xs">Asignado</Badge>
                   ) : session.status === 'closed' ? (
