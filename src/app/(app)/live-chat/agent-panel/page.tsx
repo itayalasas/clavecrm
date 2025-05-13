@@ -337,6 +337,8 @@ export default function AgentPanelPage() {
             updatedAt: Timestamp.fromDate(new Date(firestoreSafeTicket.updatedAt!)),
             assigneeUserId: firestoreSafeTicket.assigneeUserId || null,
             relatedLeadId: firestoreSafeTicket.relatedLeadId || null,
+            solutionDescription: firestoreSafeTicket.solutionDescription || "",
+            solutionAttachments: firestoreSafeTicket.solutionAttachments || [],
         }
 
         await setDoc(ticketDocRef, dataToSave, { merge: true });
@@ -562,4 +564,5 @@ export default function AgentPanelPage() {
     </div>
   );
 }
+
 
