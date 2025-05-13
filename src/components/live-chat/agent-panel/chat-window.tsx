@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, XCircle, Users, Info, MessageSquareDashed, Loader2, LogOut } from "lucide-react";
+import { Send, XCircle, Users, Info, MessageSquareDashed, Loader2, LogOut, ArrowLeftCircle, History } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { VisitorInfo } from "./visitor-info";
@@ -21,8 +21,8 @@ interface ChatWindowProps {
   onSendMessage: (text: string) => void;
   isLoadingMessages: boolean;
   currentAgent: { id: string; name: string; avatarUrl?: string | null } | null;
-  onCloseChat: () => void;
-  // onTransferChat: (sessionId: string) => void; // Future
+  onCloseChat: () => void; 
+  isReadOnly?: boolean; 
 }
 
 export function ChatWindow({
@@ -32,12 +32,12 @@ export function ChatWindow({
   isLoadingMessages,
   currentAgent,
   onCloseChat,
+  isReadOnly = false,
 }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Scroll to bottom when new messages arrive
     if (scrollAreaRef.current) {
       const scrollableViewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (scrollableViewport) {
@@ -48,7 +48,7 @@ export function ChatWindow({
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim()) {
+    if (newMessage.trim() && !isReadOnly) {
       onSendMessage(newMessage.trim());
       setNewMessage("");
     }
@@ -56,15 +56,24 @@ export function ChatWindow({
 
   const getSenderName = (senderId: string, senderType: 'visitor' | 'agent') => {
     if (senderType === 'visitor') return session.visitorName || `Visitante ${senderId.substring(0,6)}`;
-    if (senderType === 'agent' && currentAgent?.id === senderId) return currentAgent.name;
-    // Potentially lookup other agent names if needed, for now just "Agente"
-    return "Agente";
+    // Try to find agent name if sender is an agent
+    if (senderType === 'agent') {
+        // Check if it's the current agent
+        if (currentAgent?.id === senderId) return currentAgent.name;
+        // TODO: Fetch agent name from a list of all agents if available, for now just "Agente"
+        return "Agente"; 
+    }
+    return "Desconocido";
   };
 
   const getSenderAvatar = (senderId: string, senderType: 'visitor' | 'agent') => {
     if (senderType === 'visitor') return `https://avatar.vercel.sh/${senderId}.png?size=32`;
-    if (senderType === 'agent' && currentAgent?.id === senderId) return currentAgent.avatarUrl || `https://avatar.vercel.sh/${currentAgent.name}.png?size=32`;
-    return `https://avatar.vercel.sh/agent.png?size=32`; // Generic agent avatar
+    if (senderType === 'agent') {
+        if (currentAgent?.id === senderId && currentAgent.avatarUrl) return currentAgent.avatarUrl;
+        // Fallback for other agents or current agent without avatarUrl
+        return `https://avatar.vercel.sh/${getSenderName(senderId, senderType)}.png?size=32`; 
+    }
+    return `https://avatar.vercel.sh/unknown.png?size=32`;
   };
    const getSenderAvatarFallback = (senderId: string, senderType: 'visitor' | 'agent') => {
     const name = getSenderName(senderId, senderType);
@@ -81,17 +90,30 @@ export function ChatWindow({
             <AvatarFallback>{(session.visitorName || "V").substring(0,1).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <CardTitle className="text-base truncate">{session.visitorName || `Visitante ${session.visitorId.substring(0,6)}`}</CardTitle>
-            <p className="text-xs text-muted-foreground">ID Sesión: {session.id.substring(0,8)}...</p>
+            <CardTitle className="text-base truncate">
+              {isReadOnly && <History className="inline h-4 w-4 mr-1.5 text-muted-foreground" />}
+              {session.visitorName || `Visitante ${session.visitorId.substring(0,6)}`}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+                {isReadOnly ? `Transcripción - ID: ${session.id.substring(0,8)}...` : `ID Sesión: ${session.id.substring(0,8)}...`}
+            </p>
           </div>
         </div>
         <div className="flex gap-1">
-          <Button variant="outline" size="sm" onClick={onCloseChat} disabled={session.status === 'closed'}>
-            <XCircle className="mr-1 h-4 w-4" /> Cerrar Chat
-          </Button>
-          <Button variant="outline" size="sm" disabled>
-            <LogOut className="mr-1 h-4 w-4" /> Transferir
-          </Button>
+          {isReadOnly ? (
+             <Button variant="outline" size="sm" onClick={onCloseChat}>
+                <ArrowLeftCircle className="mr-1 h-4 w-4" /> Volver al Historial
+            </Button>
+          ) : (
+            <>
+                <Button variant="outline" size="sm" onClick={onCloseChat} disabled={session.status === 'closed'}>
+                    <XCircle className="mr-1 h-4 w-4" /> Cerrar Chat
+                </Button>
+                <Button variant="outline" size="sm" disabled>
+                    <LogOut className="mr-1 h-4 w-4" /> Transferir
+                </Button>
+            </>
+          )}
         </div>
       </CardHeader>
 
@@ -104,8 +126,8 @@ export function ChatWindow({
           ) : messages.length === 0 ? (
              <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-6 text-center">
                 <MessageSquareDashed size={40} className="mb-3 text-gray-400" />
-                <p className="text-sm">Aún no hay mensajes en este chat.</p>
-                {session.status === 'pending' && <p className="text-xs mt-1">Esperando que un agente se una...</p>}
+                <p className="text-sm">{isReadOnly ? "No hay mensajes en esta conversación." : "Aún no hay mensajes en este chat."}</p>
+                {!isReadOnly && session.status === 'pending' && <p className="text-xs mt-1">Esperando que un agente se una...</p>}
              </div>
           ) : (
             messages.map((msg) => (
@@ -138,7 +160,7 @@ export function ChatWindow({
                         {format(new Date(msg.timestamp), "p", { locale: es })}
                     </p>
                 </div>
-                 {msg.senderType === 'agent' && currentAgent && (
+                 {msg.senderType === 'agent' && (
                   <Avatar className="h-7 w-7 self-start">
                     <AvatarImage src={getSenderAvatar(msg.senderId, msg.senderType)} alt={getSenderName(msg.senderId, msg.senderType)} data-ai-hint="agent chat avatar" />
                      <AvatarFallback>{getSenderAvatarFallback(msg.senderId, msg.senderType)}</AvatarFallback>
@@ -152,7 +174,7 @@ export function ChatWindow({
         <div className="hidden lg:flex lg:flex-col lg:col-span-1 border-l p-3 space-y-3 bg-background">
             <VisitorInfo session={session} />
             <Separator />
-            <CannedResponses onSelectResponse={(text) => setNewMessage(prev => prev + text)} />
+            {!isReadOnly && <CannedResponses onSelectResponse={(text) => setNewMessage(prev => prev + text)} />}
         </div>
       </div>
 
@@ -161,13 +183,13 @@ export function ChatWindow({
         <form onSubmit={handleSend} className="flex w-full items-center gap-2">
           <Input
             type="text"
-            placeholder={session.status === 'closed' ? "Chat cerrado." : "Escribe un mensaje..."}
+            placeholder={isReadOnly ? "Transcripción (solo lectura)." : (session.status === 'closed' ? "Chat cerrado." : "Escribe un mensaje...")}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            disabled={session.status === 'closed' || session.status === 'pending' && session.agentId !== currentAgent?.id}
+            disabled={isReadOnly || session.status === 'closed' || (session.status === 'pending' && session.agentId !== currentAgent?.id)}
             className="flex-grow"
           />
-          <Button type="submit" disabled={!newMessage.trim() || session.status === 'closed' || session.status === 'pending' && session.agentId !== currentAgent?.id}>
+          <Button type="submit" disabled={isReadOnly || !newMessage.trim() || session.status === 'closed' || (session.status === 'pending' && session.agentId !== currentAgent?.id)}>
             <Send className="h-4 w-4" />
             <span className="sr-only">Enviar</span>
           </Button>

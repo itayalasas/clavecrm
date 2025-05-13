@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
-import { UserCheck, MessagesSquare } from "lucide-react";
+import { UserCheck, MessagesSquare, History } from "lucide-react";
 
 interface ChatListProps {
   sessions: ChatSession[];
@@ -17,9 +17,10 @@ interface ChatListProps {
   onSelectSession: (session: ChatSession) => void;
   isLoading: boolean;
   currentAgentId: string | null;
+  isHistoryList?: boolean; // New prop
 }
 
-export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoading, currentAgentId }: ChatListProps) {
+export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoading, currentAgentId, isHistoryList = false }: ChatListProps) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -39,9 +40,13 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
   if (sessions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4 text-center">
-        <MessagesSquare size={32} className="mb-2" />
-        <p className="text-sm">No hay conversaciones activas o pendientes.</p>
-        <p className="text-xs">Nuevos chats aparecerán aquí.</p>
+        {isHistoryList ? <History size={32} className="mb-2" /> : <MessagesSquare size={32} className="mb-2" />}
+        <p className="text-sm">
+          {isHistoryList ? "No hay chats en el historial." : "No hay conversaciones activas o pendientes."}
+        </p>
+        <p className="text-xs">
+          {isHistoryList ? "Los chats cerrados aparecerán aquí." : "Nuevos chats aparecerán aquí."}
+        </p>
       </div>
     );
   }
@@ -71,12 +76,14 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                {session.status === 'pending' ? (
+                {session.status === 'pending' && !isHistoryList ? (
                   <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">Pendiente</Badge>
-                ) : session.agentId === currentAgentId ? (
+                ) : session.agentId === currentAgentId && !isHistoryList ? (
                   <Badge variant="default" className="text-xs bg-green-500 hover:bg-green-600">Asignado a ti</Badge>
-                ) : session.agentId ? (
+                ) : session.agentId && !isHistoryList ? (
                    <Badge variant="secondary" className="text-xs">Asignado</Badge>
+                ) : session.status === 'closed' ? (
+                    <Badge variant="outline" className="text-xs">Cerrado</Badge>
                 ) : (
                     <Badge variant="outline" className="text-xs">{session.status}</Badge>
                 )}
