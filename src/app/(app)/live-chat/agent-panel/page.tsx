@@ -7,10 +7,14 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LayoutGrid, MessageSquare, Search, Filter, History } from "lucide-react";
-import type { ChatSession, ChatMessage } from "@/lib/types";
+import type { ChatSession, ChatMessage, User, Lead, Ticket, Contact, PipelineStage } from "@/lib/types";
+import { AddEditLeadDialog } from "@/components/pipeline/add-edit-lead-dialog";
+import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog";
+import { LinkChatToEntityDialog } from "@/components/live-chat/agent-panel/link-chat-to-entity-dialog";
+import { INITIAL_PIPELINE_STAGES } from "@/lib/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, Timestamp, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, Timestamp, getDocs, setDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -19,18 +23,43 @@ export default function AgentPanelPage() {
   const [historySessions, setHistorySessions] = useState<ChatSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  
   const [isLoadingLiveSessions, setIsLoadingLiveSessions] = useState(true);
   const [isLoadingHistorySessions, setIsLoadingHistorySessions] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const { currentUser } = useAuth();
+  const [isLoadingSupportData, setIsLoadingSupportData] = useState(true);
+
+  const { currentUser, getAllUsers } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"live" | "history">("live");
   const [historySearchTerm, setHistorySearchTerm] = useState("");
 
+  // CRM Data for dialogs
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]); // For displaying linked ticket info if needed
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(INITIAL_PIPELINE_STAGES);
+
+
+  // Dialog states
+  const [isAddLeadDialogOpen, setIsAddLeadDialogOpen] = useState(false);
+  const [leadInitialData, setLeadInitialData] = useState<Partial<Lead> | null>(null);
+  
+  const [isAddTicketDialogOpen, setIsAddTicketDialogOpen] = useState(false);
+  const [ticketInitialData, setTicketInitialData] = useState<Partial<Ticket> | null>(null);
+
+  const [isLinkEntityDialogOpen, setIsLinkEntityDialogOpen] = useState(false);
+  const [sessionToLink, setSessionToLink] = useState<ChatSession | null>(null);
+
+  const linkedLeadForSelectedSession = selectedSession?.relatedLeadId ? leads.find(l => l.id === selectedSession.relatedLeadId) : null;
+  const linkedTicketForSelectedSession = selectedSession?.relatedTicketId ? tickets.find(t => t.id === selectedSession.relatedTicketId) : null;
+
+
   // Fetch live sessions
   useEffect(() => {
     if (!currentUser || activeTab !== "live") {
-      if (activeTab !== "live") setIsLoadingLiveSessions(false); // Stop loading if tab switched
+      if (activeTab !== "live") setIsLoadingLiveSessions(false);
       return;
     }
     setIsLoadingLiveSessions(true);
@@ -93,9 +122,35 @@ export default function AgentPanelPage() {
     if (activeTab === "history") {
       fetchHistorySessions();
     } else {
-      setHistorySessions([]); // Clear history if not on history tab
+      setHistorySessions([]); 
     }
   }, [activeTab, fetchHistorySessions]);
+
+  // Fetch CRM support data (Leads, Contacts, Users, Tickets)
+   const fetchCRMSData = useCallback(async () => {
+    setIsLoadingSupportData(true);
+    try {
+      const [leadsSnapshot, contactsSnapshot, usersData, ticketsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, "leads"), orderBy("createdAt", "desc"))),
+        getDocs(query(collection(db, "contacts"), orderBy("createdAt", "desc"))),
+        getAllUsers(),
+        getDocs(query(collection(db, "tickets"), orderBy("createdAt", "desc"))),
+      ]);
+      setLeads(leadsSnapshot.docs.map(d => ({id: d.id, ...d.data() } as Lead)));
+      setContacts(contactsSnapshot.docs.map(d => ({id: d.id, ...d.data() } as Contact)));
+      setUsers(usersData);
+      setTickets(ticketsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Ticket)));
+    } catch (error) {
+      console.error("Error fetching CRM data:", error);
+      toast({ title: "Error al cargar datos CRM", variant: "destructive" });
+    } finally {
+      setIsLoadingSupportData(false);
+    }
+  }, [getAllUsers, toast]);
+
+  useEffect(() => {
+    fetchCRMSData();
+  }, [fetchCRMSData]);
 
 
   // Fetch messages for selected session
@@ -131,7 +186,6 @@ export default function AgentPanelPage() {
 
   const handleSelectSession = async (session: ChatSession) => {
     setSelectedSession(session);
-    // If session is pending and current user is an agent, assign it
     if (session.status === 'pending' && currentUser && currentUser.role !== 'user' && activeTab === 'live') { 
       try {
         await updateDoc(doc(db, "chatSessions", session.id), {
@@ -174,14 +228,140 @@ export default function AgentPanelPage() {
         status: "closed",
         lastMessageAt: serverTimestamp()
       });
-      toast({ title: "Chat Cerrado", description: `La conversación con ${selectedSession.visitorName || selectedSession.visitorId} ha sido cerrada.`});
+      toast({ title: "Chat Cerrado", description: `La conversación con ${selectedSession.visitorName || session.visitorId} ha sido cerrada.`});
+      const justClosedSessionId = selectedSession.id;
       setSelectedSession(null);
       setMessages([]);
+      // Move from live to history if on live tab
+      if (activeTab === 'live') {
+        setLiveSessions(prev => prev.filter(s => s.id !== justClosedSessionId));
+        // Optionally, fetch history again or add to history locally if performance is an issue
+        // fetchHistorySessions(); // Or add it to local history state
+      }
+
     } catch (error) {
       console.error("Error closing chat:", error);
       toast({ title: "Error al cerrar chat", variant: "destructive"});
     }
   };
+
+  const handleOpenCreateLeadDialog = (session: ChatSession) => {
+    setLeadInitialData({
+      name: session.visitorName || `Lead desde Chat ${session.visitorId.substring(0,6)}`,
+      details: `Chat iniciado el ${new Date(session.createdAt).toLocaleString()}.\nID Sesión: ${session.id}\nMensaje inicial: ${session.initialMessage || 'N/A'}`,
+      email: session.visitorName && session.visitorName.includes('@') ? session.visitorName : '', // Basic email guess
+      stageId: pipelineStages.find(s => s.name === 'Nuevo Lead')?.id || pipelineStages[0]?.id || '',
+    });
+    setSessionToLink(session); // Store session to link after lead creation
+    setIsAddLeadDialogOpen(true);
+  };
+
+  const handleSaveLeadFromChat = async (leadData: Lead) => {
+    if (!currentUser || !sessionToLink) return;
+    const leadId = leadData.id || doc(collection(db, "leads")).id;
+    try {
+        const leadDocRef = doc(db, "leads", leadId);
+        const firestoreSafeLead = {
+            ...leadData,
+            id: leadId,
+            createdAt: Timestamp.now(), // New lead created now
+            updatedAt: Timestamp.now(),
+            expectedCloseDate: leadData.expectedCloseDate ? Timestamp.fromDate(new Date(leadData.expectedCloseDate)) : null,
+        };
+        await setDoc(leadDocRef, firestoreSafeLead, { merge: true });
+        
+        await updateDoc(doc(db, "chatSessions", sessionToLink.id), {
+          relatedLeadId: leadId,
+          lastMessageAt: serverTimestamp() 
+        });
+
+        toast({ title: "Lead Creado y Vinculado", description: `Lead "${leadData.name}" creado y vinculado al chat.` });
+        fetchCRMSData(); // Refresh leads
+        setSelectedSession(prev => prev ? {...prev, relatedLeadId: leadId} : null); // Update selected session
+    } catch (error) {
+        console.error("Error al guardar lead desde chat:", error);
+        toast({ title: "Error al Guardar Lead", variant: "destructive" });
+    }
+    setIsAddLeadDialogOpen(false);
+    setLeadInitialData(null);
+    setSessionToLink(null);
+  };
+
+  const handleOpenCreateTicketDialog = (session: ChatSession) => {
+    setTicketInitialData({
+        title: `Ticket desde Chat: ${session.visitorName || session.visitorId.substring(0,6)}`,
+        description: `Chat iniciado el ${new Date(session.createdAt).toLocaleString()}.\nID Sesión: ${session.id}\nMensaje inicial del visitante:\n${session.initialMessage || 'El visitante no proveyó un mensaje inicial.'}`,
+        reporterUserId: session.visitorId, // Or a generic "Visitor" user if preferred
+        status: 'Abierto',
+        priority: 'Media',
+        assigneeUserId: currentUser?.id, // Auto-assign to current agent
+    });
+    setSessionToLink(session);
+    setIsAddTicketDialogOpen(true);
+  };
+
+  const handleSaveTicketFromChat = async (ticketData: Ticket) => {
+     if (!currentUser || !sessionToLink) return;
+    const ticketId = ticketData.id || doc(collection(db, "tickets")).id;
+    try {
+        const ticketDocRef = doc(db, "tickets", ticketId);
+        const firestoreSafeTicket = {
+            ...ticketData,
+            id: ticketId,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+            reporterUserId: sessionToLink.visitorId, // Use visitorId or map to a generic "website visitor" user
+        };
+        await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
+        
+        await updateDoc(doc(db, "chatSessions", sessionToLink.id), {
+          relatedTicketId: ticketId,
+          lastMessageAt: serverTimestamp()
+        });
+        toast({ title: "Ticket Creado y Vinculado", description: `Ticket "${ticketData.title}" creado y vinculado al chat.` });
+        fetchCRMSData(); // Refresh tickets
+        setSelectedSession(prev => prev ? {...prev, relatedTicketId: ticketId} : null);
+    } catch (error) {
+        console.error("Error al guardar ticket desde chat:", error);
+        toast({ title: "Error al Guardar Ticket", variant: "destructive" });
+    }
+    setIsAddTicketDialogOpen(false);
+    setTicketInitialData(null);
+    setSessionToLink(null);
+  };
+  
+  const handleOpenLinkEntityDialog = (session: ChatSession) => {
+    setSessionToLink(session);
+    setIsLinkEntityDialogOpen(true);
+  };
+
+  const handleLinkEntityToChat = async (sessionId: string, entityType: 'lead' | 'contact', entityId: string) => {
+    try {
+      const updateData: Partial<ChatSession> = {};
+      if (entityType === 'lead') updateData.relatedLeadId = entityId;
+      if (entityType === 'contact') updateData.relatedContactId = entityId;
+      updateData.lastMessageAt = serverTimestamp() as unknown as string; // Firestore will convert
+
+      await updateDoc(doc(db, "chatSessions", sessionId), updateData);
+      toast({ title: "Chat Vinculado", description: `El chat ha sido vinculado exitosamente.` });
+      
+      // Update local state for selectedSession if it matches
+      if (selectedSession && selectedSession.id === sessionId) {
+        setSelectedSession(prev => prev ? { ...prev, ...updateData } : null);
+      }
+      // Update the session in the liveSessions or historySessions list
+      const updateList = (list: ChatSession[]) => list.map(s => s.id === sessionId ? { ...s, ...updateData } : s);
+      setLiveSessions(updateList);
+      setHistorySessions(updateList);
+
+    } catch (error) {
+      console.error("Error vinculando entidad al chat:", error);
+      toast({ title: "Error al Vincular", variant: "destructive"});
+    }
+    setIsLinkEntityDialogOpen(false);
+    setSessionToLink(null);
+  };
+
 
   const filteredHistorySessions = historySessions.filter(session => 
     (session.visitorName && session.visitorName.toLowerCase().includes(historySearchTerm.toLowerCase())) ||
@@ -239,6 +419,11 @@ export default function AgentPanelPage() {
                   currentAgent={{id: currentUser.id, name: currentUser.name, avatarUrl: currentUser.avatarUrl}}
                   onCloseChat={handleCloseChat}
                   isReadOnly={false}
+                  onOpenCreateLeadDialog={handleOpenCreateLeadDialog}
+                  onOpenCreateTicketDialog={handleOpenCreateTicketDialog}
+                  onOpenLinkEntityDialog={handleOpenLinkEntityDialog}
+                  linkedLead={linkedLeadForSelectedSession}
+                  linkedTicket={linkedTicketForSelectedSession}
                 />
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
@@ -293,6 +478,11 @@ export default function AgentPanelPage() {
                   currentAgent={{id: currentUser.id, name: currentUser.name, avatarUrl: currentUser.avatarUrl}}
                   onCloseChat={() => setSelectedSession(null)} // Special handler for history back button
                   isReadOnly={true}
+                  onOpenCreateLeadDialog={handleOpenCreateLeadDialog} // Still allow for reference
+                  onOpenCreateTicketDialog={handleOpenCreateTicketDialog} // Still allow for reference
+                  onOpenLinkEntityDialog={handleOpenLinkEntityDialog} // Still allow for reference
+                  linkedLead={linkedLeadForSelectedSession}
+                  linkedTicket={linkedTicketForSelectedSession}
                 />
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
@@ -305,6 +495,43 @@ export default function AgentPanelPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+       {/* Dialogs for CRM Integration */}
+      {isAddLeadDialogOpen && selectedSession && (
+        <AddEditLeadDialog
+          trigger={<></>} // Dialog is controlled by isOpen state
+          isOpen={isAddLeadDialogOpen}
+          onOpenChange={setIsAddLeadDialogOpen}
+          stages={pipelineStages}
+          leadToEdit={leadInitialData} // Use initialData to pre-fill
+          onSave={handleSaveLeadFromChat}
+          isSubmitting={isLoadingSupportData} // You might want a more specific submitting state
+        />
+      )}
+
+      {isAddTicketDialogOpen && selectedSession && currentUser && (
+         <AddEditTicketDialog
+            trigger={<></>}
+            isOpen={isAddTicketDialogOpen}
+            onOpenChange={setIsAddTicketDialogOpen}
+            ticketToEdit={ticketInitialData}
+            leads={leads}
+            users={users}
+            onSave={handleSaveTicketFromChat}
+         />
+      )}
+
+      {isLinkEntityDialogOpen && sessionToLink && (
+        <LinkChatToEntityDialog
+            isOpen={isLinkEntityDialogOpen}
+            onOpenChange={setIsLinkEntityDialogOpen}
+            session={sessionToLink}
+            leads={leads}
+            contacts={contacts}
+            onLink={handleLinkEntityToChat}
+        />
+      )}
+
     </div>
   );
 }

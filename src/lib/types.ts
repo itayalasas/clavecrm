@@ -1,4 +1,3 @@
-
 import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
@@ -463,6 +462,9 @@ export interface ChatSession {
   lastMessageAt: string; // ISO string: Timestamp of the last message, for sorting/activity
   initialMessage?: string; // The first message from the visitor
   currentPageUrl?: string; // The URL the visitor was on when they initiated chat
+  relatedLeadId?: string;
+  relatedContactId?: string;
+  relatedTicketId?: string;
   // Other potential fields: browser, OS, IP (handle privacy carefully)
 }
 
@@ -485,3 +487,4 @@ export interface CannedResponse {
   isGlobal?: boolean; // If true, available to all agents
   // category?: string; // Optional: for organizing responses
 }
+

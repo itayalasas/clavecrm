@@ -40,19 +40,19 @@
   // #                                                                                   #
   // #####################################################################################
   const firebaseConfig = {
-    apiKey: "TU_API_KEY_DE_FIREBASE", // <-- REEMPLAZAR CON TU API KEY REAL
-    authDomain: "TU_AUTH_DOMAIN_DE_FIREBASE", // <-- REEMPLAZAR
-    projectId: "TU_PROJECT_ID_DE_FIREBASE", // <-- REEMPLAZAR
-    storageBucket: "TU_STORAGE_BUCKET_DE_FIREBASE", // <-- REEMPLAZAR
-    messagingSenderId: "TU_MESSAGING_SENDER_ID_DE_FIREBASE", // <-- REEMPLAZAR
-    appId: "TU_APP_ID_DE_FIREBASE", // <-- REEMPLAZAR
+    apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE", // <-- REEMPLAZAR CON TU API KEY REAL
+    authDomain: "minicrm-express.firebaseapp.com", // <-- REEMPLAZAR
+    projectId: "minicrm-express", // <-- REEMPLAZAR
+    storageBucket: "minicrm-express.firebasestorage.app", // <-- REEMPLAZAR
+    messagingSenderId: "600153365017", // <-- REEMPLAZAR
+    appId: "1:600153365017:web:7be7b7109ddc0ccab4e888", // <-- REEMPLAZAR
     measurementId: "TU_MEASUREMENT_ID_DE_FIREBASE" // <-- REEMPLAZAR (Opcional)
   };
   // #####################################################################################
   // --- END FIREBASE CONFIG ---
 
   function initializeFirebase() {
-    if (firebaseConfig.apiKey === "TU_API_KEY_DE_FIREBASE" || firebaseConfig.projectId === "TU_PROJECT_ID_DE_FIREBASE") {
+    if (firebaseConfig.apiKey ===  "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE" || firebaseConfig.projectId === "minicrm-express") {
         console.error("CRM Rápido: ERROR CRÍTICO - La configuración de Firebase (firebaseConfig) en live-chat-widget.js no ha sido actualizada. Debes reemplazar los valores de placeholder con tu configuración real de Firebase para que el chat funcione.");
         alert("Error de configuración del chat. Por favor, contacta al administrador del sitio. (FIREBASE_NOT_CONFIGURED)");
         return false;

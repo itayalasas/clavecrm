@@ -38,7 +38,7 @@ import { Card, CardContent, CardDescription as CardDescUi, CardHeader as CardHea
 
 interface AddEditTicketDialogProps {
   trigger: React.ReactNode;
-  ticketToEdit?: Ticket | null;
+  ticketToEdit?: Ticket | Partial<Ticket> | null; // Allow Partial<Ticket> for initialData
   leads: Lead[];
   users: User[];
   onSave: (ticket: Ticket) => Promise<void>; 
@@ -81,7 +81,7 @@ export function AddEditTicketDialog({
 }: AddEditTicketDialogProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
-  const setIsOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalIsOpen;
+  const setIsOpen = controlledOnOpenChange || setInternalIsOpen;
   
   const { currentUser } = useAuth();
   const { toast } = useToast();
@@ -94,29 +94,37 @@ export function AddEditTicketDialog({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentAttachments, setCurrentAttachments] = useState<{ name: string, url: string }[]>([]);
 
-  const isCreatorEditing = ticketToEdit && currentUser?.id === ticketToEdit.reporterUserId;
+  const isCreatorEditing = ticketToEdit && 'reporterUserId' in ticketToEdit && currentUser?.id === ticketToEdit.reporterUserId;
   const isAdminOrSupervisorEditing = ticketToEdit && (currentUser?.role === 'admin' || currentUser?.role === 'supervisor');
 
 
   useEffect(() => {
     if (isOpen) {
-      if (ticketToEdit) {
+      if (ticketToEdit && 'id' in ticketToEdit && ticketToEdit.id) { // Editing existing ticket
         setFormData({
-          title: ticketToEdit.title,
-          description: ticketToEdit.description,
-          status: ticketToEdit.status,
-          priority: ticketToEdit.priority,
+          title: ticketToEdit.title || "",
+          description: ticketToEdit.description || "",
+          status: ticketToEdit.status || 'Abierto',
+          priority: ticketToEdit.priority || 'Media',
           assigneeUserId: ticketToEdit.assigneeUserId || undefined,
           relatedLeadId: ticketToEdit.relatedLeadId || undefined,
           updatedAt: ticketToEdit.updatedAt,
           attachments: ticketToEdit.attachments || [],
-          // Solution fields are not directly edited here but can be displayed
         });
         setCurrentAttachments(ticketToEdit.attachments || []);
-      } else {
+      } else if (ticketToEdit) { // Creating new ticket with initial data (e.g. from chat)
+         setFormData({
+            ...defaultTicketBase,
+            ...ticketToEdit, // Spread initial data
+            assigneeUserId: ticketToEdit.assigneeUserId || currentUser?.id || undefined,
+            attachments: ticketToEdit.attachments || [],
+        });
+        setCurrentAttachments(ticketToEdit.attachments || []);
+      }
+      else { // Creating brand new ticket
         setFormData({
             ...defaultTicketBase,
-            assigneeUserId: currentUser?.id || undefined, // Default assignee to current user for new tickets
+            assigneeUserId: currentUser?.id || undefined, 
             attachments: [],
         });
         setCurrentAttachments([]);
@@ -180,7 +188,8 @@ export function AddEditTicketDialog({
       toast({title: "Error de Validación", description: "El título y la descripción son obligatorios.", variant: "destructive"});
       return;
     }
-    if (!currentUser?.id && !ticketToEdit) {
+    const reporterId = (ticketToEdit && 'reporterUserId' in ticketToEdit && ticketToEdit.reporterUserId) ? ticketToEdit.reporterUserId : currentUser?.id;
+    if (!reporterId) {
         toast({title: "Error de Autenticación", description: "No se pudo identificar al usuario reportador. Intenta recargar la página.", variant: "destructive"});
         return;
     }
@@ -188,11 +197,12 @@ export function AddEditTicketDialog({
     setIsUploading(true); 
 
     let finalAttachments = [...currentAttachments];
-    const ticketId = ticketToEdit ? ticketToEdit.id : generateTicketId();
+    const isEditingExistingTicket = ticketToEdit && 'id' in ticketToEdit && ticketToEdit.id;
+    const ticketIdToUse = isEditingExistingTicket ? ticketToEdit.id : generateTicketId();
 
     if (selectedFile) {
       setUploadProgress(0);
-      const filePath = `ticket-attachments/${currentUser!.id}/${ticketId}/${Date.now()}-${selectedFile.name}`;
+      const filePath = `ticket-attachments/${reporterId}/${ticketIdToUse}/${Date.now()}-${selectedFile.name}`;
       const fileStorageRef = storageRef(storage, filePath);
       const uploadTask = uploadBytesResumable(fileStorageRef, selectedFile);
 
@@ -225,20 +235,20 @@ export function AddEditTicketDialog({
 
     const now = new Date().toISOString();
     const ticketDataToSave: Ticket = {
-      id: ticketId,
+      id: ticketIdToUse!,
       title: formData.title!,
       description: formData.description!,
       status: formData.status || 'Abierto',
       priority: formData.priority || 'Media',
-      createdAt: ticketToEdit ? ticketToEdit.createdAt : now,
+      createdAt: (ticketToEdit && 'createdAt' in ticketToEdit && ticketToEdit.createdAt) ? ticketToEdit.createdAt : now,
       updatedAt: now,
-      reporterUserId: ticketToEdit ? ticketToEdit.reporterUserId : (currentUser!.id),
+      reporterUserId: reporterId!,
       assigneeUserId: formData.assigneeUserId === NO_USER_SELECTED_VALUE ? undefined : formData.assigneeUserId,
       relatedLeadId: formData.relatedLeadId === NO_LEAD_SELECTED_VALUE ? undefined : formData.relatedLeadId,
       attachments: finalAttachments,
-      comments: ticketToEdit ? ticketToEdit.comments : [], 
-      solutionDescription: ticketToEdit ? ticketToEdit.solutionDescription : undefined,
-      solutionAttachments: ticketToEdit ? ticketToEdit.solutionAttachments : [],
+      comments: (ticketToEdit && 'comments' in ticketToEdit && ticketToEdit.comments) ? ticketToEdit.comments : [], 
+      solutionDescription: (ticketToEdit && 'solutionDescription' in ticketToEdit) ? ticketToEdit.solutionDescription : undefined,
+      solutionAttachments: (ticketToEdit && 'solutionAttachments' in ticketToEdit) ? ticketToEdit.solutionAttachments : [],
     };
     
     await onSave(ticketDataToSave);
@@ -259,16 +269,17 @@ export function AddEditTicketDialog({
   }
 
   const sortedUsers = users.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const canEditCoreFields = !ticketToEdit || isCreatorEditing || isAdminOrSupervisorEditing;
+  const canEditCoreFields = !ticketToEdit || !('id' in ticketToEdit) || isCreatorEditing || isAdminOrSupervisorEditing;
+
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild onClick={() => !isOpen && setIsOpen(true)}>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>{ticketToEdit ? "Editar Ticket" : "Abrir Nuevo Ticket"}</DialogTitle>
+          <DialogTitle>{ticketToEdit && 'id' in ticketToEdit ? "Editar Ticket" : "Abrir Nuevo Ticket"}</DialogTitle>
           <DialogDescription>
-            {ticketToEdit ? "Actualiza los detalles de este ticket." : "Completa la información para el nuevo ticket."}
+            {ticketToEdit && 'id' in ticketToEdit ? "Actualiza los detalles de este ticket." : "Completa la información para el nuevo ticket."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -282,7 +293,7 @@ export function AddEditTicketDialog({
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor={`${dialogId}-status`} className="text-right">Estado</Label>
-            <Select name="status" value={formData.status || 'Abierto'} onValueChange={(value) => handleSelectChange('status', value as TicketStatus)} disabled={isUploading || (!canEditCoreFields && ticketToEdit?.status !== 'Abierto' && ticketToEdit?.status !== 'En Progreso') } // Allow assignee to change status via solution section
+            <Select name="status" value={formData.status || 'Abierto'} onValueChange={(value) => handleSelectChange('status', value as TicketStatus)} disabled={isUploading || (!canEditCoreFields && ticketToEdit && 'status' in ticketToEdit && ticketToEdit.status !== 'Abierto' && ticketToEdit.status !== 'En Progreso') }
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Selecciona un estado" />
@@ -438,7 +449,7 @@ export function AddEditTicketDialog({
             </div>
           </div>
 
-          {ticketToEdit && (ticketToEdit.solutionDescription || (ticketToEdit.solutionAttachments && ticketToEdit.solutionAttachments.length > 0)) && (
+          {ticketToEdit && 'id' in ticketToEdit && (ticketToEdit.solutionDescription || (ticketToEdit.solutionAttachments && ticketToEdit.solutionAttachments.length > 0)) && (
              <Card className="col-span-full mt-4 bg-muted/30">
                 <CardHeaderUi className="pb-2">
                     <CardTitleUi className="text-base text-green-700">Información de la Solución</CardTitleUi>
@@ -473,13 +484,13 @@ export function AddEditTicketDialog({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setIsOpen(false)} disabled={isUploading}>Cancelar</Button>
-          <Button type="submit" onClick={handleSubmit} disabled={isUploading || (!canEditCoreFields && !!ticketToEdit) }>
+          <Button type="submit" onClick={handleSubmit} disabled={isUploading || (!canEditCoreFields && !!(ticketToEdit && 'id' in ticketToEdit)) }>
             {isUploading ? (
               <>
                 <UploadCloud className="mr-2 h-4 w-4 animate-pulse" /> 
                 {uploadProgress > 0 && uploadProgress < 100 ? 'Subiendo...' : 'Guardando...'}
               </>
-            ) : (ticketToEdit ? "Guardar Cambios" : "Crear Ticket")}
+            ) : (ticketToEdit && 'id' in ticketToEdit ? "Guardar Cambios" : "Crear Ticket")}
           </Button>
         </DialogFooter>
       </DialogContent>

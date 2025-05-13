@@ -30,13 +30,16 @@ import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { doc, collection } from "firebase/firestore"; // For generating ID
+import { db } from "@/lib/firebase"; // Import db
 
 interface AddEditLeadDialogProps {
   trigger: React.ReactNode;
   stages: PipelineStage[];
-  leadToEdit?: Lead | null;
-  onSave: (lead: Lead) => Promise<void>; // Changed to Promise
+  leadToEdit?: Lead | Partial<Lead> | null; // Allow Partial<Lead> for initialData
+  onSave: (lead: Lead) => Promise<void>; 
   isSubmitting?: boolean;
+  isOpen?: boolean; // For controlled dialog
+  onOpenChange?: (open: boolean) => void; // For controlled dialog
 }
 
 const defaultLeadBase: Omit<Lead, 'id' | 'createdAt'> = {
@@ -52,8 +55,19 @@ const defaultLeadBase: Omit<Lead, 'id' | 'createdAt'> = {
   expectedCloseDate: undefined,
 };
 
-export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave, isSubmitting = false }: AddEditLeadDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function AddEditLeadDialog({ 
+    trigger, 
+    stages, 
+    leadToEdit, 
+    onSave, 
+    isSubmitting = false,
+    isOpen: controlledIsOpen,
+    onOpenChange: controlledOnOpenChange,
+}: AddEditLeadDialogProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const setIsOpen = controlledOnOpenChange || setInternalIsOpen;
+
   const [formData, setFormData] = useState<Omit<Lead, 'id' | 'createdAt'>>(defaultLeadBase);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const { toast } = useToast();
@@ -61,13 +75,13 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave, isSubmi
 
   useEffect(() => {
     if (isOpen) {
-      if (leadToEdit) {
+      if (leadToEdit && 'id' in leadToEdit && leadToEdit.id) { // Editing existing lead
         const initialData = {
-          name: leadToEdit.name,
+          name: leadToEdit.name || "",
           email: leadToEdit.email || "",
           phone: leadToEdit.phone || "",
           company: leadToEdit.company || "",
-          stageId: leadToEdit.stageId,
+          stageId: leadToEdit.stageId || (stages.length > 0 ? stages[0].id : ""),
           details: leadToEdit.details || "",
           value: leadToEdit.value || 0,
           score: leadToEdit.score || 0,
@@ -76,7 +90,14 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave, isSubmi
         };
         setFormData(initialData);
         setSelectedDate(leadToEdit.expectedCloseDate && isValid(parseISO(leadToEdit.expectedCloseDate)) ? parseISO(leadToEdit.expectedCloseDate) : undefined);
-      } else {
+      } else if (leadToEdit) { // Creating new lead with initial data (e.g., from chat)
+        setFormData({
+            ...defaultLeadBase,
+            ...leadToEdit, // Spread initial data
+            stageId: leadToEdit.stageId || (stages.length > 0 ? stages[0].id : ""),
+        });
+        setSelectedDate(leadToEdit.expectedCloseDate && isValid(parseISO(leadToEdit.expectedCloseDate)) ? parseISO(leadToEdit.expectedCloseDate) : undefined);
+      } else { // Creating brand new lead
         setFormData(prev => ({...defaultLeadBase, stageId: stages[0]?.id || ""}));
         setSelectedDate(undefined);
       }
@@ -105,23 +126,28 @@ export function AddEditLeadDialog({ trigger, stages, leadToEdit, onSave, isSubmi
       toast({ title: "Error de Validación", description: "El nombre y la etapa son obligatorios.", variant: "destructive"});
       return;
     }
+    
+    // Ensure id and createdAt are correctly handled for new vs edit
+    const isEditing = leadToEdit && 'id' in leadToEdit && leadToEdit.id;
+    const leadId = isEditing ? leadToEdit.id : doc(collection(db, "leads")).id;
+    const createdAt = isEditing && leadToEdit.createdAt ? leadToEdit.createdAt : new Date().toISOString();
+
     const newLead: Lead = {
       ...formData,
-      id: leadToEdit ? leadToEdit.id : doc(collection(db, "leads")).id, // Generate new ID if not editing
-      createdAt: leadToEdit ? leadToEdit.createdAt : new Date().toISOString(),
+      id: leadId!, 
+      createdAt: createdAt!,
     };
-    await onSave(newLead); // onSave is now async and handles closing the dialog
-    // setIsOpen(false); // Dialog closing is handled by parent or onSave success
+    await onSave(newLead);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSubmitting) setIsOpen(open)}}>
-      <DialogTrigger asChild onClick={() => setIsOpen(true)}>{trigger}</DialogTrigger>
+      <DialogTrigger asChild onClick={() => !isOpen && setIsOpen(true)}>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{leadToEdit ? "Editar Lead" : "Añadir Nuevo Lead"}</DialogTitle>
+          <DialogTitle>{leadToEdit && 'id' in leadToEdit && leadToEdit.id ? "Editar Lead" : "Añadir Nuevo Lead"}</DialogTitle>
           <DialogDescription>
-            {leadToEdit ? "Actualiza los detalles de este lead." : "Completa la información para el nuevo lead."}
+            {leadToEdit && 'id' in leadToEdit && leadToEdit.id ? "Actualiza los detalles de este lead." : "Completa la información para el nuevo lead."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -124,11 +123,11 @@ export default function LiveChatPage() {
           PlusCircle,
           "Conecta las conversaciones de chat con tu CRM.",
           [
-            "Creación de leads desde una conversación de chat.",
-            "Creación de tickets de soporte desde un chat.",
-            "Vinculación de chats a perfiles de clientes existentes.",
+            "Creación de leads desde una conversación de chat (Implementado).",
+            "Creación de tickets de soporte desde un chat (Implementado).",
+            "Vinculación de chats a perfiles de clientes existentes (Implementado).",
           ],
-          "planeado"
+          "implementado" 
         )}
         {renderFeatureCard(
           "Constructor de Chatbot Básico",
@@ -139,7 +138,7 @@ export default function LiveChatPage() {
             "Opciones de ramificación simple.",
             "Captura de información básica (nombre, email).",
           ],
-          "desarrollo" // Status changed
+          "desarrollo" 
         )}
          {renderFeatureCard(
           "Transferencia Bot a Humano",
@@ -150,7 +149,7 @@ export default function LiveChatPage() {
             "Notificar a agentes disponibles sobre la transferencia.",
             "Interfaz para configurar reglas de transferencia.",
           ],
-          "desarrollo" // Status changed
+          "desarrollo" 
         )}
         {renderFeatureCard(
           "Integración con WhatsApp Business API",
@@ -167,4 +166,3 @@ export default function LiveChatPage() {
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { ChatSession, ChatMessage, User } from "@/lib/types";
+import type { ChatSession, ChatMessage, User, Lead, Ticket } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,6 +23,11 @@ interface ChatWindowProps {
   currentAgent: { id: string; name: string; avatarUrl?: string | null } | null;
   onCloseChat: () => void; 
   isReadOnly?: boolean; 
+  onOpenCreateLeadDialog: (session: ChatSession) => void;
+  onOpenCreateTicketDialog: (session: ChatSession) => void;
+  onOpenLinkEntityDialog: (session: ChatSession) => void;
+  linkedLead: Lead | null;
+  linkedTicket: Ticket | null;
 }
 
 export function ChatWindow({
@@ -33,6 +38,11 @@ export function ChatWindow({
   currentAgent,
   onCloseChat,
   isReadOnly = false,
+  onOpenCreateLeadDialog,
+  onOpenCreateTicketDialog,
+  onOpenLinkEntityDialog,
+  linkedLead,
+  linkedTicket,
 }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -56,11 +66,8 @@ export function ChatWindow({
 
   const getSenderName = (senderId: string, senderType: 'visitor' | 'agent') => {
     if (senderType === 'visitor') return session.visitorName || `Visitante ${senderId.substring(0,6)}`;
-    // Try to find agent name if sender is an agent
     if (senderType === 'agent') {
-        // Check if it's the current agent
         if (currentAgent?.id === senderId) return currentAgent.name;
-        // TODO: Fetch agent name from a list of all agents if available, for now just "Agente"
         return "Agente"; 
     }
     return "Desconocido";
@@ -70,7 +77,6 @@ export function ChatWindow({
     if (senderType === 'visitor') return `https://avatar.vercel.sh/${senderId}.png?size=32`;
     if (senderType === 'agent') {
         if (currentAgent?.id === senderId && currentAgent.avatarUrl) return currentAgent.avatarUrl;
-        // Fallback for other agents or current agent without avatarUrl
         return `https://avatar.vercel.sh/${getSenderName(senderId, senderType)}.png?size=32`; 
     }
     return `https://avatar.vercel.sh/unknown.png?size=32`;
@@ -127,7 +133,7 @@ export function ChatWindow({
              <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-6 text-center">
                 <MessageSquareDashed size={40} className="mb-3 text-gray-400" />
                 <p className="text-sm">{isReadOnly ? "No hay mensajes en esta conversación." : "Aún no hay mensajes en este chat."}</p>
-                {!isReadOnly && session.status === 'pending' && <p className="text-xs mt-1">Esperando que un agente se una...</p>}
+                {!isReadOnly && session.status === 'pending' && session.agentId !== currentAgent?.id && <p className="text-xs mt-1">Esperando que un agente se una...</p>}
              </div>
           ) : (
             messages.map((msg) => (
@@ -172,7 +178,14 @@ export function ChatWindow({
         </ScrollArea>
         
         <div className="hidden lg:flex lg:flex-col lg:col-span-1 border-l p-3 space-y-3 bg-background">
-            <VisitorInfo session={session} />
+            <VisitorInfo 
+                session={session} 
+                onOpenCreateLeadDialog={onOpenCreateLeadDialog}
+                onOpenCreateTicketDialog={onOpenCreateTicketDialog}
+                onOpenLinkEntityDialog={onOpenLinkEntityDialog}
+                linkedLead={linkedLead}
+                linkedTicket={linkedTicket}
+            />
             <Separator />
             {!isReadOnly && <CannedResponses onSelectResponse={(text) => setNewMessage(prev => prev + text)} />}
         </div>
