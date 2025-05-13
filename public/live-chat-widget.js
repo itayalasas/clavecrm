@@ -1,5 +1,4 @@
 
-// public/live-chat-widget.js
 (function() {
   if (typeof window.CRMRapidoChatSettings === 'undefined') {
     console.error("CRM Rápido: Configuración del widget de chat no encontrada. Asegúrate de que window.CRMRapidoChatSettings esté definido antes de cargar este script.");
@@ -18,44 +17,30 @@
   let isChatWindowOpen = false;
   let visitorId = null;
   let currentSessionId = null;
-  let db = null; // Firestore instance
-  let unsubscribeMessages = null; // To stop listening to messages when chat closes
+  let db = null;
+  let unsubscribeMessages = null;
 
   // --- START FIREBASE CONFIG ---
-  // #####################################################################################
-  // #                                                                                   #
-  // #  ¡¡¡ACCIÓN REQUERIDA!!! REEMPLAZA ESTO CON TU CONFIGURACIÓN REAL DE FIREBASE:   #
-  // #                                                                                   #
-  // #  Obtén estos valores de la Consola de Firebase:                                   #
-  // #  1. Ve a tu proyecto en https://console.firebase.google.com/                      #
-  // #  2. Haz clic en el ícono de engranaje (Configuración del proyecto) al lado de     #
-  // #     "Descripción general del proyecto".                                           #
-  // #  3. En la pestaña "General", baja hasta la sección "Tus apps".                     #
-  // #  4. Si no tienes una app web, créala.                                             #
-  // #  5. Selecciona tu app web y luego elige la opción "CDN" en "SDK setup and         #
-  // #     configuration".                                                               #
-  // #  6. Copia los valores de 'apiKey', 'authDomain', 'projectId', etc., aquí abajo.   #
-  // #                                                                                   #
-  // #  SI NO ACTUALIZAS ESTOS VALORES, EL CHAT NO FUNCIONARÁ.                           #
-  // #                                                                                   #
-  // #####################################################################################
   const firebaseConfig = {
-    apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE", // <-- REEMPLAZAR CON TU API KEY REAL
-    authDomain: "minicrm-express.firebaseapp.com", // <-- REEMPLAZAR
-    projectId: "minicrm-express", // <-- REEMPLAZAR
-    storageBucket: "minicrm-express.firebasestorage.app", // <-- REEMPLAZAR
-    messagingSenderId: "600153365017", // <-- REEMPLAZAR
-    appId: "1:600153365017:web:7be7b7109ddc0ccab4e888", // <-- REEMPLAZAR
-    measurementId: "TU_MEASUREMENT_ID_DE_FIREBASE" // <-- REEMPLAZAR (Opcional)
+    apiKey:      "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
+    authDomain:  "minicrm-express.firebaseapp.com",
+    projectId:   "minicrm-express",
+    storageBucket:"minicrm-express.firebasestorage.app",
+    messagingSenderId:"600153365017",
+    appId:       "1:600153365017:web:7be7b7109ddc0ccab4e888",
+    measurementId:"G-XXXXXXXXXX"
   };
-  // #####################################################################################
   // --- END FIREBASE CONFIG ---
 
   function initializeFirebase() {
-    if (firebaseConfig.apiKey ===  "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE" || firebaseConfig.projectId === "minicrm-express") {
-        console.error("CRM Rápido: ERROR CRÍTICO - La configuración de Firebase (firebaseConfig) en live-chat-widget.js no ha sido actualizada. Debes reemplazar los valores de placeholder con tu configuración real de Firebase para que el chat funcione.");
-        alert("Error de configuración del chat. Por favor, contacta al administrador del sitio. (FIREBASE_NOT_CONFIGURED)");
-        return false;
+    if (
+      firebaseConfig.apiKey     === "TU_API_KEY_DE_FIREBASE" ||
+      firebaseConfig.authDomain === "TU_AUTH_DOMAIN_DE_FIREBASE" ||
+      firebaseConfig.projectId  === "TU_PROJECT_ID_DE_FIREBASE"
+    ) {
+      console.error("CRM Rápido: ERROR CRÍTICO - Aún faltan placeholders por reemplazar en firebaseConfig.");
+      alert("Error de configuración del chat. Por favor, contacta al administrador del sitio. (FIREBASE_NOT_CONFIGURED)");
+      return false;
     }
 
     if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
@@ -66,63 +51,40 @@
         const firestoreScript = document.createElement('script');
         firestoreScript.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js";
         firestoreScript.onload = () => {
-          console.log("CRM Rápido: Firebase SDK cargado dinámicamente.");
           try {
-            if (!firebase.apps.length) { // Evitar re-inicializar si ya está
-                firebase.initializeApp(firebaseConfig);
-            }
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
             db = firebase.firestore();
-            console.log("CRM Rápido: Firebase inicializado después de carga dinámica.");
-            if (db) {
-                setupWidget();
-            } else {
-                console.error("CRM Rápido: Firestore (db) no se pudo inicializar después de la carga dinámica.");
-                 alert("Error al inicializar la base de datos del chat. Por favor, inténtalo más tarde. (DB_INIT_FAIL_DYNAMIC)");
-            }
+            setupWidget();
           } catch (e) {
-            console.error("CRM Rápido: Error inicializando Firebase tras carga dinámica. Verifica firebaseConfig.", e);
-            alert("Error al inicializar el chat. Por favor, verifica la configuración de Firebase o contacta al soporte del sitio. (INIT_FAIL_DYNAMIC)");
+            console.error("CRM Rápido: Error inicializando Firebase tras carga dinámica.", e);
+            alert("Error al inicializar el chat. (INIT_FAIL_DYNAMIC)");
           }
         };
         document.head.appendChild(firestoreScript);
       };
       document.head.appendChild(firebaseScript);
-      return false; // Initialization will happen asynchronously
+      return false;
     }
-    
+
     try {
-        if (!firebase.apps.length) { // Evitar re-inicializar si ya está
-            firebase.initializeApp(firebaseConfig);
-        }
-        db = firebase.firestore();
-        if (db) {
-            console.log("CRM Rápido: Firebase inicializado exitosamente.");
-            return true;
-        } else {
-            console.error("CRM Rápido: Firestore (db) no se pudo inicializar.");
-            alert("Error al inicializar la base de datos del chat. Por favor, inténtalo más tarde. (DB_INIT_FAIL_STATIC)");
-            return false;
-        }
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      console.log("CRM Rápido: Firebase inicializado exitosamente.");
+      return true;
     } catch (e) {
-        console.error("CRM Rápido: Error al inicializar Firebase. Verifica tu firebaseConfig.", e);
-        alert("Error al inicializar el chat. Por favor, contacta al soporte del sitio. (INIT_FAIL_STATIC)");
-        return false;
+      console.error("CRM Rápido: Error al inicializar Firebase.", e);
+      alert("Error al inicializar el chat. (INIT_FAIL_STATIC)");
+      return false;
     }
   }
 
   function setupWidget() {
-    if (!db) {
-        console.error("CRM Rápido: Firestore (db) no está inicializado. El widget no puede funcionar. Asegúrate de haber reemplazado los placeholders en `firebaseConfig` en `live-chat-widget.js` con tu configuración real de Firebase.");
-        return;
-    }
+    if (!db) return;
     visitorId = getOrSetVisitorId();
-    console.log("CRM Rápido: Visitor ID:", visitorId);
     appendElementsToBody();
   }
-  
-  if (initializeFirebase()) { 
-    setupWidget();
-  }
+
+  if (initializeFirebase()) setupWidget();
 
 
   // --- Create Chat Button ---
@@ -314,66 +276,36 @@
   }
   
   async function getOrCreateChatSession(initialMessageText) {
-    if (!db) { console.error("CRM Rápido: Firestore no inicializado al intentar obtener sesión."); return null; }
+    if (!db) return null;
     if (currentSessionId) {
-        try {
-            const sessionDoc = await db.collection('chatSessions').doc(currentSessionId).get();
-            if (sessionDoc.exists && (sessionDoc.data().status === 'pending' || sessionDoc.data().status === 'active')) {
-                return currentSessionId;
-            }
-        } catch (e) {
-            console.error("CRM Rápido: Error verificando sesión activa existente:", e);
-        }
-        currentSessionId = null; 
-        if(unsubscribeMessages) unsubscribeMessages(); 
-        chatBody.innerHTML = ''; 
-    }
-    
-    const existingSessionsQuery = db.collection('chatSessions')
-        .where('visitorId', '==', visitorId)
-        .where('status', 'in', ['pending', 'active'])
-        .orderBy('createdAt', 'desc')
-        .limit(1);
-
-    try {
-        const querySnapshot = await existingSessionsQuery.get();
-        if (!querySnapshot.empty) {
-            currentSessionId = querySnapshot.docs[0].id;
-            console.log("CRM Rápido: Encontrada sesión existente:", currentSessionId);
-            loadAndListenForMessages(currentSessionId);
-            return currentSessionId;
-        }
-    } catch(error) {
-        console.error("CRM Rápido: Error buscando sesión existente:", error);
-    }
-
-    console.log("CRM Rápido: Creando nueva sesión de chat.");
-    const newSession = {
-      visitorId: visitorId,
-      visitorName: settings.defaultVisitorName || `Visitante ${visitorId.substring(0,4)}`,
-      agentId: null,
-      status: 'pending',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-      initialMessage: initialMessageText || settings.welcomeMessage,
-      currentPageUrl: window.location.href,
-    };
-
-    try {
-      const docRef = await db.collection('chatSessions').add(newSession);
-      currentSessionId = docRef.id;
-      console.log("CRM Rápido: Nueva sesión de chat creada:", currentSessionId);
-      
-      if(settings.welcomeMessage){
-        addMessageToUI(settings.welcomeMessage, 'system');
+      const sessionDoc = await db.collection('chatSessions').doc(currentSessionId).get();
+      if (sessionDoc.exists && (sessionDoc.data().status === 'pending' || sessionDoc.data().status === 'active')) {
+        return currentSessionId;
       }
+      currentSessionId = null;
+      if (unsubscribeMessages) unsubscribeMessages();
+      chatBody.innerHTML = '';
+    }
 
+    const existingSessionsQuery = db.collection('chatSessions')
+      .where('visitorId', '==', visitorId)
+      .where('status', 'in', ['pending', 'active'])
+      .orderBy('createdAt', 'desc')
+      .limit(1);
+
+    const querySnapshot = await existingSessionsQuery.get();
+    if (!querySnapshot.empty) {
+      currentSessionId = querySnapshot.docs[0].id;
       loadAndListenForMessages(currentSessionId);
       return currentSessionId;
-    } catch (error) {
-      console.error("CRM Rápido: Error creando nueva sesión de chat:", error);
-      return null;
     }
+
+    const newSession = { visitorId, visitorName: settings.defaultVisitorName || `Visitante ${visitorId.substring(0,4)}`, agentId: null, status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp(), lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(), initialMessage: initialMessageText || settings.welcomeMessage, currentPageUrl: window.location.href };
+    const docRef = await db.collection('chatSessions').add(newSession);
+    currentSessionId = docRef.id;
+    if (settings.welcomeMessage) addMessageToUI(settings.welcomeMessage, 'system');
+    loadAndListenForMessages(currentSessionId);
+    return currentSessionId;
   }
 
   function addMessageToUI(text, senderType, timestamp) {
@@ -440,45 +372,25 @@
   }
 
   async function handleSendMessage() {
-    if (!db) { console.error("CRM Rápido: Firestore no inicializado al enviar mensaje."); return; }
+    if (!db) return;
     const messageText = chatInput.value.trim();
-    if (messageText === "") return;
+    if (!messageText) return;
 
-    const sessionId = await getOrCreateChatSession(messageText); 
-    if (!sessionId) {
-      console.error("CRM Rápido: No se pudo obtener o crear la sesión de chat.");
-      alert("Error al enviar mensaje. Intenta de nuevo.");
-      return;
+    const sessionId = await getOrCreateChatSession(messageText);
+    if (!sessionId) return;
+
+    const messageData = { sessionId, senderId: visitorId, senderName: settings.defaultVisitorName || `Visitante ${visitorId.substring(0,4)}`, senderType: 'visitor', text: messageText, timestamp: firebase.firestore.FieldValue.serverTimestamp() };
+
+    await db.collection('chatSessions').doc(sessionId).collection('messages').add(messageData);
+
+    const sessionDoc = await db.collection('chatSessions').doc(sessionId).get();
+    if (sessionDoc.exists && !sessionDoc.data().initialMessage && messageText) {
+      await db.collection('chatSessions').doc(sessionId).update({ lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(), initialMessage: messageText });
+    } else {
+      await db.collection('chatSessions').doc(sessionId).update({ lastMessageAt: firebase.firestore.FieldValue.serverTimestamp() });
     }
-    
-    const messageData = {
-      sessionId: sessionId,
-      senderId: visitorId,
-      senderName: settings.defaultVisitorName || `Visitante ${visitorId.substring(0,4)}`,
-      senderType: 'visitor',
-      text: messageText,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    };
 
-    try {
-      await db.collection('chatSessions').doc(sessionId).collection('messages').add(messageData);
-      // Update lastMessageAt on the session for sorting/activity tracking
-      // Also update initialMessage if it's the first message of a newly created session
-      const sessionUpdateData = {
-        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      // Check if this message should also set/update the initialMessage for the session
-      const sessionDoc = await db.collection('chatSessions').doc(sessionId).get();
-      if (sessionDoc.exists() && !sessionDoc.data().initialMessage && messageText) {
-          sessionUpdateData.initialMessage = messageText;
-      }
-      await db.collection('chatSessions').doc(sessionId).update(sessionUpdateData);
-
-      chatInput.value = "";
-    } catch (error) {
-      console.error("CRM Rápido: Error enviando mensaje a Firestore:", error);
-      addMessageToUI("Error al enviar tu mensaje. Intenta de nuevo.", 'system');
-    }
+    chatInput.value = '';
   }
   
   function loadAndListenForMessages(sessionId) {
