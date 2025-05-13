@@ -22,13 +22,25 @@
   let unsubscribeMessages = null; // To stop listening to messages when chat closes
 
   // --- START FIREBASE CONFIG ---
-  // =====================================================================================
-  // IMPORTANTE: ¡REEMPLAZA ESTO CON TU CONFIGURACIÓN REAL DE FIREBASE!
-  // Obtén esto de la Consola de Firebase > Configuración del Proyecto > General > Tus apps.
-  // Selecciona "CDN" para ver los valores de configuración.
-  // =====================================================================================
+  // #####################################################################################
+  // #                                                                                   #
+  // #  ¡¡¡ACCIÓN REQUERIDA!!! REEMPLAZA ESTO CON TU CONFIGURACIÓN REAL DE FIREBASE:   #
+  // #                                                                                   #
+  // #  Obtén estos valores de la Consola de Firebase:                                   #
+  // #  1. Ve a tu proyecto en https://console.firebase.google.com/                      #
+  // #  2. Haz clic en el ícono de engranaje (Configuración del proyecto) al lado de     #
+  // #     "Descripción general del proyecto".                                           #
+  // #  3. En la pestaña "General", baja hasta la sección "Tus apps".                     #
+  // #  4. Si no tienes una app web, créala.                                             #
+  // #  5. Selecciona tu app web y luego elige la opción "CDN" en "SDK setup and         #
+  // #     configuration".                                                               #
+  // #  6. Copia los valores de 'apiKey', 'authDomain', 'projectId', etc., aquí abajo.   #
+  // #                                                                                   #
+  // #  SI NO ACTUALIZAS ESTOS VALORES, EL CHAT NO FUNCIONARÁ.                           #
+  // #                                                                                   #
+  // #####################################################################################
   const firebaseConfig = {
-    apiKey: "TU_API_KEY_DE_FIREBASE", // <-- REEMPLAZAR
+    apiKey: "TU_API_KEY_DE_FIREBASE", // <-- REEMPLAZAR CON TU API KEY REAL
     authDomain: "TU_AUTH_DOMAIN_DE_FIREBASE", // <-- REEMPLAZAR
     projectId: "TU_PROJECT_ID_DE_FIREBASE", // <-- REEMPLAZAR
     storageBucket: "TU_STORAGE_BUCKET_DE_FIREBASE", // <-- REEMPLAZAR
@@ -36,7 +48,7 @@
     appId: "TU_APP_ID_DE_FIREBASE", // <-- REEMPLAZAR
     measurementId: "TU_MEASUREMENT_ID_DE_FIREBASE" // <-- REEMPLAZAR (Opcional)
   };
-  // =====================================================================================
+  // #####################################################################################
   // --- END FIREBASE CONFIG ---
 
   function initializeFirebase() {
@@ -566,3 +578,4 @@
     
 
     
+
