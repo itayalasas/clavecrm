@@ -22,21 +22,30 @@
   let unsubscribeMessages = null; // To stop listening to messages when chat closes
 
   // --- START FIREBASE CONFIG ---
-  // IMPORTANTE: Reemplaza esto con tu objeto de configuración real de Firebase.
-  // Puedes obtenerlo desde la consola de Firebase de tu proyecto:
-  // Configuración del proyecto > General > Tus apps > Configuración de SDK (selecciona CDN).
+  // =====================================================================================
+  // IMPORTANTE: ¡REEMPLAZA ESTO CON TU CONFIGURACIÓN REAL DE FIREBASE!
+  // Obtén esto de la Consola de Firebase > Configuración del Proyecto > General > Tus apps.
+  // Selecciona "CDN" para ver los valores de configuración.
+  // =====================================================================================
   const firebaseConfig = {
-    apiKey: "TU_API_KEY", // REEMPLAZAR
-    authDomain: "TU_AUTH_DOMAIN", // REEMPLAZAR
-    projectId: "TU_PROJECT_ID", // REEMPLAZAR
-    storageBucket: "TU_STORAGE_BUCKET", // REEMPLAZAR
-    messagingSenderId: "TU_MESSAGING_SENDER_ID", // REEMPLAZAR
-    appId: "TU_APP_ID", // REEMPLAZAR
-    measurementId: "TU_MEASUREMENT_ID" // Opcional
+    apiKey: "TU_API_KEY_DE_FIREBASE", // <-- REEMPLAZAR
+    authDomain: "TU_AUTH_DOMAIN_DE_FIREBASE", // <-- REEMPLAZAR
+    projectId: "TU_PROJECT_ID_DE_FIREBASE", // <-- REEMPLAZAR
+    storageBucket: "TU_STORAGE_BUCKET_DE_FIREBASE", // <-- REEMPLAZAR
+    messagingSenderId: "TU_MESSAGING_SENDER_ID_DE_FIREBASE", // <-- REEMPLAZAR
+    appId: "TU_APP_ID_DE_FIREBASE", // <-- REEMPLAZAR
+    measurementId: "TU_MEASUREMENT_ID_DE_FIREBASE" // <-- REEMPLAZAR (Opcional)
   };
+  // =====================================================================================
   // --- END FIREBASE CONFIG ---
 
   function initializeFirebase() {
+    if (firebaseConfig.apiKey === "TU_API_KEY_DE_FIREBASE" || firebaseConfig.projectId === "TU_PROJECT_ID_DE_FIREBASE") {
+        console.error("CRM Rápido: ERROR CRÍTICO - La configuración de Firebase (firebaseConfig) en live-chat-widget.js no ha sido actualizada. Debes reemplazar los valores de placeholder con tu configuración real de Firebase para que el chat funcione.");
+        alert("Error de configuración del chat. Por favor, contacta al administrador del sitio. (FIREBASE_NOT_CONFIGURED)");
+        return false;
+    }
+
     if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
       console.warn("CRM Rápido: Firebase SDK no está cargado. Intentando cargar dinámicamente...");
       const firebaseScript = document.createElement('script');
@@ -47,13 +56,20 @@
         firestoreScript.onload = () => {
           console.log("CRM Rápido: Firebase SDK cargado dinámicamente.");
           try {
-            firebase.initializeApp(firebaseConfig);
+            if (!firebase.apps.length) { // Evitar re-inicializar si ya está
+                firebase.initializeApp(firebaseConfig);
+            }
             db = firebase.firestore();
             console.log("CRM Rápido: Firebase inicializado después de carga dinámica.");
-            setupWidget();
+            if (db) {
+                setupWidget();
+            } else {
+                console.error("CRM Rápido: Firestore (db) no se pudo inicializar después de la carga dinámica.");
+                 alert("Error al inicializar la base de datos del chat. Por favor, inténtalo más tarde. (DB_INIT_FAIL_DYNAMIC)");
+            }
           } catch (e) {
             console.error("CRM Rápido: Error inicializando Firebase tras carga dinámica. Verifica firebaseConfig.", e);
-            alert("Error al inicializar el chat. Por favor, verifica la configuración de Firebase o contacta al soporte del sitio.");
+            alert("Error al inicializar el chat. Por favor, verifica la configuración de Firebase o contacta al soporte del sitio. (INIT_FAIL_DYNAMIC)");
           }
         };
         document.head.appendChild(firestoreScript);
@@ -63,23 +79,28 @@
     }
     
     try {
-        if (!firebase.apps.length) {
+        if (!firebase.apps.length) { // Evitar re-inicializar si ya está
             firebase.initializeApp(firebaseConfig);
         }
         db = firebase.firestore();
-        console.log("CRM Rápido: Firebase inicializado exitosamente.");
-        return true;
+        if (db) {
+            console.log("CRM Rápido: Firebase inicializado exitosamente.");
+            return true;
+        } else {
+            console.error("CRM Rápido: Firestore (db) no se pudo inicializar.");
+            alert("Error al inicializar la base de datos del chat. Por favor, inténtalo más tarde. (DB_INIT_FAIL_STATIC)");
+            return false;
+        }
     } catch (e) {
         console.error("CRM Rápido: Error al inicializar Firebase. Verifica tu firebaseConfig.", e);
-        alert("Error al inicializar el chat. Por favor, contacta al soporte del sitio.");
+        alert("Error al inicializar el chat. Por favor, contacta al soporte del sitio. (INIT_FAIL_STATIC)");
         return false;
     }
   }
 
   function setupWidget() {
     if (!db) {
-        console.error("CRM Rápido: Firestore (db) no está inicializado. El widget no puede funcionar.");
-        // Optionally, display a message to the user inside the widget placeholder or hide it.
+        console.error("CRM Rápido: Firestore (db) no está inicializado. El widget no puede funcionar. Asegúrate de haber reemplazado los placeholders en `firebaseConfig` en `live-chat-widget.js` con tu configuración real de Firebase.");
         return;
     }
     visitorId = getOrSetVisitorId();
@@ -87,9 +108,9 @@
     appendElementsToBody();
   }
   
-  if (initializeFirebase()) { // If Firebase SDK was already present and initialized successfully
+  if (initializeFirebase()) { 
     setupWidget();
-  } // If not, setupWidget will be called by the dynamic loader's callback
+  }
 
 
   // --- Create Chat Button ---
@@ -193,10 +214,6 @@
   chatBody.style.overflowY = 'auto';
   chatBody.style.backgroundColor = '#f9f9f9';
   
-  // Welcome Message will be the first system message in Firestore if we adopt that pattern
-  // For now, it's static in the UI or replaced by fetched messages.
-  // Let's clear the initial static welcome message if messages will be fetched.
-  // chatBody.appendChild(welcomeMessageP); // This line can be removed if messages are always fetched
   chatWindow.appendChild(chatBody);
 
 
@@ -287,13 +304,17 @@
   async function getOrCreateChatSession(initialMessageText) {
     if (!db) { console.error("CRM Rápido: Firestore no inicializado al intentar obtener sesión."); return null; }
     if (currentSessionId) {
-        const sessionDoc = await db.collection('chatSessions').doc(currentSessionId).get();
-        if (sessionDoc.exists && (sessionDoc.data().status === 'pending' || sessionDoc.data().status === 'active')) {
-            return currentSessionId;
+        try {
+            const sessionDoc = await db.collection('chatSessions').doc(currentSessionId).get();
+            if (sessionDoc.exists && (sessionDoc.data().status === 'pending' || sessionDoc.data().status === 'active')) {
+                return currentSessionId;
+            }
+        } catch (e) {
+            console.error("CRM Rápido: Error verificando sesión activa existente:", e);
         }
         currentSessionId = null; 
-        if(unsubscribeMessages) unsubscribeMessages(); // Stop listening to old session
-        chatBody.innerHTML = ''; // Clear chat body for new/re-established session
+        if(unsubscribeMessages) unsubscribeMessages(); 
+        chatBody.innerHTML = ''; 
     }
     
     const existingSessionsQuery = db.collection('chatSessions')
@@ -331,10 +352,7 @@
       currentSessionId = docRef.id;
       console.log("CRM Rápido: Nueva sesión de chat creada:", currentSessionId);
       
-      // Add the welcome message as the first system message if not already handled by initialMessage
-      if(settings.welcomeMessage && initialMessageText !== settings.welcomeMessage){
-        addMessageToUI(settings.welcomeMessage, 'system');
-      } else if (settings.welcomeMessage) {
+      if(settings.welcomeMessage){
         addMessageToUI(settings.welcomeMessage, 'system');
       }
 
@@ -366,7 +384,7 @@
     if (timestamp) {
         try {
             let dateObj = timestamp;
-            if(timestamp.toDate) { // Firestore Timestamp object
+            if(timestamp.toDate) { 
                 dateObj = timestamp.toDate();
             } else if (typeof timestamp === 'string') {
                 dateObj = new Date(timestamp);
@@ -400,7 +418,7 @@
       messageP.style.fontSize = '12px';
       messageP.style.borderRadius = '0';
       messageP.style.textAlign = 'center';
-      timeP.style.display = 'none'; // No timestamp for system messages usually
+      timeP.style.display = 'none'; 
     }
     
     messageP.appendChild(timeP);
@@ -414,16 +432,13 @@
     const messageText = chatInput.value.trim();
     if (messageText === "") return;
 
-    const sessionId = await getOrCreateChatSession(messageText); // Ensures session exists
+    const sessionId = await getOrCreateChatSession(messageText); 
     if (!sessionId) {
       console.error("CRM Rápido: No se pudo obtener o crear la sesión de chat.");
       alert("Error al enviar mensaje. Intenta de nuevo.");
       return;
     }
     
-    // Don't add visitor message to UI immediately if relying solely on Firestore listener
-    // addMessageToUI(messageText, 'visitor', new Date()); 
-
     const messageData = {
       sessionId: sessionId,
       senderId: visitorId,
@@ -435,10 +450,18 @@
 
     try {
       await db.collection('chatSessions').doc(sessionId).collection('messages').add(messageData);
-      await db.collection('chatSessions').doc(sessionId).update({
-        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-        ...(currentSessionId && db.collection('chatSessions').doc(currentSessionId).get().then(doc => !doc.data().initialMessage) ? {initialMessage: messageText} : {}) 
-      });
+      // Update lastMessageAt on the session for sorting/activity tracking
+      // Also update initialMessage if it's the first message of a newly created session
+      const sessionUpdateData = {
+        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      // Check if this message should also set/update the initialMessage for the session
+      const sessionDoc = await db.collection('chatSessions').doc(sessionId).get();
+      if (sessionDoc.exists() && !sessionDoc.data().initialMessage && messageText) {
+          sessionUpdateData.initialMessage = messageText;
+      }
+      await db.collection('chatSessions').doc(sessionId).update(sessionUpdateData);
+
       chatInput.value = "";
     } catch (error) {
       console.error("CRM Rápido: Error enviando mensaje a Firestore:", error);
@@ -452,54 +475,29 @@
     }
     if (!db) { console.error("CRM Rápido: Firestore no inicializado para escuchar mensajes."); return; }
     
-    chatBody.innerHTML = ''; // Clear previous messages
-    if (settings.welcomeMessage && sessionId === currentSessionId) { // Show welcome only if it's truly a new session UI-wise
+    chatBody.innerHTML = ''; 
+    if (settings.welcomeMessage && sessionId === currentSessionId) { 
         addMessageToUI(settings.welcomeMessage, 'system');
     }
 
 
-    // Initial load of messages
-    db.collection('chatSessions').doc(sessionId).collection('messages')
-      .orderBy('timestamp', 'asc')
-      .get()
-      .then(snapshot => {
-        snapshot.forEach(doc => {
-          const messageData = doc.data();
-          addMessageToUI(messageData.text, messageData.senderType, messageData.timestamp);
-        });
-        // After initial load, start listening for new messages
-        unsubscribeMessages = db.collection('chatSessions').doc(sessionId).collection('messages')
-          .orderBy('timestamp', 'asc')
-          .where('timestamp', '>', firebase.firestore.Timestamp.now()) // Listen for messages newer than now
-          .onSnapshot(snapshot => {
-            snapshot.docChanges().forEach(change => {
-              if (change.type === 'added') {
+    const messagesQuery = db.collection('chatSessions').doc(sessionId).collection('messages')
+      .orderBy('timestamp', 'asc');
+    
+    unsubscribeMessages = messagesQuery.onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
                 const messageData = change.doc.data();
-                 // Avoid re-adding the visitor's own messages if they were added optimistically
-                 // Check based on sender and a small time window or a unique local ID if implemented
-                if (!(messageData.senderType === 'visitor' && messageData.senderId === visitorId)) {
+                // To avoid re-adding a visitor's own just-sent message (if also handled optimistically)
+                // This check can be improved with a local message ID or more robust diffing
+                if (messageData.senderType !== 'visitor' || change.doc.metadata.hasPendingWrites === false) {
                     addMessageToUI(messageData.text, messageData.senderType, messageData.timestamp);
-                } else {
-                    // If it's the visitor's own message that was not added optimistically, add it now.
-                    // This is a simplified check. Ideally, use message IDs.
-                    const existingMessages = Array.from(chatBody.querySelectorAll('p'));
-                    const alreadyDisplayed = existingMessages.some(p => 
-                        p.textContent.startsWith(messageData.text) && 
-                        (p.parentElement.style.justifyContent === 'flex-end')
-                    );
-                    if (!alreadyDisplayed) {
-                         addMessageToUI(messageData.text, messageData.senderType, messageData.timestamp);
-                    }
                 }
-              }
-            });
-          }, error => {
-            console.error("CRM Rápido: Error escuchando mensajes:", error);
-          });
-      })
-      .catch(error => {
-        console.error("CRM Rápido: Error cargando mensajes iniciales:", error);
-      });
+            }
+        });
+    }, error => {
+        console.error("CRM Rápido: Error escuchando mensajes:", error);
+    });
   }
 
   function toggleChatWindow() {
@@ -516,14 +514,14 @@
       
       if (!db) {
           console.warn("CRM Rápido: Firestore no está listo al abrir ventana. Intentando inicializar...");
-          if (initializeFirebase()) setupWidget(); // Try to init again
-          if (!db) { // If still not initialized after attempt
+          if (initializeFirebase()) setupWidget(); 
+          if (!db) { 
               addMessageToUI("El servicio de chat no está disponible en este momento. Por favor, inténtalo más tarde.", 'system');
               return;
           }
       }
 
-      getOrCreateChatSession(null).then(sessionId => { // Pass null for initialMessage here as it's handled by the function
+      getOrCreateChatSession(null).then(sessionId => {
           if (sessionId) {
             // Messages for new or existing session will be loaded by loadAndListenForMessages
           } else {
