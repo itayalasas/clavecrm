@@ -9,7 +9,7 @@ import { AddEditTicketDialog } from "@/components/tickets/add-edit-ticket-dialog
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList } from "lucide-react"; 
+import { PlusCircle, Search, Filter, ShieldCheck, Clock, Zap as ZapIcon, AlertTriangle, ClipboardList } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -17,22 +17,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion, onSnapshot } from "firebase/firestore";
 import { ref as storageRef, deleteObject } from "firebase/storage";
-import { format, parseISO, startOfMonth } from "date-fns"; 
+import { format, parseISO, startOfMonth } from "date-fns";
 import { es } from 'date-fns/locale';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useSearchParams, useRouter } from "next/navigation"; // Added useSearchParams and useRouter
+import { useSearchParams, useRouter } from "next/navigation";
 
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]); 
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  
+
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
-  const [isLoadingLeads, setIsLoadingLeads] = useState(true); 
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true);
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -45,25 +45,25 @@ export default function TicketsPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | TicketStatus>("Todos");
   const [filterPriority, setFilterPriority] = useState<"Todas" | TicketPriority>("Todas");
   const [filterAssignee, setFilterAssignee] = useState<"Todos" | string>("Todos");
-  const [ticketToOpen, setTicketToOpen] = useState<string | null>(null); // For opening a specific ticket
+  const [ticketToOpen, setTicketToOpen] = useState<string | null>(null); 
 
   const { toast } = useToast();
-  const { getAllUsers, currentUser, loading: authLoading } = useAuth(); 
+  const { getAllUsers, currentUser, loading: authLoading } = useAuth();
   const ticketsNavItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/tickets');
   const PageIcon = ticketsNavItem?.icon || ClipboardList;
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const fetchTickets = useCallback(async () => {
-    if (!currentUser) { 
+    if (!currentUser) {
       setIsLoadingTickets(false);
-      return;
+      return undefined; // Return undefined if no user
     }
     setIsLoadingTickets(true);
     try {
       const ticketsCollectionRef = collection(db, "tickets");
       const q = query(ticketsCollectionRef, orderBy("createdAt", "desc"));
-      
+
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const fetchedTickets = querySnapshot.docs.map(docSnap => {
           const data = docSnap.data();
@@ -79,23 +79,13 @@ export default function TicketsPage() {
             assigneeUserId: data.assigneeUserId || undefined,
             relatedLeadId: data.relatedLeadId || undefined,
             attachments: data.attachments || [],
+            comments: data.comments || [],
             solutionDescription: data.solutionDescription || undefined,
             solutionAttachments: data.solutionAttachments || [],
           } as Ticket;
         });
         setTickets(fetchedTickets);
         setIsLoadingTickets(false);
-
-        // Check for ticketId in query params after tickets are fetched
-        const ticketIdFromQuery = searchParams.get('ticketId');
-        if (ticketIdFromQuery) {
-          const exists = fetchedTickets.some(t => t.id === ticketIdFromQuery);
-          if (exists) {
-            setTicketToOpen(ticketIdFromQuery);
-            // Optional: remove query param after use
-            // router.replace('/tickets', { scroll: false }); 
-          }
-        }
 
       }, (error) => {
         console.error("Error al obtener tickets en tiempo real:", error);
@@ -106,10 +96,10 @@ export default function TicketsPage() {
         });
         setIsLoadingTickets(false);
       });
-      
-      return () => unsubscribe(); 
 
-    } catch (error) { 
+      return unsubscribe; // Return the unsubscribe function
+
+    } catch (error) {
       console.error("Error al configurar la escucha de tickets:", error);
       toast({
         title: "Error al Configurar Tickets",
@@ -117,8 +107,9 @@ export default function TicketsPage() {
         variant: "destructive",
       });
       setIsLoadingTickets(false);
+      return undefined; // Return undefined on error
     }
-  }, [currentUser, toast, searchParams, router]);
+  }, [currentUser, toast]);
 
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
@@ -137,10 +128,10 @@ export default function TicketsPage() {
     }
   }, [getAllUsers, toast]);
 
-  const fetchLeads = useCallback(async () => { 
+  const fetchLeads = useCallback(async () => {
     setIsLoadingLeads(true);
     try {
-      const leadsCollectionRef = collection(db, "leads"); 
+      const leadsCollectionRef = collection(db, "leads");
       const querySnapshot = await getDocs(leadsCollectionRef);
       const fetchedLeads = querySnapshot.docs.map(docSnap => ({
         id: docSnap.id,
@@ -163,20 +154,38 @@ export default function TicketsPage() {
     let unsubscribeTickets: (() => void) | undefined;
     if (!authLoading) {
         fetchUsers();
-        fetchLeads(); 
+        fetchLeads();
         if (currentUser) {
-          fetchTickets().then(unsub => { unsubscribeTickets = unsub });
+          fetchTickets().then(unsub => {
+            if (typeof unsub === 'function') { // Ensure unsub is a function before assigning
+                unsubscribeTickets = unsub;
+            }
+          });
         } else {
           setTickets([]);
           setIsLoadingTickets(false);
         }
     }
-    return () => { 
+    return () => {
       if (unsubscribeTickets) {
         unsubscribeTickets();
       }
     };
   }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTickets]);
+
+  useEffect(() => {
+    const ticketIdFromQuery = searchParams.get('ticketId');
+    if (ticketIdFromQuery && tickets.length > 0) { 
+        const exists = tickets.some(t => t.id === ticketIdFromQuery);
+        if (exists) {
+            setTicketToOpen(ticketIdFromQuery);
+            // Optional: remove query param after use
+            // router.replace('/tickets', { scroll: false }); 
+        } else {
+            setTicketToOpen(null);
+        }
+    }
+}, [searchParams, tickets, router]);
 
 
   const handleSaveTicket = async (ticketData: Ticket) => {
@@ -186,29 +195,30 @@ export default function TicketsPage() {
     }
     setIsSubmittingTicket(true);
     const isEditing = tickets.some(t => t.id === ticketData.id);
-    
+
     const ticketToSave: Ticket = {
       ...ticketData,
       solutionDescription: ticketData.solutionDescription || "",
       solutionAttachments: ticketData.solutionAttachments || [],
-      updatedAt: new Date().toISOString(), 
+      updatedAt: new Date().toISOString(),
     };
-    
+
     try {
       const ticketDocRef = doc(db, "tickets", ticketToSave.id);
-      const { ...ticketDataForFirestore } = ticketToSave; 
-      
+      const { ...ticketDataForFirestore } = ticketToSave;
+
       const firestoreSafeTicket = {
         ...ticketDataForFirestore,
         createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
         updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
-        assigneeUserId: ticketToSave.assigneeUserId || null, 
-        relatedLeadId: ticketToSave.relatedLeadId || null, 
+        assigneeUserId: ticketToSave.assigneeUserId || null,
+        relatedLeadId: ticketToSave.relatedLeadId || null,
         solutionDescription: ticketToSave.solutionDescription || "",
         solutionAttachments: ticketToSave.solutionAttachments || [],
+        comments: ticketToSave.comments || [],
       };
-      
-      await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true }); 
+
+      await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
 
       toast({
         title: isEditing ? "Ticket Actualizado" : "Ticket Creado",
@@ -237,8 +247,8 @@ export default function TicketsPage() {
     if (!ticketToDelete) return;
     const ticketId = ticketToDelete.id;
     const ticketTitle = ticketToDelete.title;
-    
-    setIsDeleteDialogOpen(false); 
+
+    setIsDeleteDialogOpen(false);
 
     try {
       if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
@@ -255,16 +265,16 @@ export default function TicketsPage() {
           } catch (e) { console.warn("Falló al eliminar adjunto de la solución", attachment.url, e); }
         }
       }
-      
+
       const commentsColRef = collection(db, "tickets", ticketId, "comments");
       const commentsSnapshot = await getDocs(commentsColRef);
       const batch = writeBatch(db);
-      
+
       for (const commentDoc of commentsSnapshot.docs) {
           const commentData = commentDoc.data() as Comment;
           if (commentData.attachments) {
               for (const att of commentData.attachments) {
-                  try { 
+                  try {
                     const commentAttRef = storageRef(storage, att.url);
                     await deleteObject(commentAttRef);
                   } catch (e) {console.warn("Error al eliminar adjunto del comentario", att.url, e)}
@@ -276,7 +286,7 @@ export default function TicketsPage() {
 
       const ticketDocRef = doc(db, "tickets", ticketId);
       await deleteDoc(ticketDocRef);
-      
+
       toast({
         title: "Ticket Eliminado",
         description: `El ticket "${ticketTitle}" ha sido eliminado exitosamente.`,
@@ -299,23 +309,25 @@ export default function TicketsPage() {
       toast({title: "Error", description: "Debes iniciar sesión para comentar.", variant: "destructive"});
       return;
     }
-    
-    const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = { 
+
+    const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = {
       userId: currentUser.id,
       userName: currentUser.name || "Usuario Anónimo",
       userAvatarUrl: currentUser.avatarUrl || null,
       text: commentText,
-      createdAt: Timestamp.now(), 
+      createdAt: Timestamp.now(),
       attachments: commentAttachments,
     };
 
     try {
-      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments")); 
+      const commentDocRef = doc(collection(db, "tickets", ticketId, "comments"));
       await setDoc(commentDocRef, newComment);
-      
+
       const ticketDocRef = doc(db, "tickets", ticketId);
       await updateDoc(ticketDocRef, {
         updatedAt: Timestamp.now(),
+        // Optionally, update status if comment implies progress
+        // status: 'En Progreso' // Example
       });
 
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
@@ -326,10 +338,10 @@ export default function TicketsPage() {
   };
 
   const handleUpdateTicketSolution = async (
-    ticketId: string, 
-    solutionDescription: string, 
-    solutionAttachments: { name: string; url: string }[],
-    status: TicketStatus
+    ticketId: string,
+    solutionDescriptionParam: string,
+    solutionAttachmentsParam: { name: string; url: string }[],
+    statusParam: TicketStatus
   ) => {
     if (!currentUser) {
         toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
@@ -347,15 +359,15 @@ export default function TicketsPage() {
     }
 
     const updatedTicketData = {
-        solutionDescription,
-        solutionAttachments,
-        status,
+        solutionDescription: solutionDescriptionParam,
+        solutionAttachments: solutionAttachmentsParam,
+        status: statusParam,
         updatedAt: Timestamp.now(),
     };
 
     try {
         const ticketDocRef = doc(db, "tickets", ticketId);
-        await updateDoc(ticketDocRef, updatedTicketData);
+        await updateDoc(ticketDocRef, updatedTicketData as any); 
         toast({title: "Solución Actualizada", description: `La solución para el ticket "${ticketToUpdate.title}" ha sido guardada.`});
     } catch (error) {
         console.error("Error al actualizar la solución del ticket:", error);
@@ -377,10 +389,10 @@ export default function TicketsPage() {
   const filteredTickets = useMemo(() => {
     if (!currentUser) return [];
 
-    return tickets 
+    return tickets
       .filter(ticket => {
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
-          return true; 
+          return true;
         }
         return ticket.reporterUserId === currentUser.id || ticket.assigneeUserId === currentUser.id;
       })
@@ -397,10 +409,10 @@ export default function TicketsPage() {
         if (filterAssignee === "unassigned") return !ticket.assigneeUserId;
         return ticket.assigneeUserId === filterAssignee;
       });
-  }, [tickets, filterStatus, filterPriority, filterAssignee, currentUser]); 
+  }, [tickets, filterStatus, filterPriority, filterAssignee, currentUser]);
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
-  
+
   const isLoading = authLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads;
 
   return (
@@ -454,7 +466,7 @@ export default function TicketsPage() {
                 {TICKET_PRIORITIES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
               </SelectContent>
             </Select>
-            {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && ( 
+            {(currentUser?.role === 'admin' || currentUser?.role === 'supervisor') && (
                 <Select value={filterAssignee} onValueChange={(value: string | "Todos") => setFilterAssignee(value)} disabled={isLoadingUsers || isLoading}>
                 <SelectTrigger className="w-full">
                     <Filter className="h-4 w-4 mr-2" />
@@ -478,21 +490,21 @@ export default function TicketsPage() {
             </TabsList>
           </Tabs>
 
-          {isLoading && tickets.length === 0 ? ( 
+          {isLoading && tickets.length === 0 ? (
             <div className="space-y-4 mt-4">
               <Skeleton className="h-24 w-full" />
               <Skeleton className="h-24 w-full" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : filteredTickets.filter(ticket => 
+          ) : filteredTickets.filter(ticket =>
                 ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (ticket.description && ticket.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
             ).length > 0 ? (
             <div className="space-y-4 mt-4">
-              {filteredTickets.filter(ticket => 
+              {filteredTickets.filter(ticket =>
                 ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (ticket.description && ticket.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 ticket.id.toLowerCase().includes(searchTerm.toLowerCase())
               ).map(ticket => (
                 <TicketItem
@@ -505,7 +517,7 @@ export default function TicketsPage() {
                   onDelete={() => confirmDeleteTicket(ticket)}
                   onAddComment={handleAddComment}
                   onUpdateTicketSolution={handleUpdateTicketSolution}
-                  defaultOpen={ticket.id === ticketToOpen} // Pass prop to open accordion
+                  defaultOpen={ticket.id === ticketToOpen} 
                 />
               ))}
             </div>
@@ -554,7 +566,7 @@ export default function TicketsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer. Esto eliminará permanentemente el ticket &quot;{ticketToDelete.title}&quot; 
+                Esta acción no se puede deshacer. Esto eliminará permanentemente el ticket &quot;{ticketToDelete.title}&quot;
                 y todos sus datos asociados (comentarios, adjuntos).
               </AlertDialogDescription>
             </AlertDialogHeader>
