@@ -1,21 +1,18 @@
-// public/live-chat-widget.js
 (function() {
-  // Verificar configuración
   if (typeof window.CRMRapidoChatSettings === 'undefined') return;
   const settings = window.CRMRapidoChatSettings;
   if (!settings.widgetEnabled) return;
 
-  // Variables globales
   let visitorId = null;
   let currentSessionId = null;
   let db = null;
   let unsubscribeMessages = null;
 
-  // Agente asignado por defecto
   let assignedAgent = {
     name: settings.agentName || "Asistente Virtual",
     avatar: settings.agentAvatarUrl || "https://cdn-icons-png.flaticon.com/512/4712/4712027.png"
   };
+
   const firebaseConfig = {
     apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
     authDomain: "minicrm-express.firebaseapp.com",
@@ -25,9 +22,7 @@
     appId: "1:600153365017:web:7be7b7109ddc0ccab4e888",
     measurementId: "G-XXXXXXXXXX"
   };
-  // Configuración de Firebase
 
-  // Inicializar Firebase y Firestore
   function initializeFirebase() {
     if (typeof firebase === 'undefined') {
       const s1 = document.createElement('script');
@@ -50,16 +45,13 @@
     return true;
   }
 
-  // Configurar widget: generar IDs, botón y estructura
   function setupWidget() {
     visitorId = getOrSetVisitorId();
     createChatWindow();
     appendToggleButton();
   }
 
-  // Crear ventana de chat (oculta inicialmente)
   function createChatWindow() {
-    // Contenedor
     const chatWindow = document.createElement('div');
     chatWindow.id = 'crm-rapido-chat-window';
     Object.assign(chatWindow.style, {
@@ -72,7 +64,6 @@
       opacity: '0', transform: 'translateY(20px)', transition: 'opacity 0.3s, transform 0.3s'
     });
 
-    // Header
     const header = document.createElement('div');
     Object.assign(header.style, { display: 'flex', alignItems: 'center', padding: '12px', backgroundColor: settings.primaryColor, color: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' });
     const avatar = document.createElement('img');
@@ -95,12 +86,10 @@
     closeBtn.onclick = toggleChatWindow;
     header.appendChild(closeBtn);
 
-    // Body
     const chatBody = document.createElement('div');
     chatBody.id = 'crm-rapido-chat-body';
     Object.assign(chatBody.style, { flexGrow: '1', padding: '10px', overflowY: 'auto', backgroundColor: '#f9f9f9' });
 
-    // Input
     const inputContainer = document.createElement('div');
     Object.assign(inputContainer.style, { padding: '10px', borderTop: '1px solid #ddd', display: 'flex', alignItems: 'center', backgroundColor: '#fff' });
     const chatInput = document.createElement('input');
@@ -120,13 +109,11 @@
     chatWindow.appendChild(inputContainer);
     document.body.appendChild(chatWindow);
 
-    // Opcional: mensajes de bienvenida
     if (settings.welcomeMessage) {
       setTimeout(() => addSystemMessage(settings.welcomeMessage), 500);
     }
   }
 
-  // Botón flotante para abrir el chat
   function appendToggleButton() {
     const btn = document.createElement('button');
     btn.id = 'crm-rapido-chat-toggle';
@@ -136,7 +123,6 @@
     document.body.appendChild(btn);
   }
 
-  // Alternar visibilidad de la ventana
   function toggleChatWindow() {
     const chat = document.getElementById('crm-rapido-chat-window');
     if (!chat) return;
@@ -146,7 +132,6 @@
     chat.style.transform = open ? 'translateY(0)' : 'translateY(20px)';
   }
 
-  // Enviar mensaje de sistema (sin remitente)
   function addSystemMessage(text) {
     const body = document.getElementById('crm-rapido-chat-body');
     const div = document.createElement('div');
@@ -159,20 +144,20 @@
     body.scrollTop = body.scrollHeight;
   }
 
-  // Enviar mensaje y guardar en Firestore
   async function handleSendMessage() {
     const input = document.getElementById('crm-rapido-chat-input');
     const text = input.value.trim();
     if (!text || !db) return;
     input.value = '';
-
-    const sessionId = await getOrCreateChatSession();
+    const sessionId = await getOrCreateChatSession(text);
     await db.collection('chatSessions').doc(sessionId).collection('messages').add({
       senderType: 'visitor',
       text,
       timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
-
+    await db.collection('chatSessions').doc(sessionId).update({
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
     addVisitorMessage(text);
   }
 
@@ -193,8 +178,7 @@
     body.scrollTop = body.scrollHeight;
   }
 
-  // Sesión Firestore: obtener o crear
-  async function getOrCreateChatSession() {
+  async function getOrCreateChatSession(initialText) {
     if (currentSessionId) return currentSessionId;
     const q = await db.collection('chatSessions')
       .where('visitorId','==',visitorId)
@@ -205,12 +189,19 @@
       currentSessionId = q.docs[0].id;
       return currentSessionId;
     }
-    const doc = await db.collection('chatSessions').add({ visitorId, status:'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    const doc = await db.collection('chatSessions').add({
+      visitorId,
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      initialMessage: initialText,
+      currentPageUrl: window.location.href,
+      visitorName: localStorage.getItem('crmRapidoVisitorName') || settings.defaultVisitorName || ("Visitante " + visitorId.substring(0, 4))
+    });
     currentSessionId = doc.id;
     return currentSessionId;
   }
 
-  // UUID visitante
   function getOrSetVisitorId() {
     let id = localStorage.getItem('crmRapidoVisitorId');
     if (!id) {
@@ -220,7 +211,6 @@
     return id;
   }
 
-  // Ejecutar
   if (initializeFirebase()) {
     setupWidget();
   }

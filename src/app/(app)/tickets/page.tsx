@@ -17,12 +17,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch, arrayUnion, onSnapshot } from "firebase/firestore";
 import { ref as storageRef, deleteObject } from "firebase/storage";
-import { format, parseISO, startOfMonth } from "date-fns";
+import { format, parseISO, startOfMonth, isValid as isValidDate } from "date-fns";
 import { es } from 'date-fns/locale';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useSearchParams, useRouter } from "next/navigation";
+
+
+// Helper function to safely parse date fields from Firestore
+const parseFirestoreDate = (fieldValue: any): string | undefined => {
+  if (!fieldValue) return undefined;
+  if (fieldValue instanceof Timestamp) {
+    return fieldValue.toDate().toISOString();
+  }
+  if (typeof fieldValue === 'string') {
+    const parsed = parseISO(fieldValue);
+    if (isValidDate(parsed)) {
+      return parsed.toISOString();
+    }
+  }
+  // Log unexpected format but don't crash
+  console.warn("Unexpected date format received from Firestore:", fieldValue);
+  return undefined;
+};
 
 
 export default function TicketsPage() {
@@ -61,7 +79,7 @@ export default function TicketsPage() {
   const fetchTickets = useCallback(async () => {
     if (!currentUser) {
       setIsLoadingTickets(false);
-      return undefined; 
+      return undefined;
     }
     setIsLoadingTickets(true);
     try {
@@ -77,21 +95,21 @@ export default function TicketsPage() {
             description: data.description,
             status: data.status,
             priority: data.priority,
-            createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-            updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+            createdAt: parseFirestoreDate(data.createdAt) || new Date(0).toISOString(), // Fallback for createdAt
+            updatedAt: parseFirestoreDate(data.updatedAt),
             reporterUserId: data.reporterUserId,
             assigneeUserId: data.assigneeUserId || undefined,
             relatedLeadId: data.relatedLeadId || undefined,
             attachments: data.attachments || [],
-            comments: data.comments || [], // Firestore subcollections need separate fetching if not embedded
+            comments: data.comments || [], 
             solutionDescription: data.solutionDescription || undefined,
             solutionAttachments: data.solutionAttachments || [],
             slaId: data.slaId || undefined,
             queueId: data.queueId || undefined,
-            resolvedAt: (data.resolvedAt as Timestamp)?.toDate().toISOString() || undefined,
-            closedAt: (data.closedAt as Timestamp)?.toDate().toISOString() || undefined,
-            firstResponseAt: (data.firstResponseAt as Timestamp)?.toDate().toISOString() || undefined,
-            satisfactionSurveySentAt: (data.satisfactionSurveySentAt as Timestamp)?.toDate().toISOString() || undefined,
+            resolvedAt: parseFirestoreDate(data.resolvedAt),
+            closedAt: parseFirestoreDate(data.closedAt),
+            firstResponseAt: parseFirestoreDate(data.firstResponseAt),
+            satisfactionSurveySentAt: parseFirestoreDate(data.satisfactionSurveySentAt),
             satisfactionRating: data.satisfactionRating || undefined,
             satisfactionComment: data.satisfactionComment || undefined,
             appliedEscalationRuleIds: data.appliedEscalationRuleIds || [],
@@ -110,7 +128,7 @@ export default function TicketsPage() {
         setIsLoadingTickets(false);
       });
 
-      return unsubscribe; 
+      return unsubscribe;
 
     } catch (error) {
       console.error("Error al configurar la escucha de tickets:", error);
@@ -120,7 +138,7 @@ export default function TicketsPage() {
         variant: "destructive",
       });
       setIsLoadingTickets(false);
-      return undefined; 
+      return undefined;
     }
   }, [currentUser, toast]);
 
@@ -206,14 +224,20 @@ export default function TicketsPage() {
   useEffect(() => {
     const ticketIdFromQuery = searchParams.get('ticketId');
     if (ticketIdFromQuery && tickets.length > 0) { 
-        const exists = tickets.some(t => t.id === ticketIdFromQuery);
-        if (exists) {
+        const ticketToAutoOpen = tickets.find(t => t.id === ticketIdFromQuery);
+        if (ticketToAutoOpen) {
             setTicketToOpen(ticketIdFromQuery);
+             // Optionally clear the query parameter after use
+            // const current = new URLSearchParams(Array.from(searchParams.entries()));
+            // current.delete('ticketId');
+            // router.replace(`${pathname}?${current.toString()}`);
         } else {
-            setTicketToOpen(null);
+            setTicketToOpen(null); // Ticket ID from query not found in list
         }
+    } else if (!ticketIdFromQuery) {
+        setTicketToOpen(null); // No ticketId in query
     }
-}, [searchParams, tickets, router]);
+  }, [searchParams, tickets, router]);
 
 
   const handleSaveTicket = async (ticketData: Ticket) => {
@@ -224,47 +248,57 @@ export default function TicketsPage() {
     setIsSubmittingTicket(true);
     const isEditing = tickets.some(t => t.id === ticketData.id);
 
-    const ticketToSave: Ticket = {
+    const ticketToSave: Partial<Ticket> = { // Use Partial<Ticket> for flexibility
       ...ticketData,
       solutionDescription: ticketData.solutionDescription || "",
       solutionAttachments: ticketData.solutionAttachments || [],
       updatedAt: new Date().toISOString(),
     };
-     // Add resolvedAt or closedAt based on status
+     
     if (ticketData.status === 'Resuelto' && (!ticketData.resolvedAt || !isEditing)) {
         ticketToSave.resolvedAt = new Date().toISOString();
     }
     if (ticketData.status === 'Cerrado' && (!ticketData.closedAt || !isEditing)) {
         ticketToSave.closedAt = new Date().toISOString();
-        if (!updatedTicketData.resolvedAt && ticketToSave.status !== 'Resuelto') { 
+        if (!ticketData.resolvedAt && ticketData.status !== 'Resuelto') { 
             ticketToSave.resolvedAt = new Date().toISOString();
         }
     }
 
 
     try {
-      const ticketDocRef = doc(db, "tickets", ticketToSave.id);
-      const { ...ticketDataForFirestore } = ticketToSave;
+      const ticketDocRef = doc(db, "tickets", ticketToSave.id!);
+      
+      const firestoreData:any = {};
+      for (const key in ticketToSave) {
+        if (ticketToSave[key as keyof Ticket] !== undefined) {
+          const typedKey = key as keyof Ticket;
+          if (['createdAt', 'updatedAt', 'resolvedAt', 'closedAt', 'firstResponseAt', 'satisfactionSurveySentAt'].includes(key)) {
+             const dateValue = ticketToSave[typedKey];
+             if (dateValue && typeof dateValue === 'string') {
+                 firestoreData[key] = Timestamp.fromDate(new Date(dateValue));
+             } else if (dateValue instanceof Timestamp) {
+                 firestoreData[key] = dateValue;
+             } else {
+                 firestoreData[key] = null;
+             }
+          } else {
+            firestoreData[key] = ticketToSave[typedKey];
+          }
+        }
+      }
+      // Ensure potentially null-ish fields are explicitly null for Firestore if they are not set
+      firestoreData.assigneeUserId = firestoreData.assigneeUserId || null;
+      firestoreData.relatedLeadId = firestoreData.relatedLeadId || null;
+      firestoreData.slaId = firestoreData.slaId || null;
+      firestoreData.queueId = firestoreData.queueId || null;
+      firestoreData.solutionDescription = firestoreData.solutionDescription || "";
+      firestoreData.solutionAttachments = firestoreData.solutionAttachments || [];
+      firestoreData.comments = firestoreData.comments || [];
+      firestoreData.appliedEscalationRuleIds = firestoreData.appliedEscalationRuleIds || [];
 
-      const firestoreSafeTicket = {
-        ...ticketDataForFirestore,
-        createdAt: Timestamp.fromDate(new Date(ticketToSave.createdAt)),
-        updatedAt: Timestamp.fromDate(new Date(ticketToSave.updatedAt!)),
-        resolvedAt: ticketToSave.resolvedAt ? Timestamp.fromDate(new Date(ticketToSave.resolvedAt)) : null,
-        closedAt: ticketToSave.closedAt ? Timestamp.fromDate(new Date(ticketToSave.closedAt)) : null,
-        firstResponseAt: ticketToSave.firstResponseAt ? Timestamp.fromDate(new Date(ticketToSave.firstResponseAt)) : null,
-        satisfactionSurveySentAt: ticketToSave.satisfactionSurveySentAt ? Timestamp.fromDate(new Date(ticketToSave.satisfactionSurveySentAt)) : null,
-        assigneeUserId: ticketToSave.assigneeUserId || null,
-        relatedLeadId: ticketToSave.relatedLeadId || null,
-        solutionDescription: ticketToSave.solutionDescription || "",
-        solutionAttachments: ticketToSave.solutionAttachments || [],
-        comments: ticketToSave.comments || [],
-        slaId: ticketToSave.slaId || null,
-        queueId: ticketToSave.queueId || null,
-        appliedEscalationRuleIds: ticketToSave.appliedEscalationRuleIds || [],
-      };
 
-      await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
+      await setDoc(ticketDocRef, firestoreData, { merge: true });
 
       toast({
         title: isEditing ? "Ticket Actualizado" : "Ticket Creado",
@@ -378,8 +412,13 @@ export default function TicketsPage() {
       }
       if (ticket.status === 'Abierto' && currentUser.id === ticket.assigneeUserId) {
          updateData.status = 'En Progreso';
+         updateData.updatedAt = new Date().toISOString();
       }
-      await updateDoc(ticketDocRef, updateData);
+      await updateDoc(ticketDocRef, {
+        updatedAt: Timestamp.now(),
+        ...(updateData.firstResponseAt && { firstResponseAt: Timestamp.fromDate(new Date(updateData.firstResponseAt)) }),
+        ...(updateData.status && { status: updateData.status })
+      });
 
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
     } catch (error) {
@@ -409,20 +448,20 @@ export default function TicketsPage() {
         return;
     }
 
-    const updatedTicketData: Partial<Pick<Ticket, 'solutionDescription' | 'solutionAttachments' | 'status' | 'updatedAt' | 'resolvedAt' | 'closedAt'>> = {
+    const updatedTicketData: any = {
         solutionDescription: solutionDescriptionParam,
         solutionAttachments: solutionAttachmentsParam,
         status: statusParam,
-        updatedAt: new Date().toISOString(),
+        updatedAt: Timestamp.now(),
     };
 
-    if (statusParam === 'Resuelto' && !ticketToUpdate.resolvedAt) {
-      updatedTicketData.resolvedAt = new Date().toISOString();
+    if (statusParam === 'Resuelto' && !parseFirestoreDate(ticketToUpdate.resolvedAt)) {
+      updatedTicketData.resolvedAt = Timestamp.now();
     }
-    if (statusParam === 'Cerrado' && !ticketToUpdate.closedAt) {
-      updatedTicketData.closedAt = new Date().toISOString();
-      if (!updatedTicketData.resolvedAt && ticketToUpdate.status !== 'Resuelto') { // If closing directly without resolving first
-        updatedTicketData.resolvedAt = new Date().toISOString();
+    if (statusParam === 'Cerrado' && !parseFirestoreDate(ticketToUpdate.closedAt)) {
+      updatedTicketData.closedAt = Timestamp.now();
+      if (!updatedTicketData.resolvedAt && ticketToUpdate.status !== 'Resuelto') { 
+        updatedTicketData.resolvedAt = Timestamp.now();
       }
     }
 
@@ -623,7 +662,7 @@ export default function TicketsPage() {
             </li>
             <li>
                 <strong>Encuestas de Satisfacción:</strong> 
-                <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Parcial (Backend)</Badge>
+                <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Parcial (Backend Implementado)</Badge>
                 <p className="text-xs pl-5">El envío automático de encuestas CSAT está implementado en backend. La UI para crear plantillas avanzadas y ver resultados está pendiente.</p>
             </li>
           </ul>
@@ -654,8 +693,3 @@ export default function TicketsPage() {
     </div>
   );
 }
-
-
-
-
-
