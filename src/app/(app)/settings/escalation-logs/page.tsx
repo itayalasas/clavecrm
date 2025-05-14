@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import type { EscalationLog, User } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { AlertTriangle, Search, CalendarDays, Ticket, ClipboardCheck, Zap, ShieldAlert, Info } from "lucide-react";
+import { AlertTriangle, Search, CalendarDays, Ticket, Info, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,8 +51,13 @@ export default function EscalationLogsPage() {
         const data = docSnap.data();
         return {
           id: docSnap.id,
-          ...data,
+          ticketId: data.ticketId,
+          ruleId: data.ruleId,
+          ruleName: data.ruleName,
+          conditionMet: data.conditionMet,
+          actionTaken: data.actionTaken,
           timestamp: parseTimestampField(data.timestamp),
+          details: data.details || "",
           loggedBySystem: data.loggedBySystem === undefined ? true : data.loggedBySystem, // Default to true
         } as EscalationLog;
       });
@@ -119,6 +124,7 @@ export default function EscalationLogsPage() {
                     className="pl-8 w-full"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={isLoading}
                 />
             </div>
         </CardHeader>
