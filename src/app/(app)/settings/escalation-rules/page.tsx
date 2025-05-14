@@ -212,8 +212,8 @@ export default function EscalationRulesPage() {
             </li>
             <li>
               <strong>Ejecución de Reglas (Backend):</strong>
-              <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Pendiente</Badge>
-              <p className="text-xs pl-5">La lógica para monitorear tickets y ejecutar estas reglas automáticamente (ej. Cloud Functions) aún no está implementada.</p>
+              <Badge variant="default" className="ml-2 bg-orange-500 hover:bg-orange-600 text-black">En Desarrollo (Requiere Cloud Functions)</Badge>
+              <p className="text-xs pl-5">La lógica para monitorear tickets y ejecutar estas reglas automáticamente (Cloud Functions) está pendiente de implementación en el backend.</p>
             </li>
              <li>
               <strong>Logs de Escalados:</strong>
@@ -262,3 +262,4 @@ export default function EscalationRulesPage() {
     </div>
   );
 }
+

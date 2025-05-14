@@ -1,174 +1,220 @@
 // public/live-chat-widget.js
 (function() {
+  // Verificar configuración
   if (typeof window.CRMRapidoChatSettings === 'undefined') return;
   const settings = window.CRMRapidoChatSettings;
   if (!settings.widgetEnabled) return;
 
+  // Variables globales
   let visitorId = null;
   let currentSessionId = null;
   let db = null;
   let unsubscribeMessages = null;
 
+  // Agente asignado por defecto
   let assignedAgent = {
-    name: "Asistente Virtual",
-    avatar: "https://cdn-icons-png.flaticon.com/512/4712/4712027.png"
+    name: settings.agentName || "Asistente Virtual",
+    avatar: settings.agentAvatarUrl || "https://cdn-icons-png.flaticon.com/512/4712/4712027.png"
   };
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
-    authDomain: "minicrm-express.firebaseapp.com",
-    projectId: "minicrm-express",
-    storageBucket: "minicrm-express.firebasestorage.app",
-    messagingSenderId: "600153365017",
-    appId: "1:600153365017:web:7be7b7109ddc0ccab4e888",
-    measurementId: "G-XXXXXXXXXX"
-  };
+  // Configuración de Firebase
+  const firebaseConfig = settings.firebaseConfig;
 
+  // Inicializar Firebase y Firestore
   function initializeFirebase() {
     if (typeof firebase === 'undefined') {
-      const script = document.createElement('script');
-      script.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js";
-      script.onload = () => {
-        const script2 = document.createElement('script');
-        script2.src = "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js";
-        script2.onload = () => {
+      const s1 = document.createElement('script');
+      s1.src = 'https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js';
+      s1.onload = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js';
+        s2.onload = () => {
           firebase.initializeApp(firebaseConfig);
           db = firebase.firestore();
           setupWidget();
         };
-        document.head.appendChild(script2);
+        document.head.appendChild(s2);
       };
-      document.head.appendChild(script);
+      document.head.appendChild(s1);
       return false;
-    } else {
-      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      db = firebase.firestore();
-      return true;
     }
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    return true;
   }
 
+  // Configurar widget: generar IDs, botón y estructura
   function setupWidget() {
     visitorId = getOrSetVisitorId();
+    createChatWindow();
     appendToggleButton();
-    appendElementsToBody();
-    showWelcomeMessages();
   }
 
-  function showWelcomeMessages() {
-    addAgentMessage("Nuestros expertos están aquí para ayudarte. ¿Estás buscando algo o necesitas ayuda?");
-    addAgentMessage("Mientras te conecto con alguien, ¿podrías por favor darme más detalles sobre lo que estás buscando?");
-  }
-
-  function addAgentMessage(text) {
-    const wrap = document.createElement("div");
-    wrap.style.display = "flex";
-    wrap.style.alignItems = "flex-start";
-    wrap.style.marginBottom = "10px";
-  
-    const avatar = document.createElement("img");
-    avatar.src = assignedAgent.avatar;
-    avatar.style.width = "24px";
-    avatar.style.height = "24px";
-    avatar.style.borderRadius = "50%";
-    avatar.style.marginRight = "8px";
-  
-    const bubble = document.createElement("div");
-    bubble.style.background = "#e5f1fb";
-    bubble.style.color = "#333";
-    bubble.style.padding = "10px";
-    bubble.style.borderRadius = "10px";
-    bubble.style.maxWidth = "80%";
-    bubble.innerText = text;
-  
-    const time = document.createElement("div");
-    time.style.fontSize = "10px";
-    time.style.color = "#555";
-    time.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  
-    const content = document.createElement("div");
-    content.appendChild(bubble);
-    content.appendChild(time);
-  
-    wrap.appendChild(avatar);
-    wrap.appendChild(content);
-    chatBody.appendChild(wrap);
-    chatBody.scrollTop = chatBody.scrollHeight;
-  }
-  
-  function appendToggleButton() {
-    const chatToggle = document.createElement("button");
-    chatToggle.id = "crm-rapido-chat-toggle";
-    chatToggle.innerText = "💬";
-    chatToggle.style.position = "fixed";
-    chatToggle.style.bottom = "20px";
-    chatToggle.style.right = "20px";
-    chatToggle.style.backgroundColor = settings.primaryColor || "#29ABE2";
-    chatToggle.style.color = "white";
-    chatToggle.style.border = "none";
-    chatToggle.style.borderRadius = "50%";
-    chatToggle.style.width = "56px";
-    chatToggle.style.height = "56px";
-    chatToggle.style.fontSize = "24px";
-    chatToggle.style.cursor = "pointer";
-    chatToggle.style.zIndex = "10000";
-
-    document.body.appendChild(chatToggle);
-    chatToggle.addEventListener("click", toggleChatWindow);
-  }
-
-  function toggleChatWindow() {
-    const chat = document.getElementById("crm-rapido-chat-window");
-    if (!chat) return;
-    const isHidden = chat.style.display === "none" || !chat.style.display;
-    chat.style.display = isHidden ? "flex" : "none";
-    chat.style.opacity = isHidden ? "1" : "0";
-    chat.style.transform = isHidden ? "translateY(0)" : "translateY(20px)";
-  }
-
-  async function listenForAgentAssignment(sessionId) {
-    if (!db || !sessionId) return;
-    const sessionRef = db.collection("chatSessions").doc(sessionId);
-    sessionRef.onSnapshot((doc) => {
-      const data = doc.data();
-      if (data && data.agentId && data.agentName && data.agentAvatar) {
-        assignedAgent.name = data.agentName;
-        assignedAgent.avatar = data.agentAvatar;
-        updateAgentHeader();
-        addMessageToUI(`Hola, soy ${data.agentName}. ¿En qué puedo ayudarte hoy?`, "agent", new Date());
-      }
+  // Crear ventana de chat (oculta inicialmente)
+  function createChatWindow() {
+    // Contenedor
+    const chatWindow = document.createElement('div');
+    chatWindow.id = 'crm-rapido-chat-window';
+    Object.assign(chatWindow.style, {
+      position: 'fixed', bottom: '86px', right: settings.widgetPosition === 'bottom-left' ? '' : '20px',
+      left: settings.widgetPosition === 'bottom-left' ? '20px' : '',
+      width: '350px', maxWidth: 'calc(100% - 40px)',
+      height: '500px', maxHeight: 'calc(100% - 90px)',
+      backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+      display: 'none', flexDirection: 'column', overflow: 'hidden', zIndex: '9998',
+      opacity: '0', transform: 'translateY(20px)', transition: 'opacity 0.3s, transform 0.3s'
     });
+
+    // Header
+    const header = document.createElement('div');
+    Object.assign(header.style, { display: 'flex', alignItems: 'center', padding: '12px', backgroundColor: settings.primaryColor, color: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' });
+    const avatar = document.createElement('img');
+    avatar.src = assignedAgent.avatar;
+    Object.assign(avatar.style, { width: '32px', height: '32px', borderRadius: '50%', marginRight: '10px' });
+    const name = document.createElement('span');
+    name.id = 'crm-rapido-agent-name';
+    name.textContent = assignedAgent.name;
+    name.style.fontWeight = '600';
+    header.appendChild(avatar);
+    header.appendChild(name);
+    if (settings.showAgentStatus) {
+      const dot = document.createElement('span');
+      Object.assign(dot.style, { display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#4CAF50', borderRadius: '50%', marginLeft: '8px' });
+      header.appendChild(dot);
+    }
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    Object.assign(closeBtn.style, { marginLeft: 'auto', background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' });
+    closeBtn.onclick = toggleChatWindow;
+    header.appendChild(closeBtn);
+
+    // Body
+    const chatBody = document.createElement('div');
+    chatBody.id = 'crm-rapido-chat-body';
+    Object.assign(chatBody.style, { flexGrow: '1', padding: '10px', overflowY: 'auto', backgroundColor: '#f9f9f9' });
+
+    // Input
+    const inputContainer = document.createElement('div');
+    Object.assign(inputContainer.style, { padding: '10px', borderTop: '1px solid #ddd', display: 'flex', alignItems: 'center', backgroundColor: '#fff' });
+    const chatInput = document.createElement('input');
+    chatInput.id = 'crm-rapido-chat-input';
+    chatInput.type = 'text';
+    chatInput.placeholder = 'Escribe tu mensaje...';
+    Object.assign(chatInput.style, { flexGrow: '1', padding: '8px', border: '1px solid #ccc', borderRadius: '20px', outline: 'none' });
+    const sendBtn = document.createElement('button');
+    sendBtn.innerHTML = '➡️';
+    Object.assign(sendBtn.style, { marginLeft: '8px', padding: '8px', backgroundColor: settings.primaryColor, border: 'none', borderRadius: '50%', cursor: 'pointer', color: '#fff' });
+    sendBtn.onclick = handleSendMessage;
+    inputContainer.appendChild(chatInput);
+    inputContainer.appendChild(sendBtn);
+
+    chatWindow.appendChild(header);
+    chatWindow.appendChild(chatBody);
+    chatWindow.appendChild(inputContainer);
+    document.body.appendChild(chatWindow);
+
+    // Opcional: mensajes de bienvenida
+    if (settings.welcomeMessage) {
+      setTimeout(() => addSystemMessage(settings.welcomeMessage), 500);
+    }
   }
 
-  async function getOrCreateChatSession() {
-    if (!db) return null;
-    if (currentSessionId) return currentSessionId;
+  // Botón flotante para abrir el chat
+  function appendToggleButton() {
+    const btn = document.createElement('button');
+    btn.id = 'crm-rapido-chat-toggle';
+    btn.textContent = '💬';
+    Object.assign(btn.style, { position: 'fixed', bottom: '20px', right: '20px', width: '56px', height: '56px', borderRadius: '50%', backgroundColor: settings.primaryColor, color: '#fff', border: 'none', fontSize: '24px', cursor: 'pointer', zIndex: '10000' });
+    btn.onclick = toggleChatWindow;
+    document.body.appendChild(btn);
+  }
 
-    const snapshot = await db.collection("chatSessions")
-      .where("visitorId", "==", visitorId)
-      .where("status", "in", ["pending", "active"]) 
+  // Alternar visibilidad de la ventana
+  function toggleChatWindow() {
+    const chat = document.getElementById('crm-rapido-chat-window');
+    if (!chat) return;
+    const open = chat.style.display === 'none' || chat.style.display === '';
+    chat.style.display = open ? 'flex' : 'none';
+    chat.style.opacity = open ? '1' : '0';
+    chat.style.transform = open ? 'translateY(0)' : 'translateY(20px)';
+  }
+
+  // Enviar mensaje de sistema (sin remitente)
+  function addSystemMessage(text) {
+    const body = document.getElementById('crm-rapido-chat-body');
+    const div = document.createElement('div');
+    div.style.textAlign = 'center';
+    div.style.margin = '8px 0';
+    div.style.color = '#555';
+    div.style.fontStyle = 'italic';
+    div.textContent = text;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  // Enviar mensaje y guardar en Firestore
+  async function handleSendMessage() {
+    const input = document.getElementById('crm-rapido-chat-input');
+    const text = input.value.trim();
+    if (!text || !db) return;
+    input.value = '';
+
+    const sessionId = await getOrCreateChatSession();
+    await db.collection('chatSessions').doc(sessionId).collection('messages').add({
+      senderType: 'visitor',
+      text,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    addVisitorMessage(text);
+  }
+
+  function addVisitorMessage(text) {
+    const body = document.getElementById('crm-rapido-chat-body');
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.justifyContent = 'flex-end';
+    wrap.style.margin = '8px';
+    const bubble = document.createElement('div');
+    bubble.style.background = settings.primaryColor;
+    bubble.style.color = '#fff';
+    bubble.style.padding = '8px';
+    bubble.style.borderRadius = '10px';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    body.appendChild(wrap);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  // Sesión Firestore: obtener o crear
+  async function getOrCreateChatSession() {
+    if (currentSessionId) return currentSessionId;
+    const q = await db.collection('chatSessions')
+      .where('visitorId','==',visitorId)
+      .where('status','in',['pending','active'])
       .limit(1)
       .get();
-
-    if (!snapshot.empty) {
-      currentSessionId = snapshot.docs[0].id;
-      listenForAgentAssignment(currentSessionId);
+    if (!q.empty) {
+      currentSessionId = q.docs[0].id;
       return currentSessionId;
     }
-
-    const docRef = await db.collection("chatSessions").add({
-      visitorId,
-      status: "pending",
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    currentSessionId = docRef.id;
-    showWelcomeMessages();
-    listenForAgentAssignment(currentSessionId);
+    const doc = await db.collection('chatSessions').add({ visitorId, status:'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    currentSessionId = doc.id;
     return currentSessionId;
   }
 
-  // (Resto: creación de chatWindow, chatBody, chatInput, sendButton, handlers, etc.)
+  // UUID visitante
+  function getOrSetVisitorId() {
+    let id = localStorage.getItem('crmRapidoVisitorId');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('crmRapidoVisitorId', id);
+    }
+    return id;
+  }
 
-  // Inicialización
-  if (initializeFirebase()) setupWidget();
+  // Ejecutar
+  if (initializeFirebase()) {
+    setupWidget();
+  }
 })();
