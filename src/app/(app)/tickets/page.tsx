@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -28,8 +29,8 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [slas, setSlas] = useState<SLA[]>(INITIAL_SLAS); // Use initial data for now
-  const [supportQueues, setSupportQueues] = useState<SupportQueue[]>(INITIAL_SUPPORT_QUEUES); // Use initial
+  const [slas, setSlas] = useState<SLA[]>([]); 
+  const [supportQueues, setSupportQueues] = useState<SupportQueue[]>([]);
 
 
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
@@ -93,6 +94,7 @@ export default function TicketsPage() {
             satisfactionSurveySentAt: (data.satisfactionSurveySentAt as Timestamp)?.toDate().toISOString() || undefined,
             satisfactionRating: data.satisfactionRating || undefined,
             satisfactionComment: data.satisfactionComment || undefined,
+            appliedEscalationRuleIds: data.appliedEscalationRuleIds || [],
           } as Ticket;
         });
         setTickets(fetchedTickets);
@@ -164,13 +166,10 @@ export default function TicketsPage() {
   const fetchSlasAndQueues = useCallback(async () => {
     setIsLoadingSlasAndQueues(true);
     try {
-      // Simulating fetch for now, replace with actual Firestore queries
-      // const slasSnapshot = await getDocs(query(collection(db, "slas"), orderBy("name")));
-      // setSlas(slasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SLA)));
-      // const queuesSnapshot = await getDocs(query(collection(db, "supportQueues"), orderBy("name")));
-      // setSupportQueues(queuesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupportQueue)));
-      setSlas(INITIAL_SLAS);
-      setSupportQueues(INITIAL_SUPPORT_QUEUES);
+      const slasSnapshot = await getDocs(query(collection(db, "slas"), orderBy("name")));
+      setSlas(slasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SLA)));
+      const queuesSnapshot = await getDocs(query(collection(db, "supportQueues"), orderBy("name")));
+      setSupportQueues(queuesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupportQueue)));
     } catch (error) {
         console.error("Error fetching SLAs or Queues:", error);
         toast({ title: "Error al cargar SLAs/Colas", variant: "destructive" });
@@ -237,6 +236,9 @@ export default function TicketsPage() {
     }
     if (ticketData.status === 'Cerrado' && (!ticketData.closedAt || !isEditing)) {
         ticketToSave.closedAt = new Date().toISOString();
+        if (!updatedTicketData.resolvedAt && ticketToSave.status !== 'Resuelto') { 
+            ticketToSave.resolvedAt = new Date().toISOString();
+        }
     }
 
 
@@ -259,6 +261,7 @@ export default function TicketsPage() {
         comments: ticketToSave.comments || [],
         slaId: ticketToSave.slaId || null,
         queueId: ticketToSave.queueId || null,
+        appliedEscalationRuleIds: ticketToSave.appliedEscalationRuleIds || [],
       };
 
       await setDoc(ticketDocRef, firestoreSafeTicket, { merge: true });
@@ -610,8 +613,8 @@ export default function TicketsPage() {
             </li>
             <li>
               <strong>Escalados Automáticos:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-              <p className="text-xs pl-5">Reglas para escalar tickets automáticamente (backend pendiente).</p>
+               <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Implementado (Backend Activo)</Badge>
+              <p className="text-xs pl-5">Las reglas definidas en "Configuración {">"} Reglas de Escalado" son procesadas por el backend. Revisa el Historial de Escalados para ver su actividad.</p>
             </li>
              <li>
                 <strong>Base de Conocimiento (Knowledge Base):</strong> 
@@ -620,8 +623,8 @@ export default function TicketsPage() {
             </li>
             <li>
                 <strong>Encuestas de Satisfacción:</strong> 
-                <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-                <p className="text-xs pl-5">Enviar encuestas CSAT/NPS (UI placeholder añadido en TicketItem). Creación/envío de encuestas pendiente.</p>
+                <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Parcial (Backend)</Badge>
+                <p className="text-xs pl-5">El envío automático de encuestas CSAT está implementado en backend. La UI para crear plantillas avanzadas y ver resultados está pendiente.</p>
             </li>
           </ul>
           <p className="mt-4 font-semibold">Estas funcionalidades se implementarán progresivamente para mejorar la gestión avanzada de tickets.</p>
@@ -651,6 +654,7 @@ export default function TicketsPage() {
     </div>
   );
 }
+
 
 
 

@@ -65,13 +65,28 @@ export default function EscalationRulesPage() {
         getAllUsers(),
       ]);
 
-      const fetchedRules = rulesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as EscalationRule));
+      const fetchedRules = rulesSnapshot.docs.map(docSnap => ({ 
+        id: docSnap.id, 
+        ...docSnap.data(), 
+        createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        updatedAt: (docSnap.data().updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+       } as EscalationRule));
       setRules(fetchedRules);
       
-      const fetchedSlas = slasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as SLA));
+      const fetchedSlas = slasSnapshot.docs.map(docSnap => ({ 
+        id: docSnap.id, 
+        ...docSnap.data(),
+        createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        updatedAt: (docSnap.data().updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+       } as SLA));
       setSlas(fetchedSlas);
 
-      const fetchedQueues = queuesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as SupportQueue));
+      const fetchedQueues = queuesSnapshot.docs.map(docSnap => ({ 
+        id: docSnap.id, 
+        ...docSnap.data(),
+        createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        updatedAt: (docSnap.data().updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+      } as SupportQueue));
       setSupportQueues(fetchedQueues);
       
       setUsers(allUsersData);
@@ -95,11 +110,24 @@ export default function EscalationRulesPage() {
     }
     try {
       const docId = id || doc(collection(db, "escalationRules")).id;
-      const dataToSave = {
+      const dataToSave: any = { // Use 'any' temporarily to allow optional fields
         ...ruleData,
         updatedAt: serverTimestamp(),
-        ...(id ? {} : { createdAt: serverTimestamp() }),
       };
+      if (!id) {
+        dataToSave.createdAt = serverTimestamp();
+      }
+
+      // Ensure optional fields that might be empty strings are converted to null or not sent if undefined
+      Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key as keyof typeof dataToSave] === undefined) {
+            delete dataToSave[key as keyof typeof dataToSave];
+        }
+        if (dataToSave[key as keyof typeof dataToSave] === "") {
+            dataToSave[key as keyof typeof dataToSave] = null;
+        }
+      });
+      
       await setDoc(doc(db, "escalationRules", docId), dataToSave, { merge: true });
       toast({ title: id ? "Regla Actualizada" : "Regla Creada", description: `La regla de escalado "${ruleData.name}" ha sido guardada.` });
       fetchData(); // Refresh list
@@ -156,7 +184,7 @@ export default function EscalationRulesPage() {
                 Reglas de Escalado de Tickets
                 </CardTitle>
                 <CardDescription>
-                Define reglas para escalar tickets automáticamente si no se cumplen los SLAs o permanecen inactivos. La ejecución de estas reglas requiere configuración de backend (Cloud Functions).
+                Define reglas para escalar tickets automáticamente si no se cumplen los SLAs o permanecen inactivos. La ejecución de estas reglas ocurre en el backend.
                 </CardDescription>
             </div>
             <Button onClick={() => { setEditingRule(null); setIsDialogOpen(true); }} disabled={isLoading}>
@@ -205,14 +233,14 @@ export default function EscalationRulesPage() {
         </CardContent>
       </Card>
       
-      <Card className="mt-4 bg-amber-50 border-amber-200">
+      <Card className="mt-4 bg-green-50 border-green-200">
         <CardHeader>
-          <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
+          <CardTitle className="flex items-center text-green-700 text-lg gap-2">
             <AlertTriangle className="h-5 w-5" />
             Estado de Desarrollo
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-amber-600">
+        <CardContent className="text-sm text-green-600">
           <ul className="list-disc list-inside space-y-2">
             <li>
               <strong>Definición de Reglas (UI):</strong>
@@ -221,23 +249,23 @@ export default function EscalationRulesPage() {
             </li>
             <li>
               <strong>Ejecución de Reglas (Backend):</strong>
-              <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Backend Implementado</Badge>
-              <p className="text-xs pl-5">La Cloud Function `evaluateEscalationRules` está implementada y debería procesar las reglas. Se requiere monitoreo y pruebas exhaustivas.</p>
+              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Activo (Backend Implementado)</Badge>
+              <p className="text-xs pl-5">La Cloud Function `evaluateEscalationRules` está implementada y procesa las reglas activas periódicamente. Se recomienda monitorear su ejecución y logs.</p>
             </li>
              <li>
               <strong>Logs de Escalados:</strong>
-              <Badge variant="outline" className="ml-2 border-blue-500 text-blue-600">UI Pendiente</Badge>
-              <p className="text-xs pl-5">La Cloud Function `logEscalationEvent` está implementada para registrar logs. Se necesita una página para visualizarlos.</p>
+              <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Implementado (UI y Backend)</Badge>
+              <p className="text-xs pl-5">La Cloud Function `logEscalationEvent` registra los logs. Puedes visualizarlos en "Administración" {">"} "Historial de Escalados".</p>
             </li>
              <li>
               <strong>Tipos de Condiciones/Acciones Avanzadas:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado (UI/Backend)</Badge>
-              <p className="text-xs pl-5">Se han añadido ejemplos en la UI (ej. Webhook). La implementación completa de condiciones/acciones más complejas (ej. análisis de sentimiento) requerirá desarrollo adicional.</p>
+              <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Parcial (UI/Backend Planeado)</Badge>
+              <p className="text-xs pl-5">Se han añadido ejemplos en la UI (ej. Webhook). La implementación completa de condiciones/acciones más complejas (ej. análisis de sentimiento) requerirá desarrollo adicional en UI y backend.</p>
             </li>
              <li>
               <strong>Horarios Laborales en SLAs:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Pendiente (Backend)</Badge>
-              <p className="text-xs pl-5">La lógica para que los SLAs consideren `businessHoursOnly` no está implementada en la Cloud Function.</p>
+              <Badge variant="default" className="ml-2 bg-orange-500 hover:bg-orange-600 text-white">Pendiente (Backend)</Badge>
+              <p className="text-xs pl-5">La lógica para que los SLAs consideren `businessHoursOnly` no está implementada en la Cloud Function y requiere una configuración de horario laboral.</p>
             </li>
           </ul>
         </CardContent>
