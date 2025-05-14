@@ -308,12 +308,13 @@ export function AddEditMeetingDialog({
                   </FormItem>
                 )} />
 
-                <div>
-                  <FormLabel>Asistentes</FormLabel>
+                {/* Attendee Management UI */}
+                <div className="space-y-3 pt-3 border-t">
+                  <FormLabel className="text-md">Asistentes</FormLabel>
                   {fields.map((item, index) => (
-                    <Card key={item.id} className="p-3 mt-2 space-y-2 bg-muted/50">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Asistente {index + 1} ({item.type})</span>
+                    <Card key={item.id} className="p-3 space-y-2 bg-muted/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Asistente {index + 1} ({item.type === 'user' ? 'Usuario CRM' : item.type === 'contact' ? 'Contacto CRM' : 'Externo'})</span>
                         <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive h-7 w-7">
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -339,22 +340,24 @@ export function AddEditMeetingDialog({
                         )} />
                     </Card>
                   ))}
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex flex-col sm:flex-row gap-2 mt-2">
                     <Select onValueChange={(value) => addInternalAttendee('user', value)}>
-                        <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir Usuario Interno..." /></SelectTrigger>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir Usuario CRM..." /></SelectTrigger>
                         <SelectContent>
                             {users.filter(u => !fields.some(f => f.id === u.id && f.type === 'user')).map(user => <SelectItem key={user.id} value={user.id}>{user.name} ({user.email})</SelectItem>)}
+                            {users.filter(u => !fields.some(f => f.id === u.id && f.type === 'user')).length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">Todos los usuarios añadidos.</div>}
                         </SelectContent>
                     </Select>
                      <Select onValueChange={(value) => addInternalAttendee('contact', value)}>
                         <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir Contacto CRM..." /></SelectTrigger>
                         <SelectContent>
                             {contacts.filter(c => !fields.some(f => f.id === c.id && f.type === 'contact')).map(contact => <SelectItem key={contact.id} value={contact.id}>{`${contact.firstName || ''} ${contact.lastName || ''} (${contact.email})`.trim()}</SelectItem>)}
+                            {contacts.filter(c => !fields.some(f => f.id === c.id && f.type === 'contact')).length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">Todos los contactos añadidos.</div>}
                         </SelectContent>
                     </Select>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addExternalAttendee} className="mt-2">
-                    <UserPlus className="mr-2 h-4 w-4" /> Añadir Asistente Externo
+                  <Button type="button" variant="outline" size="sm" onClick={addExternalAttendee} className="mt-2 w-full sm:w-auto">
+                    <UserPlus className="mr-2 h-4 w-4" /> Añadir Asistente Externo Manualmente
                   </Button>
                 </div>
               </div>
@@ -374,3 +377,6 @@ export function AddEditMeetingDialog({
     </Dialog>
   );
 }
+
+
+    
