@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { getUserInitials } from "@/lib/utils";
 
 
 function findCurrentPage(items: NavItem[], pathname: string): NavItem | null {
@@ -55,17 +56,6 @@ export function AppHeader() {
     }
   };
   
-  const getUserInitials = (name?: string | null) => {
-    if (!name) return "U";
-    const nameParts = name.split(" ");
-    if (nameParts.length > 1 && nameParts[0] && nameParts[1]) {
-      return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
-    }
-    if (nameParts[0]) {
-        return nameParts[0].substring(0,2).toUpperCase();
-    }
-    return "U";
-  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">

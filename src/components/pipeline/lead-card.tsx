@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Lead } from "@/lib/types";
@@ -14,6 +15,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
+import { getUserInitials } from "@/lib/utils";
 
 interface LeadCardProps {
   lead: Lead;
@@ -21,7 +23,7 @@ interface LeadCardProps {
 }
 
 export function LeadCard({ lead, onEdit }: LeadCardProps) {
-  const avatarFallback = lead.name.substring(0, 2).toUpperCase();
+  const avatarFallback = getUserInitials(lead.name);
   return (
     <Card className="mb-4 shadow-md hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="p-4">

@@ -13,6 +13,7 @@ import { Copy, Globe, EyeOff, PlusCircle, Trash2, Save, Loader2, Users2 } from "
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { getUserInitials } from "@/lib/utils";
 
 interface DocumentSharingDialogContentProps {
   documentFile: DocumentFile;
@@ -149,14 +150,6 @@ export function DocumentSharingDialogContent({
   
   const availableUsersToAdd = allUsers.filter(u => u.id !== currentUser.id && !localSharedUsers.some(sharedUser => sharedUser.userId === u.id));
   const availableGroupsToAdd = PREDEFINED_GROUPS.filter(g => !localSharedGroups.some(sg => sg.groupId === g.id));
-
-
-  const getUserInitials = (name: string) => {
-    if (!name) return "?";
-    const parts = name.split(" ");
-    if (parts.length > 1 && parts[0] && parts[1]) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return name.substring(0, 2).toUpperCase();
-  };
 
 
   return (

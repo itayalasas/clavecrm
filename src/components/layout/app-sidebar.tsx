@@ -25,6 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut, Settings, ChevronDown, Briefcase } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { getUserInitials } from "@/lib/utils";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -47,18 +48,6 @@ export function AppSidebar() {
     }
   };
   
-  const getUserInitials = (name?: string | null) => {
-    if (!name) return "U";
-    const nameParts = name.split(" ");
-    if (nameParts.length > 1 && nameParts[0] && nameParts[1]) {
-      return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
-    }
-    if (nameParts[0]) {
-        return nameParts[0].substring(0,2).toUpperCase();
-    }
-    return "U";
-  };
-
   const toggleSubmenu = (label: string) => {
     setOpenSubmenus(prev => ({ ...prev, [label]: !prev[label] }));
   };

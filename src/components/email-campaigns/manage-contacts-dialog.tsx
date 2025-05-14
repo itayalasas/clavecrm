@@ -25,6 +25,7 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, doc, serverTimestamp, query, where, updateDoc, arrayUnion, arrayRemove, writeBatch, setDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { getUserInitials } from "@/lib/utils";
 
 const addContactFormSchema = z.object({
   email: z.string().email("Correo electrónico inválido."),
@@ -197,13 +198,6 @@ export function ManageContactsDialog({ isOpen, onOpenChange, list, allContacts, 
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getUserInitials = (name?: string) => {
-    if (!name) return "";
-    const parts = name.split(" ");
-    if (parts.length > 1 && parts[0] && parts[1]) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return name.substring(0, 2).toUpperCase();
   };
 
 

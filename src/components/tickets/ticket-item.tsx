@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase, X, Brain, SmilePlus, Info, LayersIcon, ShieldCheck } from "lucide-react";
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale'; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label }
 from "@/components/ui/label";
 import { useAuth } from "@/contexts/auth-context";
+import { getUserInitials } from "@/lib/utils";
 
 interface TicketItemProps {
   ticket: Ticket;
@@ -47,7 +48,7 @@ const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, l
                 {IconComp && <IconComp className="h-4 w-4" />}
                 <Avatar className="h-5 w-5">
                   <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.email}.png`} alt={user.name} data-ai-hint="user avatar"/>
-                  <AvatarFallback>{user.name.substring(0, 1).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback>{getUserInitials(user.name)}</AvatarFallback>
                 </Avatar>
                 <span className="text-xs hidden sm:inline">{user.name}</span>
             </div>
@@ -489,8 +490,9 @@ export function TicketItem({
                     <Brain className="mr-1.5 h-3.5 w-3.5"/> Sugerir Artículo KB (Próx.)
                 </Button>
                  {(ticket.status === 'Resuelto' || ticket.status === 'Cerrado') && (
-                    <Button variant="ghost" size="sm" className="text-xs" disabled>
-                        <SmilePlus className="mr-1.5 h-3.5 w-3.5"/> Enviar Encuesta de Satisfacción (Próx.)
+                    <Button variant="ghost" size="sm" className="text-xs" disabled={!!ticket.satisfactionSurveySentAt}>
+                        <SmilePlus className="mr-1.5 h-3.5 w-3.5"/> 
+                        {ticket.satisfactionSurveySentAt ? "Encuesta Enviada" : "Enviar Encuesta de Satisfacción (Próx.)"}
                     </Button>
                 )}
                  {(ticket.status === 'Resuelto' || ticket.status === 'Cerrado') && ticket.satisfactionRating && (
@@ -511,7 +513,7 @@ export function TicketItem({
                         <div className="flex items-center gap-2">
                           <Avatar className="h-6 w-6">
                             <AvatarImage src={comment.userAvatarUrl || `https://avatar.vercel.sh/${comment.userName}.png`} alt={comment.userName} data-ai-hint="user avatar"/>
-                            <AvatarFallback>{comment.userName.substring(0,1).toUpperCase()}</AvatarFallback>
+                            <AvatarFallback>{getUserInitials(comment.userName)}</AvatarFallback>
                           </Avatar>
                           <span className="text-xs font-medium">{comment.userName}</span>
                         </div>

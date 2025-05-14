@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict, isValid, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { UserCheck, MessagesSquare, History, UserCircle, Smartphone } from "lucide-react"; // Added Smartphone
+import { getUserInitials } from "@/lib/utils";
 
 interface ChatListProps {
   sessions: ChatSession[];
@@ -24,7 +25,7 @@ interface ChatListProps {
 const VisitorDisplayIcon = ({ session }: { session: ChatSession }) => {
   const isGenericVisitor = !session.visitorName || session.visitorName.startsWith("Visitante ");
   const visitorName = session.visitorName || "Visitante";
-  const fallbackInitial = (visitorName).substring(0,1).toUpperCase();
+  const fallbackInitial = getUserInitials(visitorName);
 
   if (session.channel === 'whatsapp') {
     return <Smartphone className="h-9 w-9 mr-3 text-green-500" />;

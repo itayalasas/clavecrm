@@ -15,6 +15,7 @@ import { CannedResponses } from "./canned-responses";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { getUserInitials } from "@/lib/utils";
 
 interface ChatWindowProps {
   session: ChatSession;
@@ -34,7 +35,7 @@ interface ChatWindowProps {
 const ChatWindowHeaderIcon = ({ session }: { session: ChatSession }) => {
   const isGenericVisitor = !session.visitorName || session.visitorName.startsWith("Visitante ");
   const visitorName = session.visitorName || "Visitante";
-  const fallbackInitial = (visitorName).substring(0,1).toUpperCase();
+  const fallbackInitial = getUserInitials(visitorName);
 
   if (session.channel === 'whatsapp') {
     return <Smartphone className="h-8 w-8 text-green-500" />;
@@ -102,7 +103,7 @@ export function ChatWindow({
   };
    const getAgentAvatarFallback = (senderId: string) => {
     const name = getSenderName(senderId, 'agent');
-    return name.substring(0,1).toUpperCase();
+    return getUserInitials(name);
   }
 
 

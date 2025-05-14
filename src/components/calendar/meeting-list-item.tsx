@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Meeting, Lead, User, Resource } from "@/lib/types";
@@ -9,6 +10,7 @@ import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getUserInitials } from "@/lib/utils";
 
 interface MeetingListItemProps {
   meeting: Meeting;
@@ -120,7 +122,7 @@ export function MeetingListItem({ meeting, leads, users, resources, onEdit, onDe
                         <TooltipTrigger asChild>
                             <Avatar className="h-5 w-5 border">
                                 <AvatarImage src={`https://avatar.vercel.sh/${att.email}.png`} alt={getAttendeeName(att)} data-ai-hint="attendee avatar"/>
-                                <AvatarFallback>{getAttendeeName(att).substring(0,1).toUpperCase()}</AvatarFallback>
+                                <AvatarFallback>{getUserInitials(getAttendeeName(att))}</AvatarFallback>
                             </Avatar>
                         </TooltipTrigger>
                         <TooltipContent><p>{getAttendeeName(att)} ({att.email}) - {att.status}</p></TooltipContent>
