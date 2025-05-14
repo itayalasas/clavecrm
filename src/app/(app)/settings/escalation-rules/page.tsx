@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { EscalationRule, User, SLA, SupportQueue, TicketPriority } from "@/lib/types";
-import { NAV_ITEMS, INITIAL_ESCALATION_RULES, ESCALATION_CONDITION_TYPES, ESCALATION_ACTION_TYPES, INITIAL_USERS, INITIAL_SLAS, INITIAL_SUPPORT_QUEUES, TICKET_PRIORITIES } from "@/lib/constants";
+import { NAV_ITEMS, ESCALATION_CONDITION_TYPES, ESCALATION_ACTION_TYPES, TICKET_PRIORITIES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Search, Filter, ClockIcon, AlertTriangle } from "lucide-react";
@@ -34,7 +34,7 @@ export default function EscalationRulesPage() {
 
   const [rules, setRules] = useState<EscalationRule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [slas, setSlas] = useState<SLA[]>([]); 
+  const [slas, setSlas] = useState<SLA[]>([]);
   const [supportQueues, setSupportQueues] = useState<SupportQueue[]>([]);
 
 
@@ -54,18 +54,27 @@ export default function EscalationRulesPage() {
     }
     setIsLoading(true);
     try {
-      // TODO: Replace with actual Firestore fetching when ready
-      // const qRules = query(collection(db, "escalationRules"), orderBy("order", "asc"));
-      // const rulesSnapshot = await getDocs(qRules);
-      // const fetchedRules = rulesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as EscalationRule));
-      // setRules(fetchedRules);
-      setRules(INITIAL_ESCALATION_RULES.sort((a,b) => a.order - b.order));
-      
-      // const allUsersData = await getAllUsers();
-      setUsers(INITIAL_USERS); // Using initial data for users for now
-      setSlas(INITIAL_SLAS);
-      setSupportQueues(INITIAL_SUPPORT_QUEUES);
+      const rulesQuery = query(collection(db, "escalationRules"), orderBy("order", "asc"));
+      const slasQuery = query(collection(db, "slas"), orderBy("name", "asc"));
+      const queuesQuery = query(collection(db, "supportQueues"), orderBy("name", "asc"));
 
+      const [rulesSnapshot, slasSnapshot, queuesSnapshot, allUsersData] = await Promise.all([
+        getDocs(rulesQuery),
+        getDocs(slasQuery),
+        getDocs(queuesQuery),
+        getAllUsers(),
+      ]);
+
+      const fetchedRules = rulesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as EscalationRule));
+      setRules(fetchedRules);
+      
+      const fetchedSlas = slasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as SLA));
+      setSlas(fetchedSlas);
+
+      const fetchedQueues = queuesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as SupportQueue));
+      setSupportQueues(fetchedQueues);
+      
+      setUsers(allUsersData);
 
     } catch (error) {
       console.error("Error fetching escalation rules data:", error);
@@ -91,7 +100,7 @@ export default function EscalationRulesPage() {
         updatedAt: serverTimestamp(),
         ...(id ? {} : { createdAt: serverTimestamp() }),
       };
-      // await setDoc(doc(db, "escalationRules", docId), dataToSave, { merge: true }); // Uncomment when Firestore is ready
+      await setDoc(doc(db, "escalationRules", docId), dataToSave, { merge: true });
       toast({ title: id ? "Regla Actualizada" : "Regla Creada", description: `La regla de escalado "${ruleData.name}" ha sido guardada.` });
       fetchData(); // Refresh list
       return true;
@@ -109,7 +118,7 @@ export default function EscalationRulesPage() {
   const handleDeleteRule = async () => {
     if (!ruleToDelete || !currentUser) return;
     try {
-      // await deleteDoc(doc(db, "escalationRules", ruleToDelete.id)); // Uncomment when Firestore is ready
+      await deleteDoc(doc(db, "escalationRules", ruleToDelete.id)); 
       toast({ title: "Regla Eliminada", description: `La regla "${ruleToDelete.name}" ha sido eliminada.` });
       fetchData(); // Refresh list
     } catch (error) {
@@ -208,22 +217,27 @@ export default function EscalationRulesPage() {
             <li>
               <strong>Definición de Reglas (UI):</strong>
               <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Implementado</Badge>
-              <p className="text-xs pl-5">Puedes crear, editar y eliminar reglas de escalado con condiciones y acciones básicas. Se han añadido ejemplos de condiciones/acciones avanzadas (marcadas como Futuro) para ilustrar las posibilidades.</p>
+              <p className="text-xs pl-5">Puedes crear, editar y eliminar reglas de escalado. Los datos para SLAs y Colas se cargan desde Firestore.</p>
             </li>
             <li>
               <strong>Ejecución de Reglas (Backend):</strong>
-              <Badge variant="default" className="ml-2 bg-orange-500 hover:bg-orange-600 text-black">Pendiente (Requiere Cloud Functions)</Badge>
-              <p className="text-xs pl-5">La lógica para monitorear tickets y ejecutar estas reglas automáticamente (Cloud Functions) aún no está implementada en el backend.</p>
+              <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Backend Implementado</Badge>
+              <p className="text-xs pl-5">La Cloud Function `evaluateEscalationRules` está implementada y debería procesar las reglas. Se requiere monitoreo y pruebas exhaustivas.</p>
             </li>
              <li>
               <strong>Logs de Escalados:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado (Backend)</Badge>
-              <p className="text-xs pl-5">Un registro de cuándo se activaron las reglas y qué acciones se tomaron se añadirá cuando el backend esté listo para generar estos logs.</p>
+              <Badge variant="outline" className="ml-2 border-blue-500 text-blue-600">UI Pendiente</Badge>
+              <p className="text-xs pl-5">La Cloud Function `logEscalationEvent` está implementada para registrar logs. Se necesita una página para visualizarlos.</p>
             </li>
              <li>
               <strong>Tipos de Condiciones/Acciones Avanzadas:</strong>
               <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado (UI/Backend)</Badge>
-              <p className="text-xs pl-5">Se han añadido algunos ejemplos en la UI. La implementación completa de condiciones/acciones más complejas (ej. análisis de sentimiento, webhooks) requerirá desarrollo tanto en UI como en backend.</p>
+              <p className="text-xs pl-5">Se han añadido ejemplos en la UI (ej. Webhook). La implementación completa de condiciones/acciones más complejas (ej. análisis de sentimiento) requerirá desarrollo adicional.</p>
+            </li>
+             <li>
+              <strong>Horarios Laborales en SLAs:</strong>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Pendiente (Backend)</Badge>
+              <p className="text-xs pl-5">La lógica para que los SLAs consideren `businessHoursOnly` no está implementada en la Cloud Function.</p>
             </li>
           </ul>
         </CardContent>
@@ -262,4 +276,3 @@ export default function EscalationRulesPage() {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+
 import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
@@ -32,7 +33,7 @@ export interface Task {
   completed: boolean;
   relatedLeadId?: string;
   createdAt: string; // Store as ISO string
-  priority?: 'low' | 'medium' | 'high';
+  priority?: 'Alta' | 'Media' | 'Baja'; // Corrected to match TICKET_PRIORITIES
   assigneeUserId?: string; // ID of the user assigned to the task
   reporterUserId: string; // ID of the user who reported or created the task
   solutionDescription?: string; // Description of the solution
@@ -84,6 +85,7 @@ export interface Ticket {
   satisfactionSurveySentAt?: string; // ISO string
   satisfactionRating?: number; // e.g., 1-5
   satisfactionComment?: string;
+  appliedEscalationRuleIds?: string[]; // IDs of escalation rules already applied to this ticket
 }
 
 // Sales Management Types
@@ -505,7 +507,7 @@ export interface SLA {
   resolutionTimeTargetHours: number; // e.g., 8 hours for resolution
   appliesToPriority?: TicketPriority[]; // e.g., only for 'Alta'
   appliesToQueues?: string[]; // Which queues this SLA applies to by default
-  businessHoursId?: string; // Link to a business hours definition (future)
+  businessHoursOnly?: boolean; // Added optional for consistency
   isEnabled: boolean;
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
@@ -522,8 +524,24 @@ export interface SupportQueue {
   updatedAt?: string; // ISO string
 }
 
-export type EscalationConditionType = 'sla_response_breached' | 'sla_resolution_breached' | 'ticket_idle_for_x_hours' | 'ticket_priority_is' | 'ticket_in_queue';
-export type EscalationActionType = 'notify_user' | 'notify_group' | 'change_priority' | 'assign_to_user' | 'assign_to_queue';
+export type EscalationConditionType =
+  | 'sla_response_breached'
+  | 'sla_resolution_breached'
+  | 'ticket_idle_for_x_hours'
+  | 'ticket_priority_is'
+  | 'ticket_in_queue'
+  | 'ticket_sentiment_is_negative' // Added new type
+  | 'customer_response_pending_for_x_hours'; // Added new type
+
+export type EscalationActionType =
+  | 'notify_user'
+  | 'notify_group'
+  | 'change_priority'
+  | 'assign_to_user'
+  | 'assign_to_queue'
+  | 'trigger_webhook' // Added new type
+  | 'create_follow_up_task'; // Added new type
+
 
 export interface EscalationRule {
   id: string;
@@ -532,15 +550,29 @@ export interface EscalationRule {
   conditionType: EscalationConditionType;
   conditionValue?: string | number; // e.g., hours for 'ticket_idle_for_x_hours', or priority value for 'ticket_priority_is', or queueId for 'ticket_in_queue'
   actionType: EscalationActionType;
-  actionTargetUserId?: string | null; // For notify_user, assign_to_user
+  actionTargetUserId?: string | null; // For notify_user, assign_to_user, create_follow_up_task
   actionTargetGroupId?: string | null; // For notify_group (placeholder)
   actionTargetQueueId?: string | null; // For assign_to_queue
   actionTargetPriority?: TicketPriority | null; // For change_priority
+  actionValue?: string; // For webhook URL, or task details (future)
   order: number; // Execution order for rules
   isEnabled: boolean;
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
 }
+
+export interface EscalationLog {
+  id: string;
+  ticketId: string;
+  ruleId: string;
+  ruleName: string;
+  conditionMet: string;
+  actionTaken: string;
+  timestamp: string; // ISO string
+  details?: string;
+  loggedBySystem: boolean; // To differentiate from manual log entries if any
+}
+
 
 // Knowledge Base & Surveys (Placeholders - to be detailed later)
 export interface KnowledgeBaseArticle {
@@ -567,4 +599,3 @@ export interface SatisfactionSurvey {
     submittedAt: string;
     type: 'CSAT' | 'NPS';
 }
-```

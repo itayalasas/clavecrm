@@ -1,6 +1,6 @@
 
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon } from 'lucide-react';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -71,15 +71,17 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck },
       { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon },
       { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon },
+      { href: '/settings/escalation-logs', label: 'Historial de Escalados', icon: AlertTriangle },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
     ],
     parentActiveIf: (pathname) => [
-        '/user-management', 
-        '/settings', 
+        '/user-management',
+        '/settings',
         '/audit-log',
         '/settings/slas',
         '/settings/support-queues',
-        '/settings/escalation-rules'
+        '/settings/escalation-rules',
+        '/settings/escalation-logs', // Added new log page
     ].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/live-chat-widget'),
   },
 ];
@@ -277,7 +279,7 @@ export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: stri
   { value: 'change_priority', label: 'Cambiar Prioridad del Ticket', targetType: 'priority' },
   { value: 'assign_to_user', label: 'Asignar a Usuario', targetType: 'user' },
   { value: 'assign_to_queue', label: 'Mover a Cola', targetType: 'queue' },
-  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string' }, // For URL
+  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string' },
   { value: 'create_follow_up_task', label: 'Crear Tarea de Seguimiento (Futuro)', targetType: 'user' },
 ];
 
@@ -285,4 +287,3 @@ export const INITIAL_ESCALATION_RULES: EscalationRule[] = [
   { id: 'rule-1', name: 'Escalar si ticket Alta prioridad no respondido en 1h', conditionType: 'sla_response_breached', actionType: 'notify_user', actionTargetUserId: 'user-2', order: 1, isEnabled: true, createdAt: new Date().toISOString(), description: 'Notifica al supervisor M. García si un ticket de Alta prioridad no tiene primera respuesta en 1 hora.' },
   { id: 'rule-2', name: 'Reasignar ticket inactivo > 24h', conditionType: 'ticket_idle_for_x_hours', conditionValue: 24, actionType: 'assign_to_queue', actionTargetQueueId: 'q-general', order: 2, isEnabled: true, createdAt: new Date().toISOString(), description: 'Mueve a cola General si no hay actividad en 24h.'},
 ];
-
