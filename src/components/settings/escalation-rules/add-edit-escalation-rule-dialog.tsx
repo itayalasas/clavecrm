@@ -23,6 +23,13 @@ import { Checkbox } from "@/components/ui/checkbox"; // Not used currently, but 
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const NO_SELECTION_VALUE = "__NONE__";
 
@@ -77,7 +84,7 @@ export function AddEditEscalationRuleDialog({
       actionTargetUserId: NO_SELECTION_VALUE,
       actionTargetGroupId: NO_SELECTION_VALUE,
       actionTargetQueueId: NO_SELECTION_VALUE,
-      actionTargetPriority: undefined, 
+      actionTargetPriority: undefined,
       actionValue: "",
       order: 0,
       isEnabled: true,
@@ -136,12 +143,12 @@ export function AddEditEscalationRuleDialog({
 
     const payload = {
         ...data,
-        conditionValue: parsedConditionValue,
-        actionTargetUserId: data.actionTargetUserId === NO_SELECTION_VALUE ? null : data.actionTargetUserId,
-        actionTargetGroupId: data.actionTargetGroupId === NO_SELECTION_VALUE ? null : data.actionTargetGroupId,
-        actionTargetQueueId: data.actionTargetQueueId === NO_SELECTION_VALUE ? null : data.actionTargetQueueId,
-        actionTargetPriority: data.actionTargetPriority || null,
-        actionValue: data.actionValue || null,
+        conditionValue: parsedConditionValue === "" ? undefined : parsedConditionValue,
+        actionTargetUserId: data.actionTargetUserId === NO_SELECTION_VALUE ? undefined : data.actionTargetUserId,
+        actionTargetGroupId: data.actionTargetGroupId === NO_SELECTION_VALUE ? undefined : data.actionTargetGroupId,
+        actionTargetQueueId: data.actionTargetQueueId === NO_SELECTION_VALUE ? undefined : data.actionTargetQueueId,
+        actionTargetPriority: data.actionTargetPriority || undefined,
+        actionValue: data.actionValue || undefined,
     };
     const success = await onSave(payload, ruleToEdit?.id);
     if (success) {
@@ -172,7 +179,7 @@ export function AddEditEscalationRuleDialog({
                 <FormField control={form.control} name="description" render={({ field }) => (
                   <FormItem><FormLabel>Descripción (Opcional)</FormLabel><FormControl><Textarea placeholder="Breve descripción de la regla" {...field} rows={2} /></FormControl><FormMessage /></FormItem>
                 )} />
-                
+
                 <FormField control={form.control} name="conditionType" render={({ field }) => (
                   <FormItem><FormLabel>Condición (Si...)</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
@@ -221,12 +228,12 @@ export function AddEditEscalationRuleDialog({
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un tipo de acción" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {ESCALATION_ACTION_TYPES.map(type => <SelectItem key={type.value} value={type.value} disabled={type.targetType === 'group' && type.label.includes('Futuro')}>{type.label}</SelectItem>)}
+                        {ESCALATION_ACTION_TYPES.map(type => <SelectItem key={type.value} value={type.value} disabled={type.targetType === 'group' && type.label.includes('(Futuro)')}>{type.label}</SelectItem>)}
                       </SelectContent>
                     </Select><FormMessage />
                   </FormItem>
                 )} />
-                
+
                 {currentActionConfig?.targetType === 'user' && (
                     <FormField control={form.control} name="actionTargetUserId" render={({ field }) => (
                         <FormItem><FormLabel>Usuario Objetivo</FormLabel>
