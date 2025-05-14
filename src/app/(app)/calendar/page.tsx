@@ -17,6 +17,8 @@ import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Tim
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export default function CalendarPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/calendar');
@@ -74,16 +76,13 @@ export default function CalendarPage() {
         getDocs(collection(db, "leads")),
         getDocs(collection(db, "contacts")),
         getAllUsers(),
-        // For now, using INITIAL_RESOURCES. Later, this could fetch from Firestore.
         Promise.resolve(INITIAL_RESOURCES) 
-        // getDocs(collection(db, "resources")) // Example for fetching from Firestore
       ]);
 
       setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
       setUsers(allUsers);
       setResources(resourcesData as Resource[]); 
-      // setResources(resourcesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Resource))); // If fetching from Firestore
       
     } catch (error) {
       console.error("Error al obtener datos de soporte (leads, contactos, usuarios, recursos):", error);
@@ -104,14 +103,14 @@ export default function CalendarPage() {
       return false;
     }
     
-    const isProcessing = isLoadingMeetings; // Use a general loading state for submission
-    if (isProcessing) return false; // Prevent multiple submissions
+    const isProcessing = isLoadingMeetings; 
+    if (isProcessing) return false; 
 
     const meetingIdToUse = existingMeetingId || doc(collection(db, "meetings")).id;
 
     try {
-      const startDateTime = new Date(meetingDataFromDialog.startTime);
-      const endDateTime = new Date(meetingDataFromDialog.endTime);
+      const startDateTime = parseISO(meetingDataFromDialog.startTime);
+      const endDateTime = parseISO(meetingDataFromDialog.endTime);
 
       const dataForFirestore: { [key: string]: any } = {
         title: meetingDataFromDialog.title,
@@ -121,9 +120,9 @@ export default function CalendarPage() {
         attendees: meetingDataFromDialog.attendees,
         location: meetingDataFromDialog.location !== undefined ? meetingDataFromDialog.location : null,
         conferenceLink: meetingDataFromDialog.conferenceLink !== undefined ? meetingDataFromDialog.conferenceLink : null,
-        relatedLeadId: meetingDataFromDialog.relatedLeadId === "" || meetingDataFromDialog.relatedLeadId === undefined ? null : meetingDataFromDialog.relatedLeadId,
+        relatedLeadId: meetingDataFromDialog.relatedLeadId || null,
         status: meetingDataFromDialog.status,
-        resourceId: meetingDataFromDialog.resourceId === "" || meetingDataFromDialog.resourceId === undefined ? null : meetingDataFromDialog.resourceId,
+        resourceId: meetingDataFromDialog.resourceId || null,
         updatedAt: Timestamp.now(),
       };
 
@@ -135,7 +134,6 @@ export default function CalendarPage() {
       await setDoc(doc(db, "meetings", meetingIdToUse), dataForFirestore, { merge: true });
 
       toast({ title: existingMeetingId ? "Reunión Actualizada" : "Reunión Creada", description: `La reunión "${meetingDataFromDialog.title}" ha sido guardada.` });
-      // fetchMeetings(); // No need to call with onSnapshot
       setIsMeetingDialogOpen(false);
       
       const oldMeeting = existingMeetingId ? meetings.find(m => m.id === existingMeetingId) : null;
@@ -165,7 +163,6 @@ export default function CalendarPage() {
     try {
       await deleteDoc(doc(db, "meetings", meetingId));
       toast({ title: "Reunión Eliminada", description: "La reunión ha sido eliminada." });
-      // fetchMeetings(); // No need to call with onSnapshot
     } catch (error) {
       console.error("Error eliminando reunión:", error);
       toast({ title: "Error al Eliminar Reunión", variant: "destructive" });
@@ -269,7 +266,7 @@ export default function CalendarPage() {
             <li>
               <strong>Envío de invitaciones (.ics) y recordatorios por correo electrónico:</strong> 
               <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Backend Pendiente</Badge>
-              <p className="text-xs pl-5">La funcionalidad para preparar y enviar invitaciones está lista en el frontend y parcialmente en el backend. Requiere completar la Cloud Function para generar archivos .ics y enviar correos (usando Nodemailer o similar).</p>
+              <p className="text-xs pl-5">La funcionalidad para preparar y enviar invitaciones está lista en el frontend. La Cloud Function `sendMeetingInvitation` está definida pero necesita pruebas exhaustivas y ajustes para asegurar la correcta generación de .ics y el envío de correos a todos los asistentes.</p>
             </li>
             <li>
               <strong>Vistas de calendario por semana y día completamente interactivas:</strong>
@@ -305,3 +302,4 @@ export default function CalendarPage() {
     </div>
   );
 }
+

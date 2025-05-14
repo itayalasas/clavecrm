@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useId } from "react";
@@ -203,7 +204,7 @@ export function AddEditMeetingDialog({
           <DialogTitle>{meetingToEdit ? "Editar Reunión" : "Nueva Reunión"}</DialogTitle>
           <DialogDescription>
             {meetingToEdit ? "Actualiza los detalles de esta reunión." : "Programa una nueva reunión y gestiona los asistentes."}
-             Las invitaciones (.ics) y recordatorios se enviarán automáticamente (simulado).
+             Las invitaciones (.ics) y recordatorios se enviarán automáticamente (procesado por backend).
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
