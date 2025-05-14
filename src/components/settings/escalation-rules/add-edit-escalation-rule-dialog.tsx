@@ -132,6 +132,7 @@ export function AddEditEscalationRuleDialog({
     setIsSubmitting(true);
     const conditionConfig = ESCALATION_CONDITION_TYPES.find(c => c.value === data.conditionType);
     let parsedConditionValue: string | number | undefined = data.conditionValue;
+
     if (conditionConfig?.requiresValue === 'number' && data.conditionValue) {
         parsedConditionValue = parseInt(data.conditionValue, 10);
         if (isNaN(parsedConditionValue)) {
@@ -143,14 +144,22 @@ export function AddEditEscalationRuleDialog({
 
     const payload = {
         ...data,
-        conditionValue: parsedConditionValue === "" ? undefined : parsedConditionValue,
-        actionTargetUserId: data.actionTargetUserId === NO_SELECTION_VALUE ? undefined : data.actionTargetUserId,
-        actionTargetGroupId: data.actionTargetGroupId === NO_SELECTION_VALUE ? undefined : data.actionTargetGroupId,
-        actionTargetQueueId: data.actionTargetQueueId === NO_SELECTION_VALUE ? undefined : data.actionTargetQueueId,
-        actionTargetPriority: data.actionTargetPriority || undefined,
-        actionValue: data.actionValue || undefined,
+        conditionValue: (parsedConditionValue === "" || parsedConditionValue === undefined) ? null : parsedConditionValue,
+        actionTargetUserId: (data.actionTargetUserId === NO_SELECTION_VALUE || !data.actionTargetUserId) ? null : data.actionTargetUserId,
+        actionTargetGroupId: (data.actionTargetGroupId === NO_SELECTION_VALUE || !data.actionTargetGroupId) ? null : data.actionTargetGroupId,
+        actionTargetQueueId: (data.actionTargetQueueId === NO_SELECTION_VALUE || !data.actionTargetQueueId) ? null : data.actionTargetQueueId,
+        actionTargetPriority: data.actionTargetPriority || null,
+        actionValue: data.actionValue || null,
     };
-    const success = await onSave(payload, ruleToEdit?.id);
+
+    // Explicitly remove undefined properties from payload before saving to Firestore
+    Object.keys(payload).forEach(key => {
+        if (payload[key as keyof typeof payload] === undefined) {
+            delete payload[key as keyof typeof payload];
+        }
+    });
+    
+    const success = await onSave(payload as Omit<EscalationRule, 'id' | 'createdAt' | 'updatedAt'>, ruleToEdit?.id);
     if (success) {
       onOpenChange(false);
     }
@@ -312,4 +321,3 @@ export function AddEditEscalationRuleDialog({
     </Dialog>
   );
 }
-
