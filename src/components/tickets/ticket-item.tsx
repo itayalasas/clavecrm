@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Ticket, Lead, User, TicketPriority, TicketStatus, Comment } from "@/lib/types";
+import type { Ticket, Lead, User, TicketPriority, TicketStatus, Comment, KnowledgeBaseArticle } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +19,13 @@ import { useToast } from "@/hooks/use-toast";
 import { db, storage } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { TICKET_STATUSES } from "@/lib/constants";
+import { TICKET_STATUSES, INITIAL_KB_ARTICLES } from "@/lib/constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label }
 from "@/components/ui/label";
 import { useAuth } from "@/contexts/auth-context";
 import { getUserInitials } from "@/lib/utils";
+import { SuggestKbArticleDialog } from "./suggest-kb-article-dialog";
 
 interface TicketItemProps {
   ticket: Ticket;
@@ -50,7 +51,7 @@ const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, l
                   <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.email}.png`} alt={user.name} data-ai-hint="user avatar"/>
                   <AvatarFallback>{getUserInitials(user.name)}</AvatarFallback>
                 </Avatar>
-                <span className="text-xs hidden sm:inline">{user.name}</span>
+                <span className="text-xs hidden sm:inline">{user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}</span>
             </div>
           </TooltipTrigger>
           <TooltipContent>
@@ -89,13 +90,15 @@ export function TicketItem({
   const [solutionUploadProgress, setSolutionUploadProgress] = useState(0);
   const [solutionStatus, setSolutionStatus] = useState<TicketStatus>(ticket.status);
   const [currentSolutionAttachments, setCurrentSolutionAttachments] = useState(ticket.solutionAttachments || []);
+  
+  const [isSuggestKbDialogOpen, setIsSuggestKbDialogOpen] = useState(false);
 
 
   const { toast } = useToast();
 
   const isCreator = currentUser?.id === ticket.reporterUserId;
   const isAssignee = currentUser?.id === ticket.assigneeUserId;
-  const canManageSolution = isAssignee && ticket.status !== 'Cerrado' && ticket.status !== 'Resuelto';
+  const canManageSolution = isAssignee && ticket.status !== 'Cerrado'; // Agent can update solution if ticket is not closed
   const canEditTicket = isCreator || currentUser?.role === 'admin' || currentUser?.role === 'supervisor';
 
   useEffect(() => {
@@ -193,6 +196,8 @@ export function TicketItem({
               uploadedAttachments.push({ name: commentFile.name, url: downloadURL });
               setIsUploadingCommentAttachment(false);
               setCommentFile(null);
+              const fileInput = (e.target as HTMLFormElement).querySelector('input[type="file"]') as HTMLInputElement | null;
+              if (fileInput) fileInput.value = "";
               resolve();
             }
           );
@@ -220,7 +225,10 @@ export function TicketItem({
       toast({ title: "Solución Vacía", description: "Para los estados 'Resuelto' o 'Cerrado', proporciona una descripción o adjunta un archivo para la solución.", variant:"destructive"});
       return;
     }
-    if (!currentUser || !isAssignee) return;
+    if (!currentUser || !isAssignee) {
+      toast({title: "Acción no permitida", description: "Solo el asignado puede registrar la solución.", variant: "destructive"});
+      return;
+    }
 
     let newSolutionAttachments = [...currentSolutionAttachments];
 
@@ -250,6 +258,8 @@ export function TicketItem({
               newSolutionAttachments.push({ name: solutionFile.name, url: downloadURL });
               setSolutionFile(null);
               setIsUploadingSolutionAttachment(false);
+              const fileInput = (e.target as HTMLFormElement).querySelector('input[type="file"]') as HTMLInputElement | null;
+              if (fileInput) fileInput.value = "";
               resolve();
             }
           );
@@ -260,7 +270,7 @@ export function TicketItem({
     }
 
     await onUpdateTicketSolution(ticket.id, solutionDescription, newSolutionAttachments, solutionStatus);
-    setCurrentSolutionAttachments(newSolutionAttachments);
+    setCurrentSolutionAttachments(newSolutionAttachments); // Update local state to reflect new attachments
   };
 
   const handleRemoveSolutionAttachment = async (attachmentUrlToRemove: string) => {
@@ -270,6 +280,7 @@ export function TicketItem({
         await deleteObject(fileRef);
         const updatedAttachments = currentSolutionAttachments.filter(att => att.url !== attachmentUrlToRemove);
         setCurrentSolutionAttachments(updatedAttachments);
+        // Optimistically update or call onUpdateTicketSolution if preferred to reflect change in DB immediately
         await onUpdateTicketSolution(ticket.id, solutionDescription, updatedAttachments, ticket.status);
         toast({ title: "Adjunto de solución eliminado" });
     } catch (error: any) {
@@ -278,17 +289,68 @@ export function TicketItem({
     }
   };
 
+  const handleSuggestArticle = (article: KnowledgeBaseArticle) => {
+    const suggestionText = `Revisando tu consulta, creo que este artículo de nuestra Base de Conocimiento podría ayudarte:
+
+**${article.title}**
+Puedes encontrar más detalles aquí: [Enlace al Artículo ${article.id}](${article.slug ? `/knowledge-base/${article.slug}` : `/kb/${article.id}`})
+
+Por favor, házmelo saber si esto resuelve tu problema o si necesitas más asistencia.`;
+    setNewCommentText(prev => prev ? `${prev}\n\n${suggestionText}` : suggestionText);
+    setIsSuggestKbDialogOpen(false);
+  };
+
 
   return (
     <Card id={`ticket-item-${ticket.id}`} className={`transition-all duration-200 shadow-sm hover:shadow-md ${ticket.status === 'Cerrado' ? 'bg-muted/50 opacity-80' : 'bg-card'}`}>
       <Accordion type="single" collapsible className="w-full" defaultValue={defaultOpen ? `ticket-${ticket.id}-details` : undefined}>
         <AccordionItem value={`ticket-${ticket.id}-details`} className="border-b-0">
-          <CardHeader className="p-4 pb-0">
-            <div className="flex items-start justify-between gap-2">
-                <AccordionTrigger className="p-0 hover:no-underline flex-grow text-left">
+             <div className="flex items-start gap-4 p-4">
+                
+                <div className="flex-grow">
+                  <AccordionTrigger className="p-0 hover:no-underline flex-grow text-left">
                     <CardTitle className={`text-lg ${ticket.status === 'Cerrado' ? 'line-through text-muted-foreground' : ''}`}>{ticket.title}</CardTitle>
-                </AccordionTrigger>
-              <div className="flex gap-1 shrink-0">
+                  </AccordionTrigger>
+                
+                {ticket.description && (
+                    <p className={`text-sm mt-1 ${ticket.status === 'Cerrado' ? 'text-muted-foreground/70' : "text-muted-foreground"}`}>
+                    {ticket.description.length > 150 ? `${ticket.description.substring(0, 147)}...` : ticket.description}
+                    </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
+                    {getStatusBadge(ticket.status)}
+                    {getPriorityBadge(ticket.priority)}
+                    {ticket.createdAt && isValid(parseISO(ticket.createdAt)) && (
+                        <span className="flex items-center gap-1">
+                            <CalendarDays className="h-3 w-3" /> Creado: {format(parseISO(ticket.createdAt), "PPp", { locale: es })}
+                        </span>
+                    )}
+                    {ticket.updatedAt && isValid(parseISO(ticket.updatedAt)) && (
+                        <span className="flex items-center gap-1">
+                            <CalendarDays className="h-3 w-3 text-blue-500" /> Actualizado: {format(parseISO(ticket.updatedAt), "PPp", { locale: es })}
+                        </span>
+                    )}
+                    {reporter && <UserAvatarNameTooltip user={reporter} label="Reportado por" />}
+                    {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" /> :
+                        <span className="flex items-center gap-1 p-1 px-1.5 bg-muted rounded-md text-xs">
+                            <UserIconLk className="h-3 w-3" /> Sin asignar
+                        </span>
+                    }
+                    {relatedLead && (
+                        <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="flex items-center gap-1 p-1 px-1.5 bg-secondary rounded-md hover:bg-secondary/80 cursor-default">
+                                <LinkIcon className="h-3 w-3 text-primary" /> {relatedLead.name}
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Enlazado a Lead: {relatedLead.name}</p></TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
+                </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
                 {canEditTicket && (
                   <Button variant="ghost" size="icon" onClick={() => onEdit(ticket)} className="h-8 w-8" aria-label="Editar ticket">
                     <Edit3 className="h-4 w-4" />
@@ -301,48 +363,15 @@ export function TicketItem({
                 )}
               </div>
             </div>
-            <CardDescription className="text-xs text-muted-foreground pt-1">
-              ID: {ticket.id}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 pt-2">
-            <p className={`text-sm mt-1 mb-3 ${ticket.status === 'Cerrado' ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
-              {ticket.description.length > 150 ? `${ticket.description.substring(0, 147)}...` : ticket.description}
-            </p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1.5" title="Estado">
-                {getStatusBadge(ticket.status)}
-              </div>
-              <div className="flex items-center gap-1.5" title="Prioridad">
-                {getPriorityBadge(ticket.priority)}
-              </div>
-              <div className="flex items-center gap-1.5" title="Creado el">
-                <CalendarDays className="h-4 w-4" />
-                <span>{format(parseISO(ticket.createdAt), "PP p", { locale: es })}</span>
-              </div>
-              {ticket.updatedAt && isValid(parseISO(ticket.updatedAt)) && (
-                <div className="flex items-center gap-1.5" title="Actualizado el">
-                  <CalendarDays className="h-4 w-4 text-blue-500" />
-                  <span>{format(parseISO(ticket.updatedAt), "PP p", { locale: es })}</span>
+          <AccordionContent className="px-4 pb-4 space-y-4">
+            {ticket.description && ticket.description.length > 150 && (
+                <div className="pt-2 border-t">
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-1">Descripción Completa:</h4>
+                    <p className="text-sm text-card-foreground whitespace-pre-wrap">{ticket.description}</p>
                 </div>
-              )}
-              <UserAvatarNameTooltip user={reporter} label="Reportado por" icon={UserIconLk} />
-              {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" icon={UserIconLk} /> :
-                <div className="flex items-center gap-1.5" title="Asignado a">
-                    <UserIconLk className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Sin asignar</span>
-                </div>
-              }
-              {relatedLead && (
-                <div className="flex items-center gap-1.5 col-span-full sm:col-span-1" title="Lead Relacionado">
-                  <LinkIcon className="h-4 w-4 text-primary" />
-                  <span className="truncate">Lead: {relatedLead.name}</span>
-                </div>
-              )}
-            </div>
-             {(ticket.slaId || ticket.queueId) && (
-                <div className="mt-2 pt-2 border-t grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            )}
+            {(ticket.slaId || ticket.queueId) && (
+                <div className="mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {ticket.slaId && (
                          <div className="flex items-center gap-1.5" title="SLA Aplicado">
                             <ShieldCheck className="h-4 w-4 text-green-600" /> SLA: {ticket.slaId}
@@ -353,14 +382,6 @@ export function TicketItem({
                             <LayersIcon className="h-4 w-4 text-indigo-600" /> Cola: {ticket.queueId}
                         </div>
                     )}
-                </div>
-            )}
-          </CardContent>
-          <AccordionContent className="px-4 pb-4 space-y-4">
-            {ticket.description && ticket.description.length > 150 && (
-                <div className="pt-2 border-t">
-                    <h4 className="text-sm font-semibold text-muted-foreground mb-1">Descripción Completa:</h4>
-                    <p className="text-sm text-card-foreground whitespace-pre-wrap">{ticket.description}</p>
                 </div>
             )}
             {ticket.attachments && ticket.attachments.length > 0 && (
@@ -486,13 +507,13 @@ export function TicketItem({
             )}
             
             <div className="pt-3 border-t space-y-2">
-                <Button variant="ghost" size="sm" className="text-xs" disabled>
-                    <Brain className="mr-1.5 h-3.5 w-3.5"/> Sugerir Artículo KB (Próx.)
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => setIsSuggestKbDialogOpen(true)} disabled={ticket.status === 'Cerrado'}>
+                    <Brain className="mr-1.5 h-3.5 w-3.5"/> Sugerir Artículo KB
                 </Button>
                  {(ticket.status === 'Resuelto' || ticket.status === 'Cerrado') && (
-                    <Button variant="ghost" size="sm" className="text-xs" disabled={!!ticket.satisfactionSurveySentAt}>
+                    <Button variant="ghost" size="sm" className="text-xs" disabled={!!ticket.satisfactionSurveySentAt || ticket.status === 'Cerrado'}>
                         <SmilePlus className="mr-1.5 h-3.5 w-3.5"/> 
-                        {ticket.satisfactionSurveySentAt ? "Encuesta Enviada" : "Enviar Encuesta de Satisfacción (Próx.)"}
+                        {ticket.satisfactionSurveySentAt ? "Encuesta Enviada" : "Enviar Encuesta (Auto)"}
                     </Button>
                 )}
                  {(ticket.status === 'Resuelto' || ticket.status === 'Cerrado') && ticket.satisfactionRating && (
@@ -546,13 +567,13 @@ export function TicketItem({
                   onChange={(e) => setNewCommentText(e.target.value)}
                   placeholder="Escribe un comentario..."
                   rows={2}
-                  disabled={isUploadingCommentAttachment}
+                  disabled={isUploadingCommentAttachment || ticket.status === 'Cerrado'}
                 />
                 <Input
                   type="file"
                   onChange={handleCommentFileChange}
                   className="text-xs"
-                  disabled={isUploadingCommentAttachment}
+                  disabled={isUploadingCommentAttachment || ticket.status === 'Cerrado'}
                   accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.zip,.rar"
                 />
                  {isUploadingCommentAttachment && (
@@ -564,7 +585,7 @@ export function TicketItem({
                 {commentFile && !isUploadingCommentAttachment && (
                   <p className="text-xs text-muted-foreground">Archivo para comentario: {commentFile.name}</p>
                 )}
-                <Button type="submit" size="sm" disabled={(!newCommentText.trim() && !commentFile) || isUploadingCommentAttachment}>
+                <Button type="submit" size="sm" disabled={(!newCommentText.trim() && !commentFile) || isUploadingCommentAttachment || ticket.status === 'Cerrado'}>
                   {isUploadingCommentAttachment ? <><UploadCloud className="mr-2 h-4 w-4 animate-pulse" /> Subiendo...</> : <><Send className="mr-2 h-4 w-4" /> Enviar Comentario</>}
                 </Button>
                  <p className="text-xs text-muted-foreground">Las notificaciones por correo para nuevos comentarios requieren configuración de backend (ej. Firebase Cloud Functions).</p>
@@ -573,6 +594,15 @@ export function TicketItem({
           </AccordionContent>
         </AccordionItem>
       </Accordion>
+      {isSuggestKbDialogOpen && (
+        <SuggestKbArticleDialog
+            isOpen={isSuggestKbDialogOpen}
+            onOpenChange={setIsSuggestKbDialogOpen}
+            ticket={ticket}
+            kbArticles={INITIAL_KB_ARTICLES} // Replace with actual fetched articles when KB is ready
+            onArticleSuggested={handleSuggestArticle}
+        />
+      )}
     </Card>
   );
 }

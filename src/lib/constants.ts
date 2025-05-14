@@ -1,5 +1,5 @@
 
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType } from './types';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType, KnowledgeBaseArticle } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
@@ -55,7 +55,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: LifeBuoy,
     subItems: [
       { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
-      { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain, disabled: true },
+      { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain },
       { href: '/live-chat', label: 'Chat en Vivo / Chatbots', icon: MessagesSquare },
       { href: '/satisfaction-surveys', label: 'Encuestas de Satisfacción', icon: Smile },
     ],
@@ -300,4 +300,40 @@ export const SURVEY_QUESTION_TYPES: { value: SurveyQuestionType; label: string }
   { value: 'OpenText', label: 'Pregunta Abierta (Texto)' },
   { value: 'MultipleChoice', label: 'Opción Múltiple' },
   { value: 'SingleChoice', label: 'Opción Única' },
+];
+
+export const INITIAL_KB_ARTICLES: KnowledgeBaseArticle[] = [
+  {
+    id: 'kb-1',
+    title: '¿Cómo restablecer mi contraseña?',
+    content: 'Para restablecer tu contraseña, ve a la página de inicio de sesión y haz clic en "Olvidé mi contraseña". Sigue las instrucciones...',
+    category: 'Cuentas',
+    tags: ['contraseña', 'resetear', 'acceso'],
+    createdAt: new Date().toISOString(),
+    authorId: 'system',
+    visibility: 'public',
+    slug: 'como-restablecer-contrasena'
+  },
+  {
+    id: 'kb-2',
+    title: 'Configuración inicial del sistema',
+    content: 'Guía paso a paso para configurar el CRM por primera vez. Cubre usuarios, roles, y configuraciones básicas...',
+    category: 'Configuración',
+    tags: ['guía', 'inicio', 'setup'],
+    createdAt: new Date().toISOString(),
+    authorId: 'system',
+    visibility: 'internal',
+    slug: 'configuracion-inicial'
+  },
+  {
+    id: 'kb-3',
+    title: 'Solución de problemas comunes de tickets',
+    content: 'Si un ticket no se actualiza, verifica que el asignado tenga los permisos correctos y que no haya reglas de escalado bloqueándolo...',
+    category: 'Tickets',
+    tags: ['solución', 'problemas', 'soporte'],
+    createdAt: new Date().toISOString(),
+    authorId: 'system',
+    visibility: 'internal',
+    slug: 'solucion-problemas-tickets'
+  }
 ];

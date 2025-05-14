@@ -619,3 +619,17 @@ export interface SurveyResponseAnswer {
   questionId: string;
   value: string | number | string[]; // string for OpenText/SingleChoice, number for Rating, string[] for MultipleChoice
 }
+
+// Knowledge Base
+export interface KnowledgeBaseArticle {
+  id: string;
+  title: string;
+  content: string; // Could be Markdown or HTML
+  category?: string;
+  tags?: string[];
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  authorId: string;
+  visibility: 'public' | 'internal'; // or more granular roles
+  slug?: string; // For URL generation
+}
