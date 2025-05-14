@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import type { SupportQueue, User, SLA } from "@/lib/types";
-import { NAV_ITEMS, INITIAL_SUPPORT_QUEUES, INITIAL_USERS, INITIAL_SLAS } from "@/lib/constants";
+import { NAV_ITEMS } from "@/lib/constants"; // Removed INITIAL_SUPPORT_QUEUES, INITIAL_USERS, INITIAL_SLAS
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Search, Filter, LayersIcon } from "lucide-react";
@@ -48,21 +49,34 @@ export default function SupportQueueManagementPage() {
     }
     setIsLoading(true);
     try {
-      // TODO: Replace with actual Firestore fetching when ready
-      // const qQueues = query(collection(db, "supportQueues"), orderBy("createdAt", "desc"));
-      // const queuesSnapshot = await getDocs(qQueues);
-      // const fetchedQueues = queuesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), createdAt: (docSnap.data().createdAt as Timestamp)?.toDate().toISOString() } as SupportQueue));
-      // setQueues(fetchedQueues);
-      setQueues(INITIAL_SUPPORT_QUEUES);
+      const qQueues = query(collection(db, "supportQueues"), orderBy("name", "asc")); // Order by name for consistency
+      const queuesSnapshot = await getDocs(qQueues);
+      const fetchedQueues = queuesSnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return { 
+          id: docSnap.id, 
+          ...data, 
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+        } as SupportQueue
+      });
+      setQueues(fetchedQueues);
       
-      // const allUsers = await getAllUsers();
-      setUsers(INITIAL_USERS);
+      const allUsers = await getAllUsers();
+      setUsers(allUsers);
 
-      // const qSlas = query(collection(db, "slas"), orderBy("name", "asc"));
-      // const slasSnapshot = await getDocs(qSlas);
-      // const fetchedSlas = slasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as SLA));
-      // setSlas(fetchedSlas);
-      setSlas(INITIAL_SLAS);
+      const qSlas = query(collection(db, "slas"), orderBy("name", "asc"));
+      const slasSnapshot = await getDocs(qSlas);
+      const fetchedSlas = slasSnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return { 
+          id: docSnap.id, 
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+        } as SLA
+      });
+      setSlas(fetchedSlas);
 
     } catch (error) {
       console.error("Error fetching support queues data:", error);
@@ -83,12 +97,26 @@ export default function SupportQueueManagementPage() {
     }
     try {
       const docId = id || doc(collection(db, "supportQueues")).id;
-      const dataToSave = {
+      const dataToSave: any = { // Use any to allow optional fields from form
         ...queueData,
         updatedAt: serverTimestamp(),
-        ...(id ? {} : { createdAt: serverTimestamp() }),
       };
-      // await setDoc(doc(db, "supportQueues", docId), dataToSave, { merge: true }); // Uncomment when Firestore is ready
+      if (!id) { // Only set createdAt if new
+        dataToSave.createdAt = serverTimestamp();
+      }
+
+      // Ensure optional fields that might be empty strings/NO_SELECTION_VALUE are converted to null or not sent if undefined
+      Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key as keyof typeof dataToSave] === undefined) {
+            delete dataToSave[key as keyof typeof dataToSave];
+        }
+        // Ensure specific fields that might use NO_SELECTION_VALUE are nulled if that's the case
+        if ((key === 'defaultAssigneeUserId' || key === 'defaultSlaId') && dataToSave[key as keyof typeof dataToSave] === "__NONE__") {
+            dataToSave[key as keyof typeof dataToSave] = null;
+        }
+      });
+      
+      await setDoc(doc(db, "supportQueues", docId), dataToSave, { merge: true }); 
       toast({ title: id ? "Cola Actualizada" : "Cola Creada", description: `La cola de soporte "${queueData.name}" ha sido guardada.` });
       fetchData(); // Refresh list
       return true;
@@ -106,7 +134,7 @@ export default function SupportQueueManagementPage() {
   const handleDeleteQueue = async () => {
     if (!queueToDelete || !currentUser) return;
     try {
-      // await deleteDoc(doc(db, "supportQueues", queueToDelete.id)); // Uncomment when Firestore is ready
+      await deleteDoc(doc(db, "supportQueues", queueToDelete.id)); 
       toast({ title: "Cola Eliminada", description: `La cola de soporte "${queueToDelete.name}" ha sido eliminada.` });
       fetchData(); // Refresh list
     } catch (error) {
@@ -224,3 +252,5 @@ export default function SupportQueueManagementPage() {
     </div>
   );
 }
+
+    

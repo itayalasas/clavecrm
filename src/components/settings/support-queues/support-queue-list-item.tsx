@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { SupportQueue, User, SLA } from "@/lib/types";
@@ -9,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { getUserInitials } from '@/lib/utils';
 
 
 interface SupportQueueListItemProps {
@@ -73,10 +75,10 @@ export function SupportQueueListItem({ queue, users, slas, onEdit, onDelete }: S
                     return (
                         <TooltipProvider key={userId}>
                             <Tooltip>
-                                <TooltipTrigger>
+                                <TooltipTrigger asChild>
                                     <Avatar className="h-5 w-5 border">
                                         <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.email}.png`} alt={user.name} data-ai-hint="user avatar" />
-                                        <AvatarFallback>{user.name.substring(0,1).toUpperCase()}</AvatarFallback>
+                                        <AvatarFallback>{getUserInitials(user.name)}</AvatarFallback>
                                     </Avatar>
                                 </TooltipTrigger>
                                 <TooltipContent><p>{user.name}</p></TooltipContent>
@@ -98,3 +100,5 @@ export function SupportQueueListItem({ queue, users, slas, onEdit, onDelete }: S
     </Card>
   );
 }
+
+    

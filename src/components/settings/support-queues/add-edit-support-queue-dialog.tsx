@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -31,7 +32,7 @@ const supportQueueFormSchema = z.object({
   description: z.string().optional(),
   defaultAssigneeUserId: z.string().optional(),
   defaultSlaId: z.string().optional(),
-  memberUserIds: z.array(z.string()).optional(),
+  memberUserIds: z.array(z.string()).optional().default([]), // Ensure default is an empty array
 });
 
 type SupportQueueFormValues = z.infer<typeof supportQueueFormSchema>;
@@ -94,8 +95,9 @@ export function AddEditSupportQueueDialog({
         ...data,
         defaultAssigneeUserId: data.defaultAssigneeUserId === NO_SELECTION_VALUE ? null : data.defaultAssigneeUserId,
         defaultSlaId: data.defaultSlaId === NO_SELECTION_VALUE ? null : data.defaultSlaId,
+        memberUserIds: data.memberUserIds || [], // Ensure it's an array, even if empty
     };
-    const success = await onSave(payload, queueToEdit?.id);
+    const success = await onSave(payload as Omit<SupportQueue, 'id' | 'createdAt' | 'updatedAt'>, queueToEdit?.id);
     if (success) {
       onOpenChange(false);
     }
@@ -131,8 +133,8 @@ export function AddEditSupportQueueDialog({
                     <Popover>
                         <PopoverTrigger asChild>
                             <FormControl>
-                            <Button variant="outline" role="combobox" className={cn("w-full justify-between", !field.value && "text-muted-foreground")}>
-                                {defaultAssigneeNameDisplay}
+                            <Button variant="outline" role="combobox" className={cn("w-full justify-between", (!field.value || field.value === NO_SELECTION_VALUE) && "text-muted-foreground")}>
+                                {field.value && field.value !== NO_SELECTION_VALUE ? sortedUsers.find(user => user.id === field.value)?.name : "Sin asignar por defecto"}
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                             </FormControl>
@@ -143,7 +145,7 @@ export function AddEditSupportQueueDialog({
                                 <CommandList>
                                 <CommandEmpty>Ningún usuario encontrado.</CommandEmpty>
                                 <CommandGroup>
-                                    <CommandItem value={NO_SELECTION_VALUE} onSelect={() => field.onChange(NO_SELECTION_VALUE)}>Sin asignar por defecto</CommandItem>
+                                    <CommandItem value={NO_SELECTION_VALUE} key={NO_SELECTION_VALUE} onSelect={() => field.onChange(NO_SELECTION_VALUE)}>Sin asignar por defecto</CommandItem>
                                     {sortedUsers.map((user) => (
                                     <CommandItem value={user.name} key={user.id} onSelect={() => field.onChange(user.id)}>
                                         <Check className={cn("mr-2 h-4 w-4", user.id === field.value ? "opacity-100" : "opacity-0")}/>
@@ -195,13 +197,14 @@ export function AddEditSupportQueueDialog({
                                                 {sortedUsers.map((user) => (
                                                     <CommandItem
                                                         key={user.id}
-                                                        value={user.name}
+                                                        value={user.name} // Use a unique value for CommandItem's value prop
                                                         onSelect={() => {
                                                             const currentMembers = field.value || [];
                                                             const newMembers = currentMembers.includes(user.id)
                                                                 ? currentMembers.filter((id) => id !== user.id)
                                                                 : [...currentMembers, user.id];
                                                             field.onChange(newMembers);
+                                                            // Do not close popover: setMemberUserPopoverOpen(false);
                                                         }}
                                                     >
                                                         <Check className={cn("mr-2 h-4 w-4", field.value?.includes(user.id) ? "opacity-100" : "opacity-0")} />
@@ -234,3 +237,5 @@ export function AddEditSupportQueueDialog({
     </Dialog>
   );
 }
+
+    
