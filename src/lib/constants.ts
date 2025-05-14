@@ -1,4 +1,5 @@
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule } from './types';
+
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType } from './types';
 import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
@@ -69,7 +70,7 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle },
       { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck },
       { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon },
-      { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon, disabled: true },
+      { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
     ],
     parentActiveIf: (pathname) => [
@@ -152,7 +153,7 @@ export const INITIAL_TASKS: Task[] = [
 
 
 export const TICKET_STATUSES: TicketStatus[] = ['Abierto', 'En Progreso', 'Resuelto', 'Cerrado'];
-export const TICKET_PRIORITIES: TicketPriority[] = ['Baja', 'Media', 'Alta'];
+export const TICKET_PRIORITIES: TicketPriority[] = ['Alta', 'Media', 'Baja'];
 
 export const QUOTE_STATUSES: QuoteStatus[] = ['Borrador', 'Enviada', 'Aceptada', 'Rechazada', 'Expirada'];
 export const ORDER_STATUSES: OrderStatus[] = ['Pendiente', 'Procesando', 'Enviado', 'Entregado', 'Cancelado'];
@@ -248,19 +249,35 @@ export const DOCUMENT_TEMPLATE_CATEGORIES: string[] = [
 
 // Initial placeholder data. In a real app, this would be fetched.
 export const INITIAL_SLAS: SLA[] = [
-    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], businessHoursId: 'biz-hours-std', isEnabled: true, createdAt: new Date().toISOString() },
+    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], isEnabled: true, createdAt: new Date().toISOString() },
     { id: 'sla-2', name: 'Urgente (4 Horas Resolución)', responseTimeTargetMinutes: 30, resolutionTimeTargetHours: 4, appliesToPriority: ['Alta'], businessHoursOnly: false, isEnabled: true, createdAt: new Date().toISOString() },
     { id: 'sla-3', name: 'VIP (2 Horas Respuesta)', responseTimeTargetMinutes: 120, resolutionTimeTargetHours: 24, appliesToQueues: ['q-vip'], isEnabled: true, createdAt: new Date().toISOString()},
 ];
 
 export const INITIAL_SUPPORT_QUEUES: SupportQueue[] = [
     { id: 'q-general', name: 'Soporte General', description: 'Cola por defecto para nuevos tickets.', memberUserIds:[], createdAt: new Date().toISOString() },
-    { id: 'q-tech', name: 'Soporte Técnico', description: 'Para problemas técnicos y de producto.', defaultAssigneeUserId: null, associatedSlaId: 'sla-2', memberUserIds:[], createdAt: new Date().toISOString() },
+    { id: 'q-tech', name: 'Soporte Técnico', description: 'Para problemas técnicos y de producto.', defaultSlaId: 'sla-2', memberUserIds:[], createdAt: new Date().toISOString() },
     { id: 'q-billing', name: 'Consultas de Facturación', description: 'Para temas relacionados con pagos y facturas.', memberUserIds:[], createdAt: new Date().toISOString() },
-    { id: 'q-vip', name: 'Soporte VIP', description: 'Atención prioritaria para clientes VIP.', defaultAssigneeUserId: null, associatedSlaId: 'sla-3', memberUserIds:[], createdAt: new Date().toISOString() },
+    { id: 'q-vip', name: 'Soporte VIP', description: 'Atención prioritaria para clientes VIP.', defaultSlaId: 'sla-3', memberUserIds:[], createdAt: new Date().toISOString() },
+];
+
+export const ESCALATION_CONDITION_TYPES: { value: EscalationConditionType, label: string, requiresValue?: 'number' | 'priority' | 'queue' }[] = [
+  { value: 'sla_response_breached', label: 'SLA de Respuesta Incumplido' },
+  { value: 'sla_resolution_breached', label: 'SLA de Resolución Incumplido' },
+  { value: 'ticket_idle_for_x_hours', label: 'Ticket Inactivo por X Horas', requiresValue: 'number' },
+  { value: 'ticket_priority_is', label: 'Prioridad del Ticket Es', requiresValue: 'priority'},
+  { value: 'ticket_in_queue', label: 'Ticket está en Cola', requiresValue: 'queue'},
+];
+
+export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: string, targetType?: 'user' | 'group' | 'queue' | 'priority' }[] = [
+  { value: 'notify_user', label: 'Notificar a Usuario', targetType: 'user' },
+  { value: 'notify_group', label: 'Notificar a Grupo (Próximamente)', targetType: 'group' },
+  { value: 'change_priority', label: 'Cambiar Prioridad del Ticket', targetType: 'priority' },
+  { value: 'assign_to_user', label: 'Asignar a Usuario', targetType: 'user' },
+  { value: 'assign_to_queue', label: 'Mover a Cola', targetType: 'queue' },
 ];
 
 export const INITIAL_ESCALATION_RULES: EscalationRule[] = [
-  { id: 'rule-1', name: 'Escalar ticket sin respuesta en 2h', conditionType: 'ticket_idle_for_x_hours', conditionValue: 2, actionType: 'notify_user', actionTargetId: 'supervisor-user-id', order: 1, isEnabled: true, createdAt: new Date().toISOString() },
-  { id: 'rule-2', name: 'Escalar ticket Alta prioridad sin resolver en 3h', conditionType: 'sla_resolution_breached', actionType: 'change_priority', actionTargetValue: 'Alta', order: 2, isEnabled: true, createdAt: new Date().toISOString(), description: 'Si un ticket de Alta prioridad no se resuelve según SLA, notificar al supervisor.'},
+  { id: 'rule-1', name: 'Escalar si ticket Alta prioridad no respondido en 1h', conditionType: 'sla_response_breached', actionType: 'notify_user', actionTargetUserId: 'user-2', order: 1, isEnabled: true, createdAt: new Date().toISOString(), description: 'Notifica al supervisor M. García si un ticket de Alta prioridad no tiene primera respuesta en 1 hora.' },
+  { id: 'rule-2', name: 'Reasignar ticket inactivo > 24h', conditionType: 'ticket_idle_for_x_hours', conditionValue: 24, actionType: 'assign_to_queue', actionTargetQueueId: 'q-general', order: 2, isEnabled: true, createdAt: new Date().toISOString(), description: 'Mueve a cola General si no hay actividad en 24h.'},
 ];

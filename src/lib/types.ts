@@ -506,7 +506,6 @@ export interface SLA {
   appliesToPriority?: TicketPriority[]; // e.g., only for 'Alta'
   appliesToQueues?: string[]; // Which queues this SLA applies to by default
   businessHoursId?: string; // Link to a business hours definition (future)
-  escalationRuleIds?: string[]; // Rules triggered on breach
   isEnabled: boolean;
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
@@ -523,7 +522,7 @@ export interface SupportQueue {
   updatedAt?: string; // ISO string
 }
 
-export type EscalationConditionType = 'sla_response_breached' | 'sla_resolution_breached' | 'ticket_idle_for_x_hours';
+export type EscalationConditionType = 'sla_response_breached' | 'sla_resolution_breached' | 'ticket_idle_for_x_hours' | 'ticket_priority_is' | 'ticket_in_queue';
 export type EscalationActionType = 'notify_user' | 'notify_group' | 'change_priority' | 'assign_to_user' | 'assign_to_queue';
 
 export interface EscalationRule {
@@ -531,10 +530,12 @@ export interface EscalationRule {
   name: string;
   description?: string;
   conditionType: EscalationConditionType;
-  conditionValue?: number; // e.g., hours for 'ticket_idle_for_x_hours'
+  conditionValue?: string | number; // e.g., hours for 'ticket_idle_for_x_hours', or priority value for 'ticket_priority_is', or queueId for 'ticket_in_queue'
   actionType: EscalationActionType;
-  actionTargetId?: string; // userId, groupId, queueId, or new priority value
-  actionTargetValue?: string; // e.g. the new priority level
+  actionTargetUserId?: string | null; // For notify_user, assign_to_user
+  actionTargetGroupId?: string | null; // For notify_group (placeholder)
+  actionTargetQueueId?: string | null; // For assign_to_queue
+  actionTargetPriority?: TicketPriority | null; // For change_priority
   order: number; // Execution order for rules
   isEnabled: boolean;
   createdAt: string; // ISO string
@@ -566,3 +567,4 @@ export interface SatisfactionSurvey {
     submittedAt: string;
     type: 'CSAT' | 'NPS';
 }
+```
