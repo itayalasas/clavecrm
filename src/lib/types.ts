@@ -51,6 +51,7 @@ export interface User {
   avatarUrl?: string | null; // Made nullable for consistency
   role: UserRole; // Updated to use UserRole
   groups?: string[]; // IDs of groups the user belongs to
+  createdAt?: string; // ISO string
 }
 
 export interface Comment {
@@ -86,6 +87,7 @@ export interface Ticket {
   satisfactionRating?: number; // e.g., 1-5
   satisfactionComment?: string;
   appliedEscalationRuleIds?: string[]; // IDs of escalation rules already applied to this ticket
+  comments?: Comment[]; // Embedded or fetched separately
 }
 
 // Sales Management Types
@@ -313,8 +315,7 @@ export interface ActivityLog {
   // Fields for system_audit
   entityType?: string; // e.g., 'Lead', 'User', 'EmailSettings', 'Document'
   entityId?: string;   // ID of the affected entity
-  actionDetails?: string; // Specific details of the system action, e.g., "User 'X' logged in" or "Field 'status' changed from 'Open' to 'Closed' on Ticket 'Y'"
-  // changedFields?: Record<string, { oldValue: any, newValue: any }>; // Optional, for detailed field-level changes (can be complex to implement)
+  // actionDetails?: string; // Specific details of the system action, (details field can be used)
 
   createdAt: string; // ISO string - when the log entry was created in Firestore
 }
@@ -443,14 +444,14 @@ export interface Meeting {
   attendees: MeetingAttendee[];
   location?: string; // Can be a physical address or "Videollamada"
   conferenceLink?: string; // For online meetings
-  relatedLeadId?: string;
+  relatedLeadId?: string | null;
   relatedTicketId?: string;
   createdByUserId: string;
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
   status: MeetingStatus;
   reminderSent?: boolean;
-  resourceId?: string; // ID of the selected resource
+  resourceId?: string | null; // ID of the selected resource
 }
 
 export interface MeetingAttendee {
@@ -472,10 +473,9 @@ export interface ChatSession {
   lastMessageAt: string; // ISO string: Timestamp of the last message, for sorting/activity
   initialMessage?: string; // The first message from the visitor
   currentPageUrl?: string; // The URL the visitor was on when they initiated chat
-  relatedLeadId?: string;
-  relatedContactId?: string;
-  relatedTicketId?: string;
-  // Other potential fields: browser, OS, IP (handle privacy carefully)
+  relatedLeadId?: string | null;
+  relatedContactId?: string | null;
+  relatedTicketId?: string | null;
 }
 
 export interface ChatMessage {
@@ -486,7 +486,6 @@ export interface ChatMessage {
   senderType: 'visitor' | 'agent';
   text: string; // Message content
   timestamp: string; // ISO string (serverTimestamp on write, converted on read)
-  // attachments?: { name: string, url: string }[]; // For future file sharing in chat
 }
 
 export interface CannedResponse {
@@ -495,7 +494,6 @@ export interface CannedResponse {
   text: string; // The full response text
   agentId?: string; // Optional: if this response is specific to an agent
   isGlobal?: boolean; // If true, available to all agents
-  // category?: string; // Optional: for organizing responses
 }
 
 // Advanced Ticket Management Types
@@ -530,8 +528,8 @@ export type EscalationConditionType =
   | 'ticket_idle_for_x_hours'
   | 'ticket_priority_is'
   | 'ticket_in_queue'
-  | 'ticket_sentiment_is_negative' // Added new type
-  | 'customer_response_pending_for_x_hours'; // Added new type
+  | 'ticket_sentiment_is_negative'
+  | 'customer_response_pending_for_x_hours';
 
 export type EscalationActionType =
   | 'notify_user'
@@ -539,8 +537,8 @@ export type EscalationActionType =
   | 'change_priority'
   | 'assign_to_user'
   | 'assign_to_queue'
-  | 'trigger_webhook' // Added new type
-  | 'create_follow_up_task'; // Added new type
+  | 'trigger_webhook'
+  | 'create_follow_up_task';
 
 
 export interface EscalationRule {
@@ -548,17 +546,17 @@ export interface EscalationRule {
   name: string;
   description?: string;
   conditionType: EscalationConditionType;
-  conditionValue?: string | number | null; // Updated to allow null
+  conditionValue?: string | number | null;
   actionType: EscalationActionType;
-  actionTargetUserId?: string | null; // For notify_user, assign_to_user, create_follow_up_task
-  actionTargetGroupId?: string | null; // For notify_group (placeholder)
-  actionTargetQueueId?: string | null; // For assign_to_queue
-  actionTargetPriority?: TicketPriority | null; // For change_priority
-  actionValue?: string | null; // For webhook URL, or task details (future)
-  order: number; // Execution order for rules
+  actionTargetUserId?: string | null;
+  actionTargetGroupId?: string | null;
+  actionTargetQueueId?: string | null;
+  actionTargetPriority?: TicketPriority | null;
+  actionValue?: string | null;
+  order: number;
   isEnabled: boolean;
-  createdAt: string; // ISO string
-  updatedAt?: string; // ISO string
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface EscalationLog {
@@ -582,7 +580,7 @@ export interface SurveyQuestion {
   id: string; // Unique within the survey template
   text: string;
   type: SurveyQuestionType;
-  options?: { label: string; value: string | number }[]; // For MultipleChoice, SingleChoice, RatingScale (e.g. 1-5 stars)
+  options?: { label: string; value: string | number }[];
   isRequired?: boolean;
   order: number;
 }
@@ -591,7 +589,7 @@ export interface SurveyTemplate {
   id: string;
   name: string;
   description?: string;
-  type: SurveyType; // CSAT, NPS, Custom
+  type: SurveyType;
   questions: SurveyQuestion[];
   thankYouMessage?: string;
   createdAt: string; // ISO string
@@ -602,19 +600,20 @@ export interface SurveyTemplate {
 
 export interface SurveyResponseAnswer {
   questionId: string;
-  value: string | number | string[]; // String for OpenText, Number for Rating, Array for MultipleChoice
+  value: string | number | string[];
 }
 
 export interface SurveyResponse {
   id: string;
   surveyTemplateId: string;
-  ticketId?: string; // If triggered by a ticket
-  contactId?: string; // Who responded (if known)
-  userId?: string; // If a logged-in user responded
+  ticketId?: string;
+  contactId?: string;
+  userId?: string;
   submittedAt: string; // ISO string
   answers: SurveyResponseAnswer[];
-  ipAddress?: string; // For analytics, handle privacy
-  userAgent?: string; // For analytics
-  csatScore?: number; // If CSAT type, overall score
-  npsScore?: number; // If NPS type, score
+  ipAddress?: string;
+  userAgent?: string;
+  csatScore?: number;
+  npsScore?: number;
+  status?: 'pending' | 'completed'; // Added status
 }
