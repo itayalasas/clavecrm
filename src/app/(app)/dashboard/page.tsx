@@ -1,33 +1,99 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { INITIAL_LEADS, INITIAL_PIPELINE_STAGES, INITIAL_TASKS } from "@/lib/constants";
+import { INITIAL_PIPELINE_STAGES } from "@/lib/constants"; // Keep stages static for now
 import type { Lead, PipelineStage, Task } from "@/lib/types";
-import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target, Activity, CalendarClock } from 'lucide-react';
+import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target, Activity, CalendarClock, AlertTriangle } from 'lucide-react';
 import { es } from 'date-fns/locale';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getMonth, isValid } from 'date-fns';
+import { format, parseISO, isValid, Timestamp as FirestoreTimestamp } from 'date-fns';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D'];
 const MONTH_NAMES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
+const parseDateField = (fieldValue: any): string | undefined => {
+    if (!fieldValue) return undefined;
+    if (fieldValue instanceof Timestamp) { // Firestore Timestamp
+        return fieldValue.toDate().toISOString();
+    }
+    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
+        return fieldValue;
+    }
+    // Handle cases where it might be a Firestore serverTimestamp pending write (less likely for reads)
+    // or an old format. For reads, it should typically be a Timestamp or already a string.
+    console.warn("Unexpected date format in parseDateField:", fieldValue);
+    return undefined; 
+};
+
+
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [stages, setStages] = useState<PipelineStage[]>(INITIAL_PIPELINE_STAGES);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoadingLeads, setIsLoadingLeads] = useState(true);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const { toast } = useToast();
+
+  const fetchLeadsAndTasks = useCallback(async () => {
+    setIsLoadingLeads(true);
+    setIsLoadingTasks(true);
+    try {
+      // Fetch Leads
+      const leadsCollectionRef = collection(db, "leads");
+      const leadsQuery = query(leadsCollectionRef, orderBy("createdAt", "desc"));
+      const leadsSnapshot = await getDocs(leadsQuery);
+      const fetchedLeads = leadsSnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: parseDateField(data.createdAt) || new Date().toISOString(),
+          expectedCloseDate: parseDateField(data.expectedCloseDate),
+        } as Lead;
+      });
+      setLeads(fetchedLeads);
+
+      // Fetch Tasks
+      const tasksCollectionRef = collection(db, "tasks");
+      const tasksQuery = query(tasksCollectionRef, orderBy("createdAt", "desc"));
+      const tasksSnapshot = await getDocs(tasksQuery);
+      const fetchedTasks = tasksSnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: parseDateField(data.createdAt) || new Date().toISOString(),
+          dueDate: parseDateField(data.dueDate),
+        } as Task;
+      });
+      setTasks(fetchedTasks);
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      toast({
+        title: "Error al Cargar Datos del Panel",
+        description: "No se pudieron cargar los datos para el panel de control.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingLeads(false);
+      setIsLoadingTasks(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
-    // In a real application, fetch this data from your backend/Firebase
-    setLeads(INITIAL_LEADS);
-    setStages(INITIAL_PIPELINE_STAGES);
-    setTasks(INITIAL_TASKS);
-  }, []);
+    fetchLeadsAndTasks();
+  }, [fetchLeadsAndTasks]);
 
   const totalLeads = leads.length;
   const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
-  const wonLeads = leads.filter(lead => lead.stageId === 'stage-5').length; // Assuming stage-5 is "Cerrado Ganado"
+  const wonLeads = leads.filter(lead => lead.stageId === 'stage-5').length; 
   const conversionRate = totalLeads > 0 ? (wonLeads / totalLeads) * 100 : 0;
   
   const openTasks = tasks.filter(task => !task.completed).length;
@@ -43,7 +109,6 @@ export default function DashboardPage() {
     { name: 'Tareas Completadas', value: completedTasks },
   ];
 
-  // Sales Forecast Data (weighted value by probability)
   const salesForecastData = MONTH_NAMES_ES.map((monthName, index) => {
     const forecastValue = leads.reduce((sum, lead) => {
       if (lead.expectedCloseDate && parseISO(lead.expectedCloseDate).getMonth() === index) {
@@ -54,15 +119,31 @@ export default function DashboardPage() {
     return { month: monthName, forecast: Math.round(forecastValue) };
   });
 
-  // Funnel Value by Expected Close Date
   const funnelValueByCloseDateData = leads
-    .filter(lead => lead.expectedCloseDate && lead.value && lead.stageId !== 'stage-5' && lead.stageId !== 'stage-6') // Exclude won/lost
+    .filter(lead => lead.expectedCloseDate && lead.value && lead.stageId !== 'stage-5' && lead.stageId !== 'stage-6')
     .sort((a, b) => new Date(a.expectedCloseDate!).getTime() - new Date(b.expectedCloseDate!).getTime())
     .map(lead => ({
       date: format(parseISO(lead.expectedCloseDate!), 'dd MMM', { locale: es }),
       value: lead.value,
       name: lead.name,
-    })).slice(0, 10); // Show top 10 earliest for brevity
+    })).slice(0, 10);
+
+  const isLoading = isLoadingLeads || isLoadingTasks;
+
+  if (isLoading && leads.length === 0 && tasks.length === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-[350px] w-full" />
+          <Skeleton className="h-[350px] w-full" />
+        </div>
+         <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,7 +154,7 @@ export default function DashboardPage() {
             <Users className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalLeads}</div>
+            {isLoadingLeads ? <Skeleton className="h-8 w-16 mb-1" /> : <div className="text-2xl font-bold">{totalLeads}</div>}
             <p className="text-xs text-muted-foreground">+10% desde el mes pasado</p>
           </CardContent>
         </Card>
@@ -83,7 +164,7 @@ export default function DashboardPage() {
             <DollarSign className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalValue.toLocaleString('es-ES')}</div>
+            {isLoadingLeads ? <Skeleton className="h-8 w-24 mb-1" /> : <div className="text-2xl font-bold">${totalValue.toLocaleString('es-ES')}</div>}
             <p className="text-xs text-muted-foreground">+5.2% desde el mes pasado</p>
           </CardContent>
         </Card>
@@ -93,7 +174,7 @@ export default function DashboardPage() {
             <Target className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{conversionRate.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</div>
+            {isLoadingLeads ? <Skeleton className="h-8 w-20 mb-1" /> : <div className="text-2xl font-bold">{conversionRate.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</div>}
             <p className="text-xs text-muted-foreground">+2.1% desde el mes pasado</p>
           </CardContent>
         </Card>
@@ -103,7 +184,7 @@ export default function DashboardPage() {
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{leads.filter(l => l.stageId !== 'stage-5' && l.stageId !== 'stage-6').length}</div>
+            {isLoadingLeads ? <Skeleton className="h-8 w-12 mb-1" /> : <div className="text-2xl font-bold">{leads.filter(l => l.stageId !== 'stage-5' && l.stageId !== 'stage-6').length}</div>}
             <p className="text-xs text-muted-foreground">Actualmente en el embudo</p>
           </CardContent>
         </Card>
@@ -116,6 +197,7 @@ export default function DashboardPage() {
             <CardDescription>Valor estimado de cierre por mes basado en probabilidad.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
+            {isLoadingLeads ? <Skeleton className="h-full w-full" /> : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={salesForecastData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -129,6 +211,7 @@ export default function DashboardPage() {
                 <Line type="monotone" dataKey="forecast" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -138,6 +221,7 @@ export default function DashboardPage() {
             <CardDescription>Distribución de leads en el embudo de ventas.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
+            {isLoadingLeads ? <Skeleton className="h-full w-full" /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={leadsByStageData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -150,6 +234,7 @@ export default function DashboardPage() {
                 <Bar dataKey="leads" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -161,6 +246,7 @@ export default function DashboardPage() {
             <CardDescription>Próximos cierres esperados (primeros 10).</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
+            {isLoadingLeads ? <Skeleton className="h-full w-full" /> : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={funnelValueByCloseDateData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
@@ -174,6 +260,7 @@ export default function DashboardPage() {
                 <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -183,6 +270,7 @@ export default function DashboardPage() {
             <CardDescription>Resumen de tareas abiertas y completadas.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
+          {isLoadingTasks ? <Skeleton className="h-full w-full" /> : (
             <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -206,6 +294,7 @@ export default function DashboardPage() {
               <Legend />
             </PieChart>
             </ResponsiveContainer>
+          )}
           </CardContent>
         </Card>
       </div>
@@ -216,33 +305,68 @@ export default function DashboardPage() {
           <CardDescription>Últimas actualizaciones e interacciones.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-3">
-            {tasks.slice(0,3).map(task => (
-               <li key={task.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
-                {task.completed ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <ListTodo className="h-5 w-5 text-amber-500" />}
-                <div>
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {task.relatedLeadId ? `Relacionado con ${leads.find(l => l.id === task.relatedLeadId)?.name || 'Cliente Potencial'}` : 'Tarea General'}
-                    {task.dueDate && isValid(parseISO(task.dueDate)) ? ` - Vence: ${format(parseISO(task.dueDate), 'P', { locale: es})}` : ''}
-                  </p>
-                </div>
-              </li>
-            ))}
-            {leads.slice(0,2).map(lead => (
-              <li key={lead.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
-                <Users className="h-5 w-5 text-primary" />
-                 <div>
-                  <p className="text-sm font-medium">Nuevo Lead: {lead.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Agregado el {format(parseISO(lead.createdAt), 'P', { locale: es})}
-                  </p>
-                </div>
-              </li>
-            ))}
+          {isLoadingLeads || isLoadingTasks ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {tasks.slice(0,3).map(task => (
+                 <li key={task.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
+                  {task.completed ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <ListTodo className="h-5 w-5 text-amber-500" />}
+                  <div>
+                    <p className="text-sm font-medium">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {task.relatedLeadId ? `Relacionado con ${leads.find(l => l.id === task.relatedLeadId)?.name || 'Cliente Potencial'}` : 'Tarea General'}
+                      {task.dueDate && isValid(parseISO(task.dueDate)) ? ` - Vence: ${format(parseISO(task.dueDate), 'P', { locale: es})}` : ''}
+                    </p>
+                  </div>
+                </li>
+              ))}
+              {leads.slice(0,2).map(lead => (
+                <li key={lead.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
+                  <Users className="h-5 w-5 text-primary" />
+                   <div>
+                    <p className="text-sm font-medium">Nuevo Lead: {lead.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Agregado el {isValid(parseISO(lead.createdAt)) ? format(parseISO(lead.createdAt), 'P', { locale: es}) : 'Fecha desconocida'}
+                    </p>
+                  </div>
+                </li>
+              ))}
+               {tasks.length === 0 && leads.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No hay actividad reciente para mostrar.</p>
+              )}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+       <Card className="mt-4 bg-amber-50 border-amber-200">
+        <CardHeader>
+          <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Notas de Desarrollo del Panel
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-amber-600">
+          <ul className="list-disc list-inside space-y-1">
+            <li>
+              <strong>Datos de Ejemplo:</strong> Las frases como "+X% desde el mes pasado" son actualmente estáticas. Se requiere lógica adicional para calcular estas métricas dinámicamente.
+            </li>
+            <li>
+              <strong>Personalización:</strong> El panel actual es genérico. En futuras versiones, se podría permitir la personalización de qué métricas y gráficos mostrar.
+            </li>
+             <li>
+              <strong>Profundidad de Datos:</strong> Actualmente se muestran los primeros N items en "Actividad Reciente" y "Valor del Embudo por Fecha de Cierre". Se podría añadir paginación o enlaces a vistas más detalladas.
+            </li>
           </ul>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+
