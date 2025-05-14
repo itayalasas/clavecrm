@@ -4,6 +4,7 @@ import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/auth-context';
+import React from 'react'; // Ensure React is imported for React.ReactNode
 
 const geistSans = Geist({
   variable: '--font-geist-sans',

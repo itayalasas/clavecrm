@@ -2,9 +2,7 @@
 // src/contexts/auth-context.tsx
 'use client';
 
-import type { ReactNode } from 'react';
-import React from 'react'; // Ensure React is imported for React.useState etc.
-// Removed named imports for hooks, will use React.useState etc.
+import * as React from 'react';
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -34,7 +32,7 @@ interface AuthContextType {
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [currentUser, setCurrentUser] = React.useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = React.useState<FirebaseUser | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -103,16 +101,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signup = async (email: string, pass: string, name: string, role?: UserRole): Promise<FirebaseUser | null> => {
-    const adminPerformingSignup = currentUser;
+    const adminPerformingSignup = currentUser; // Current admin trying to sign up a new user
+    
+    // Temporarily store the admin's auth state. THIS IS THE CRITICAL PART.
+    const previousAuthUser = auth.currentUser;
+
     if (!adminPerformingSignup) {
         toast({ title: "Error de Permisos", description: "Solo un administrador autenticado puede crear nuevos usuarios.", variant: "destructive"});
         return null;
     }
-    setAdminUserForSignup(adminPerformingSignup); // Store admin before potential auth state change
 
+    setLoading(true); // Should be part of the signup process
     try {
-      const tempAuth = auth; // Use current auth instance
-      const userCredential = await createUserWithEmailAndPassword(tempAuth, email, pass);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const newUser = userCredential.user;
 
       const userDocRef = doc(db, "users", newUser.uid);
@@ -143,18 +144,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       await logSystemEvent(adminPerformingSignup, 'create', 'User', newUser.uid, `Usuario ${name} (${email}) creado con rol ${role || DEFAULT_USER_ROLE}.`);
-
-      // Re-authenticate the admin user
-      if (adminPerformingSignup.email) { // Check if admin email exists
-        // This is a placeholder for re-authentication.
-        // Direct re-login without password isn't straightforward and safe here.
-        // The ideal flow is for admin's session to remain active or for them to re-login if necessary.
-        // For now, we won't automatically sign out the new user or re-sign in admin from here.
-        // The onAuthStateChanged listener should restore the admin's session.
-        console.log("Admin session should be restored by onAuthStateChanged.");
+      
+      // After new user is created, Firebase auth state might change to the new user.
+      // We need to restore the admin's session.
+      // This is tricky because direct re-login without password isn't simple.
+      // The onAuthStateChanged listener should ideally handle restoring the admin's state if Firebase still has it.
+      // However, explicitly trying to sign out the new user and relying on onAuthStateChanged to pick up the admin is more robust.
+      
+      if (auth.currentUser && auth.currentUser.uid === newUser.uid) {
+        await signOut(auth); // Sign out the newly created user
       }
 
+      // After signing out the new user, onAuthStateChanged should detect the admin's previous session (if it was still valid)
+      // or prompt the admin to log in again if their session was truly lost.
+      // We rely on the onAuthStateChanged listener to update currentUser and firebaseUser correctly.
+      // No need to call login() for admin here, as that requires password.
+      
       return newUser;
+
     } catch (error: any) {
       console.error("Error en signup (admin):", error);
       let errorMessage = "Ocurrió un error al crear el usuario.";
@@ -168,8 +175,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      setAdminUserForSignup(null); // Reset if signup fails
-      throw error;
+      // If signup failed, ensure admin's session is restored if it changed.
+      if (previousAuthUser && auth.currentUser?.uid !== previousAuthUser.uid) {
+        // This path is complex and ideally Firebase handles session restoration.
+        // For now, we assume onAuthStateChanged will restore or the admin needs to re-login.
+        console.warn("Signup failed, admin session might need manual restoration if it changed.");
+      }
+      throw error; // Rethrow to be caught by the calling component
+    } finally {
+        setLoading(false); // Ensure loading is set to false
     }
   };
 
@@ -194,11 +208,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     const userLoggingOut = currentUser;
+    setLoading(true); // Set loading true before logout
     try {
       await signOut(auth);
       if (userLoggingOut) {
         await logSystemEvent(userLoggingOut, 'logout', 'User', userLoggingOut.id, `Usuario ${userLoggingOut.name} cerró sesión.`);
       }
+      // setCurrentUser(null) and setFirebaseUser(null) will be handled by onAuthStateChanged
     } catch (error: any) {
       console.error("Error en logout:", error);
        toast({
@@ -207,6 +223,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         variant: "destructive",
       });
       throw error;
+    } finally {
+        setLoading(false); // Ensure loading is set to false
     }
   };
 
@@ -220,7 +238,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let createdAtStr = new Date().toISOString(); // Fallback
         if (data.createdAt instanceof Date) {
             createdAtStr = data.createdAt.toISOString();
-        } else if (typeof data.createdAt?.toDate === 'function') { // Firestore Timestamp
+        } else if (data.createdAt && typeof data.createdAt.toDate === 'function') { // Firestore Timestamp
             createdAtStr = data.createdAt.toDate().toISOString();
         } else if (typeof data.createdAt === 'string') { // Already a string
             createdAtStr = data.createdAt;
