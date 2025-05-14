@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { SLA } from "@/lib/types";
-import { NAV_ITEMS, INITIAL_SLAS, TICKET_PRIORITIES } from "@/lib/constants"; // Assuming TICKET_PRIORITIES is in constants
+import type { SLA, TicketPriority } from "@/lib/types";
+import { NAV_ITEMS, TICKET_PRIORITIES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Search, Filter, ShieldCheck } from "lucide-react";
@@ -24,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { isValid, parseISO } from "date-fns";
 
 export default function SlaManagementPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || []).find(item => item.href === '/settings/slas');
@@ -39,6 +41,22 @@ export default function SlaManagementPage() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
 
+  const parseTimestampField = (fieldValue: any): string => {
+    if (!fieldValue) return new Date(0).toISOString(); // Fallback for safety, though createdAt should always exist
+    if (fieldValue instanceof Timestamp) {
+        return fieldValue.toDate().toISOString();
+    }
+    if (typeof fieldValue === 'string') {
+        const parsedDate = parseISO(fieldValue);
+        if (isValid(parsedDate)) {
+            return parsedDate.toISOString();
+        }
+    }
+    console.warn("Formato de fecha inesperado en SLA:", fieldValue);
+    return new Date(0).toISOString();
+  };
+
+
   const fetchSlas = useCallback(async () => {
     if (!currentUser) {
       setIsLoading(false);
@@ -46,21 +64,18 @@ export default function SlaManagementPage() {
     }
     setIsLoading(true);
     try {
-      // TODO: Replace with actual Firestore fetching when ready
-      // For now, using INITIAL_SLAS
-      // const q = query(collection(db, "slas"), orderBy("createdAt", "desc"));
-      // const querySnapshot = await getDocs(q);
-      // const fetchedSlas = querySnapshot.docs.map(docSnap => {
-      //   const data = docSnap.data();
-      //   return {
-      //     id: docSnap.id,
-      //     ...data,
-      //     createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-      //     updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-      //   } as SLA;
-      // });
-      // setSlas(fetchedSlas);
-      setSlas(INITIAL_SLAS); // Using initial data
+      const q = query(collection(db, "slas"), orderBy("name", "asc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedSlas = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: parseTimestampField(data.createdAt),
+          updatedAt: data.updatedAt ? parseTimestampField(data.updatedAt) : undefined,
+        } as SLA;
+      });
+      setSlas(fetchedSlas);
     } catch (error) {
       console.error("Error fetching SLAs:", error);
       toast({ title: "Error al Cargar SLAs", description: String(error), variant: "destructive" });
@@ -78,20 +93,26 @@ export default function SlaManagementPage() {
       toast({ title: "Error de autenticación", variant: "destructive" });
       return false;
     }
+    setIsLoading(true); // Indicate saving process
     try {
       const docId = id || doc(collection(db, "slas")).id;
-      const dataToSave = {
+      const dataToSave: any = {
         ...slaData,
         updatedAt: serverTimestamp(),
-        ...(id ? {} : { createdAt: serverTimestamp() }),
       };
-      // await setDoc(doc(db, "slas", docId), dataToSave, { merge: true }); // Uncomment when Firestore is ready
+      if (!id) { // If it's a new SLA
+        dataToSave.createdAt = serverTimestamp();
+      }
+      
+      await setDoc(doc(db, "slas", docId), dataToSave, { merge: true });
       toast({ title: id ? "SLA Actualizado" : "SLA Creado", description: `El SLA "${slaData.name}" ha sido guardado.` });
       fetchSlas(); // Refresh list
+      setIsLoading(false);
       return true;
     } catch (error) {
       console.error("Error saving SLA:", error);
       toast({ title: "Error al Guardar SLA", variant: "destructive" });
+      setIsLoading(false);
       return false;
     }
   };
@@ -102,8 +123,9 @@ export default function SlaManagementPage() {
 
   const handleDeleteSla = async () => {
     if (!slaToDelete || !currentUser) return;
+    setIsLoading(true);
     try {
-      // await deleteDoc(doc(db, "slas", slaToDelete.id)); // Uncomment when Firestore is ready
+      await deleteDoc(doc(db, "slas", slaToDelete.id)); 
       toast({ title: "SLA Eliminado", description: `El SLA "${slaToDelete.name}" ha sido eliminado.` });
       fetchSlas(); // Refresh list
     } catch (error) {
@@ -111,6 +133,7 @@ export default function SlaManagementPage() {
       toast({ title: "Error al Eliminar SLA", variant: "destructive" });
     } finally {
       setSlaToDelete(null);
+      setIsLoading(false);
     }
   };
 
@@ -165,7 +188,7 @@ export default function SlaManagementPage() {
         </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && slas.length === 0 ? ( // Show skeleton only on initial load
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDesc } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescUi } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
@@ -161,19 +162,19 @@ export function AddEditSlaDialog({
                         />
                     ))}
                     </div>
-                     <FormDesc className="text-xs">Si no se selecciona ninguna, se aplicará a todas las prioridades por defecto.</FormDesc>
+                     <FormDescUi className="text-xs">Si no se selecciona ninguna, se aplicará a todas las prioridades por defecto.</FormDescUi>
                 </FormItem>
                 <FormField control={form.control} name="businessHoursOnly" render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                     <div className="space-y-0.5"><FormLabel>Solo Horario Laboral</FormLabel>
-                    <FormDesc className="text-xs">Si se activa, el SLA solo contará dentro del horario laboral configurado (funcionalidad futura).</FormDesc></div>
+                    <FormDescUi className="text-xs">Si se activa, el SLA solo contará dentro del horario laboral configurado (funcionalidad futura).</FormDescUi></div>
                     <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )} />
                  <FormField control={form.control} name="isEnabled" render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                     <div className="space-y-0.5"><FormLabel>Habilitado</FormLabel>
-                    <FormDesc className="text-xs">Desactiva para archivar este SLA sin eliminarlo.</FormDesc></div>
+                    <FormDescUi className="text-xs">Desactiva para archivar este SLA sin eliminarlo.</FormDescUi></div>
                     <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )} />
