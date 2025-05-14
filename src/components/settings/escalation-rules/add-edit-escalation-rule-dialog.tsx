@@ -19,7 +19,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDesc } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox"; // Not used currently, but might be useful later
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
@@ -37,6 +36,7 @@ const escalationRuleFormSchema = z.object({
   actionTargetGroupId: z.string().optional(), // Placeholder for future group selection
   actionTargetQueueId: z.string().optional(),
   actionTargetPriority: z.custom<TicketPriority>().optional(),
+  actionValue: z.string().optional(), // For actions like trigger_webhook that require a value (e.g. URL)
   order: z.coerce.number().int().min(0, "El orden debe ser un número positivo o cero."),
   isEnabled: z.boolean().default(true),
 });
@@ -77,7 +77,8 @@ export function AddEditEscalationRuleDialog({
       actionTargetUserId: NO_SELECTION_VALUE,
       actionTargetGroupId: NO_SELECTION_VALUE,
       actionTargetQueueId: NO_SELECTION_VALUE,
-      actionTargetPriority: undefined, // Or a default priority if applicable
+      actionTargetPriority: undefined, 
+      actionValue: "",
       order: 0,
       isEnabled: true,
     },
@@ -99,6 +100,7 @@ export function AddEditEscalationRuleDialog({
           actionTargetGroupId: ruleToEdit.actionTargetGroupId || NO_SELECTION_VALUE,
           actionTargetQueueId: ruleToEdit.actionTargetQueueId || NO_SELECTION_VALUE,
           actionTargetPriority: ruleToEdit.actionTargetPriority || undefined,
+          actionValue: ruleToEdit.actionValue || "",
           order: ruleToEdit.order,
           isEnabled: ruleToEdit.isEnabled,
         });
@@ -111,6 +113,7 @@ export function AddEditEscalationRuleDialog({
           actionTargetGroupId: NO_SELECTION_VALUE,
           actionTargetQueueId: NO_SELECTION_VALUE,
           actionTargetPriority: undefined,
+          actionValue: "",
           order: 0, isEnabled: true,
         });
       }
@@ -138,6 +141,7 @@ export function AddEditEscalationRuleDialog({
         actionTargetGroupId: data.actionTargetGroupId === NO_SELECTION_VALUE ? null : data.actionTargetGroupId,
         actionTargetQueueId: data.actionTargetQueueId === NO_SELECTION_VALUE ? null : data.actionTargetQueueId,
         actionTargetPriority: data.actionTargetPriority || null,
+        actionValue: data.actionValue || null,
     };
     const success = await onSave(payload, ruleToEdit?.id);
     if (success) {
@@ -187,8 +191,10 @@ export function AddEditEscalationRuleDialog({
                         {currentConditionConfig.requiresValue === 'number' && "Valor (ej. horas)"}
                         {currentConditionConfig.requiresValue === 'priority' && "Prioridad Específica"}
                         {currentConditionConfig.requiresValue === 'queue' && "Cola Específica"}
+                        {currentConditionConfig.requiresValue === 'string' && "Valor (texto)"}
                       </FormLabel>
                       {currentConditionConfig.requiresValue === 'number' && <FormControl><Input type="number" placeholder="Ej. 2 (para horas)" {...field} /></FormControl>}
+                      {currentConditionConfig.requiresValue === 'string' && <FormControl><Input type="text" placeholder="Valor de la condición" {...field} /></FormControl>}
                       {currentConditionConfig.requiresValue === 'priority' && (
                         <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_VALUE}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Selecciona una prioridad" /></SelectTrigger></FormControl>
@@ -215,7 +221,7 @@ export function AddEditEscalationRuleDialog({
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un tipo de acción" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {ESCALATION_ACTION_TYPES.map(type => <SelectItem key={type.value} value={type.value} disabled={type.targetType === 'group'}>{type.label}</SelectItem>)}
+                        {ESCALATION_ACTION_TYPES.map(type => <SelectItem key={type.value} value={type.value} disabled={type.targetType === 'group' && type.label.includes('Futuro')}>{type.label}</SelectItem>)}
                       </SelectContent>
                     </Select><FormMessage />
                   </FormItem>
@@ -259,6 +265,14 @@ export function AddEditEscalationRuleDialog({
                         </FormItem>
                     )} />
                 )}
+                {currentActionConfig?.requiresValue === 'string' && (
+                    <FormField control={form.control} name="actionValue" render={({ field }) => (
+                        <FormItem><FormLabel>Valor de Acción (ej. URL para Webhook)</FormLabel>
+                        <FormControl><Input type="text" placeholder="Ej. https://mi.webhook.com/..." {...field} /></FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )} />
+                )}
 
 
                 <FormField control={form.control} name="order" render={({ field }) => (
@@ -291,3 +305,4 @@ export function AddEditEscalationRuleDialog({
     </Dialog>
   );
 }
+

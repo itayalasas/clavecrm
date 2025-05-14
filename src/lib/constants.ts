@@ -139,16 +139,16 @@ export const INITIAL_LEADS: Lead[] = [
 ];
 
 export const INITIAL_USERS: User[] = [
-  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100', role: 'user' },
-  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100', role: 'supervisor' },
-  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100', role: 'admin' },
+  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100', role: 'user', createdAt: new Date().toISOString() },
+  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100', role: 'supervisor', createdAt: new Date().toISOString() },
+  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100', role: 'admin', createdAt: new Date().toISOString() },
 ];
 
 export const INITIAL_TASKS: Task[] = [
-  { id: 'task-1', title: 'Llamada de seguimiento con Acme Corp', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-1', createdAt: new Date().toISOString(), priority: 'high', reporterUserId: 'user-1', assigneeUserId: 'user-2' },
-  { id: 'task-2', title: 'Preparar demo para Beta Solutions', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-2', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
-  { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'low', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), reporterUserId: 'user-2' },
-  { id: 'task-4', title: 'Investigar competidores de Delta Services', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-4', createdAt: new Date().toISOString(), priority: 'medium', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
+  { id: 'task-1', title: 'Llamada de seguimiento con Acme Corp', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-1', createdAt: new Date().toISOString(), priority: 'Alta', reporterUserId: 'user-1', assigneeUserId: 'user-2' },
+  { id: 'task-2', title: 'Preparar demo para Beta Solutions', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-2', createdAt: new Date().toISOString(), priority: 'Media', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
+  { id: 'task-3', title: 'Enviar borrador del informe Q1 a los interesados', completed: true, createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), priority: 'Baja', dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), reporterUserId: 'user-2' },
+  { id: 'task-4', title: 'Investigar competidores de Delta Services', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), completed: false, relatedLeadId: 'lead-4', createdAt: new Date().toISOString(), priority: 'Media', reporterUserId: 'user-1', assigneeUserId: 'user-1' },
 ];
 
 
@@ -226,7 +226,7 @@ export const MEETING_STATUSES: MeetingStatus[] = ['Programada', 'Confirmada', 'C
 
 export const ACTIVITY_LOG_USER_ACTIVITY_TYPES: readonly ActivityLogUserActivityType[] = ['Llamada', 'Reunión', 'Correo Enviado', 'Correo Recibido', 'Nota', 'Visita'] as const;
 
-export const AUDIT_ACTION_TYPES: readonly ActivityLogSystemAuditActionType[] = ['create', 'update', 'delete', 'login', 'logout', 'config_change', 'access_change', 'file_upload' | 'file_download'] as const;
+export const AUDIT_ACTION_TYPES: readonly ActivityLogSystemAuditActionType[] = ['create', 'update', 'delete', 'login', 'logout', 'config_change', 'access_change', 'file_upload' , 'file_download'] as const;
 
 
 export const INITIAL_RESOURCES: Resource[] = [
@@ -261,23 +261,28 @@ export const INITIAL_SUPPORT_QUEUES: SupportQueue[] = [
     { id: 'q-vip', name: 'Soporte VIP', description: 'Atención prioritaria para clientes VIP.', defaultSlaId: 'sla-3', memberUserIds:[], createdAt: new Date().toISOString() },
 ];
 
-export const ESCALATION_CONDITION_TYPES: { value: EscalationConditionType, label: string, requiresValue?: 'number' | 'priority' | 'queue' }[] = [
+export const ESCALATION_CONDITION_TYPES: { value: EscalationConditionType, label: string, requiresValue?: 'number' | 'priority' | 'queue' | 'string' }[] = [
   { value: 'sla_response_breached', label: 'SLA de Respuesta Incumplido' },
   { value: 'sla_resolution_breached', label: 'SLA de Resolución Incumplido' },
   { value: 'ticket_idle_for_x_hours', label: 'Ticket Inactivo por X Horas', requiresValue: 'number' },
   { value: 'ticket_priority_is', label: 'Prioridad del Ticket Es', requiresValue: 'priority'},
   { value: 'ticket_in_queue', label: 'Ticket está en Cola', requiresValue: 'queue'},
+  { value: 'ticket_sentiment_is_negative', label: 'Sentimiento del Ticket es Negativo (IA - Futuro)', requiresValue: undefined },
+  { value: 'customer_response_pending_for_x_hours', label: 'Respuesta Cliente Pendiente por X Horas (Futuro)', requiresValue: 'number' },
 ];
 
-export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: string, targetType?: 'user' | 'group' | 'queue' | 'priority' }[] = [
+export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: string, targetType?: 'user' | 'group' | 'queue' | 'priority', requiresValue?: 'string' }[] = [
   { value: 'notify_user', label: 'Notificar a Usuario', targetType: 'user' },
-  { value: 'notify_group', label: 'Notificar a Grupo (Próximamente)', targetType: 'group' },
+  { value: 'notify_group', label: 'Notificar a Grupo (Futuro)', targetType: 'group' },
   { value: 'change_priority', label: 'Cambiar Prioridad del Ticket', targetType: 'priority' },
   { value: 'assign_to_user', label: 'Asignar a Usuario', targetType: 'user' },
   { value: 'assign_to_queue', label: 'Mover a Cola', targetType: 'queue' },
+  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string' }, // For URL
+  { value: 'create_follow_up_task', label: 'Crear Tarea de Seguimiento (Futuro)', targetType: 'user' },
 ];
 
 export const INITIAL_ESCALATION_RULES: EscalationRule[] = [
   { id: 'rule-1', name: 'Escalar si ticket Alta prioridad no respondido en 1h', conditionType: 'sla_response_breached', actionType: 'notify_user', actionTargetUserId: 'user-2', order: 1, isEnabled: true, createdAt: new Date().toISOString(), description: 'Notifica al supervisor M. García si un ticket de Alta prioridad no tiene primera respuesta en 1 hora.' },
   { id: 'rule-2', name: 'Reasignar ticket inactivo > 24h', conditionType: 'ticket_idle_for_x_hours', conditionValue: 24, actionType: 'assign_to_queue', actionTargetQueueId: 'q-general', order: 2, isEnabled: true, createdAt: new Date().toISOString(), description: 'Mueve a cola General si no hay actividad en 24h.'},
 ];
+

@@ -34,7 +34,7 @@ export default function EscalationRulesPage() {
 
   const [rules, setRules] = useState<EscalationRule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [slas, setSlas] = useState<SLA[]>([]); // Needed for some condition/action targets if we implement them
+  const [slas, setSlas] = useState<SLA[]>([]); 
   const [supportQueues, setSupportQueues] = useState<SupportQueue[]>([]);
 
 
@@ -208,22 +208,22 @@ export default function EscalationRulesPage() {
             <li>
               <strong>Definición de Reglas (UI):</strong>
               <Badge variant="default" className="ml-2 bg-green-500 hover:bg-green-600 text-white">Implementado</Badge>
-              <p className="text-xs pl-5">Puedes crear, editar y eliminar reglas de escalado con condiciones y acciones básicas.</p>
+              <p className="text-xs pl-5">Puedes crear, editar y eliminar reglas de escalado con condiciones y acciones básicas. Se han añadido ejemplos de condiciones/acciones avanzadas (marcadas como Futuro) para ilustrar las posibilidades.</p>
             </li>
             <li>
               <strong>Ejecución de Reglas (Backend):</strong>
-              <Badge variant="default" className="ml-2 bg-orange-500 hover:bg-orange-600 text-black">En Desarrollo (Requiere Cloud Functions)</Badge>
-              <p className="text-xs pl-5">La lógica para monitorear tickets y ejecutar estas reglas automáticamente (Cloud Functions) está pendiente de implementación en el backend.</p>
+              <Badge variant="default" className="ml-2 bg-orange-500 hover:bg-orange-600 text-black">Pendiente (Requiere Cloud Functions)</Badge>
+              <p className="text-xs pl-5">La lógica para monitorear tickets y ejecutar estas reglas automáticamente (Cloud Functions) aún no está implementada en el backend.</p>
             </li>
              <li>
               <strong>Logs de Escalados:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-              <p className="text-xs pl-5">Un registro de cuándo se activaron las reglas y qué acciones se tomaron se añadirá cuando el backend esté listo.</p>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado (Backend)</Badge>
+              <p className="text-xs pl-5">Un registro de cuándo se activaron las reglas y qué acciones se tomaron se añadirá cuando el backend esté listo para generar estos logs.</p>
             </li>
              <li>
               <strong>Tipos de Condiciones/Acciones Avanzadas:</strong>
-              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
-              <p className="text-xs pl-5">Se podrán añadir más tipos de condiciones y acciones complejas en el futuro.</p>
+              <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado (UI/Backend)</Badge>
+              <p className="text-xs pl-5">Se han añadido algunos ejemplos en la UI. La implementación completa de condiciones/acciones más complejas (ej. análisis de sentimiento, webhooks) requerirá desarrollo tanto en UI como en backend.</p>
             </li>
           </ul>
         </CardContent>
