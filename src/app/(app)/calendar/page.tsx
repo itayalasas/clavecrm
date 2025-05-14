@@ -98,7 +98,7 @@ export default function CalendarPage() {
     fetchSupportData();
   }, [fetchSupportData]);
 
-  const handleSaveMeeting = async (meetingDataFromDialog: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, existingMeetingId?: string) => {
+  const handleSendGridEvents = async (meetingDataFromDialog: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, existingMeetingId?: string) => {
     if (!currentUser) {
       toast({ title: "Error", description: "Debe iniciar sesión para guardar reuniones.", variant: "destructive" });
       return false;
@@ -110,11 +110,14 @@ export default function CalendarPage() {
     const meetingIdToUse = existingMeetingId || doc(collection(db, "meetings")).id;
 
     try {
+      const startDateTime = new Date(meetingDataFromDialog.startTime);
+      const endDateTime = new Date(meetingDataFromDialog.endTime);
+
       const dataForFirestore: { [key: string]: any } = {
         title: meetingDataFromDialog.title,
         description: meetingDataFromDialog.description !== undefined ? meetingDataFromDialog.description : null,
-        startTime: Timestamp.fromDate(new Date(meetingDataFromDialog.startTime)),
-        endTime: Timestamp.fromDate(new Date(meetingDataFromDialog.endTime)),
+        startTime: Timestamp.fromDate(startDateTime),
+        endTime: Timestamp.fromDate(endDateTime),
         attendees: meetingDataFromDialog.attendees,
         location: meetingDataFromDialog.location !== undefined ? meetingDataFromDialog.location : null,
         conferenceLink: meetingDataFromDialog.conferenceLink !== undefined ? meetingDataFromDialog.conferenceLink : null,
@@ -135,13 +138,16 @@ export default function CalendarPage() {
       // fetchMeetings(); // No need to call with onSnapshot
       setIsMeetingDialogOpen(false);
       
-      const oldAttendees = existingMeetingId ? meetings.find(m => m.id === existingMeetingId)?.attendees : [];
-      const attendeesChanged = JSON.stringify(oldAttendees) !== JSON.stringify(meetingDataFromDialog.attendees);
+      const oldMeeting = existingMeetingId ? meetings.find(m => m.id === existingMeetingId) : null;
+      const attendeesChanged = JSON.stringify(oldMeeting?.attendees?.map(a => ({email:a.email, status:a.status})).sort()) !== JSON.stringify(meetingDataFromDialog.attendees.map(a => ({email:a.email, status:a.status})).sort());
+      const timeChanged = oldMeeting ? (oldMeeting.startTime !== startDateTime.toISOString() || oldMeeting.endTime !== endDateTime.toISOString()) : false;
+      const statusChanged = oldMeeting ? oldMeeting.status !== meetingDataFromDialog.status : false;
 
-      if (!existingMeetingId || attendeesChanged) {
+
+      if (!existingMeetingId || attendeesChanged || timeChanged || (statusChanged && (meetingDataFromDialog.status === 'Confirmada' || meetingDataFromDialog.status === 'Cancelada'))) {
         toast({ 
-          title: "Procesando Invitaciones...", 
-          description: "Las invitaciones se enviarán a los asistentes en segundo plano.", 
+          title: "Procesando Invitaciones/Actualizaciones...", 
+          description: "Las invitaciones o actualizaciones se enviarán a los asistentes en segundo plano por la Cloud Function.", 
           variant: "default", 
           duration: 7000 
         });
@@ -289,7 +295,7 @@ export default function CalendarPage() {
         isOpen={isMeetingDialogOpen}
         onOpenChange={setIsMeetingDialogOpen}
         meetingToEdit={editingMeeting}
-        onSave={handleSaveMeeting}
+        onSave={handleSendGridEvents}
         leads={leads}
         contacts={contacts}
         users={users}
@@ -299,5 +305,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
-    
