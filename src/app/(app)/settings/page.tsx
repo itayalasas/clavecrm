@@ -12,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NAV_ITEMS } from "@/lib/constants";
 import type { EmailSettings, SMTPSecurity } from "@/lib/types";
-import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle } from "lucide-react";
+import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle, Smartphone } from "lucide-react"; // Added Smartphone
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, type Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/auth-context"; 
-import Link from "next/link"; 
+import { useAuth } from "@/contexts/auth-context";
+import Link from "next/link";
 
 const emailSettingsSchema = z.object({
   smtpHost: z.string().min(1, "El host SMTP es obligatorio."),
@@ -33,17 +33,28 @@ const emailSettingsSchema = z.object({
 
 type EmailSettingsFormValues = z.infer<typeof emailSettingsSchema>;
 
+// Placeholder for WhatsApp settings - actual fields depend on provider/API
+const whatsAppApiSettingsSchema = z.object({
+  phoneNumberId: z.string().optional(),
+  wabaId: z.string().optional(), // WhatsApp Business Account ID
+  accessToken: z.string().optional(),
+  webhookVerifyToken: z.string().optional(),
+});
+type WhatsAppApiSettingsFormValues = z.infer<typeof whatsAppApiSettingsSchema>;
+
+
 export default function SettingsPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.label === 'Configuración General');
   const PageIcon = navItem?.icon || Settings;
   const { toast } = useToast();
-  const { currentUser } = useAuth(); 
+  const { currentUser } = useAuth();
 
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isSavingWhatsApp, setIsSavingWhatsApp] = useState(false);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
 
-  const form = useForm<EmailSettingsFormValues>({
+  const emailForm = useForm<EmailSettingsFormValues>({
     resolver: zodResolver(emailSettingsSchema),
     defaultValues: {
       smtpHost: "",
@@ -57,70 +68,115 @@ export default function SettingsPage() {
     },
   });
 
+  const whatsAppForm = useForm<WhatsAppApiSettingsFormValues>({
+    resolver: zodResolver(whatsAppApiSettingsSchema),
+    defaultValues: {
+      phoneNumberId: "",
+      wabaId: "",
+      accessToken: "",
+      webhookVerifyToken: "",
+    },
+  });
+
+
   useEffect(() => {
-    const fetchEmailSettings = async () => {
+    const fetchAllSettings = async () => {
       setIsLoadingSettings(true);
       try {
-        const settingsDocRef = doc(db, "settings", "emailConfiguration");
-        const docSnap = await getDoc(settingsDocRef);
-        if (docSnap.exists()) {
-          form.reset(docSnap.data() as EmailSettingsFormValues);
+        const emailSettingsDocRef = doc(db, "settings", "emailConfiguration");
+        const emailDocSnap = await getDoc(emailSettingsDocRef);
+        if (emailDocSnap.exists()) {
+          emailForm.reset(emailDocSnap.data() as EmailSettingsFormValues);
         }
+
+        const whatsAppSettingsDocRef = doc(db, "settings", "whatsAppApiConfiguration");
+        const whatsAppDocSnap = await getDoc(whatsAppSettingsDocRef);
+        if (whatsAppDocSnap.exists()) {
+          whatsAppForm.reset(whatsAppDocSnap.data() as WhatsAppApiSettingsFormValues);
+        }
+
       } catch (error) {
-        console.error("Error al cargar configuración de correo:", error);
+        console.error("Error al cargar configuración:", error);
         toast({
           title: "Error al Cargar Configuración",
-          description: "No se pudo cargar la configuración de correo electrónico.",
+          description: "No se pudo cargar la configuración.",
           variant: "destructive",
         });
       } finally {
         setIsLoadingSettings(false);
       }
     };
-    fetchEmailSettings();
-  }, [form, toast]);
+    fetchAllSettings();
+  }, [emailForm, whatsAppForm, toast]);
 
   const logSystemEvent = async (action: string, entityType: string, entityId: string, details: string) => {
     if (!currentUser) return;
     try {
       await addDoc(collection(db, "activityLogs"), {
         category: 'system_audit' as const,
-        type: 'config_change' as const, 
+        type: 'config_change' as const,
         subject: action,
         details: `${details} por ${currentUser.name}.`,
-        timestamp: serverTimestamp(), 
+        timestamp: serverTimestamp(),
         loggedByUserId: currentUser.id,
         loggedByUserName: currentUser.name,
         entityType: entityType,
         entityId: entityId,
-        createdAt: serverTimestamp(), 
+        createdAt: serverTimestamp(),
       });
     } catch (error) {
       console.error("Error logging system event:", error);
     }
   };
 
-  const onSubmitHandler: SubmitHandler<EmailSettingsFormValues> = async (data) => {
-    setIsSaving(true);
+  const onEmailSubmitHandler: SubmitHandler<EmailSettingsFormValues> = async (data) => {
+    setIsSavingEmail(true);
     try {
       const settingsDocRef = doc(db, "settings", "emailConfiguration");
       await setDoc(settingsDocRef, data, { merge: true });
       toast({
-        title: "Configuración Guardada",
+        title: "Configuración de Correo Guardada",
         description: "La configuración de correo electrónico ha sido actualizada.",
       });
       await logSystemEvent("Actualización Config. Email", "EmailSettings", "emailConfiguration", "Se actualizaron los ajustes de correo electrónico.");
     } catch (error) {
       console.error("Error al guardar configuración de correo:", error);
       toast({
-        title: "Error al Guardar",
+        title: "Error al Guardar Correo",
         description: "No se pudo guardar la configuración de correo electrónico.",
         variant: "destructive",
       });
     } finally {
-      setIsSaving(false);
+      setIsSavingEmail(false);
     }
   };
+
+  const onWhatsAppSubmitHandler: SubmitHandler<WhatsAppApiSettingsFormValues> = async (data) => {
+    setIsSavingWhatsApp(true);
+    try {
+      const settingsDocRef = doc(db, "settings", "whatsAppApiConfiguration");
+      // Filter out empty strings, save them as null or don't save them if not provided
+      const dataToSave = Object.fromEntries(
+        Object.entries(data).map(([key, value]) => [key, value === "" ? null : value])
+      );
+      await setDoc(settingsDocRef, dataToSave, { merge: true });
+      toast({
+        title: "Configuración de WhatsApp Guardada",
+        description: "La configuración de la API de WhatsApp ha sido actualizada.",
+      });
+      await logSystemEvent("Actualización Config. WhatsApp", "WhatsAppApiSettings", "whatsAppApiConfiguration", "Se actualizaron los ajustes de la API de WhatsApp.");
+    } catch (error) {
+      console.error("Error al guardar configuración de WhatsApp:", error);
+      toast({
+        title: "Error al Guardar WhatsApp",
+        description: "No se pudo guardar la configuración de WhatsApp.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingWhatsApp(false);
+    }
+  };
+
 
   return (
     <div className="flex flex-col gap-8">
@@ -157,11 +213,11 @@ export default function SettingsPage() {
                 <Skeleton className="h-10 w-1/2" />
               </div>
             ) : (
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmitHandler)} className="space-y-6">
+              <Form {...emailForm}>
+                <form onSubmit={emailForm.handleSubmit(onEmailSubmitHandler)} className="space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
-                      control={form.control}
+                      control={emailForm.control}
                       name="smtpHost"
                       render={({ field }) => (
                         <FormItem>
@@ -172,7 +228,7 @@ export default function SettingsPage() {
                       )}
                     />
                     <FormField
-                      control={form.control}
+                      control={emailForm.control}
                       name="smtpPort"
                       render={({ field }) => (
                         <FormItem>
@@ -185,7 +241,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
-                        control={form.control}
+                        control={emailForm.control}
                         name="smtpUser"
                         render={({ field }) => (
                             <FormItem>
@@ -196,7 +252,7 @@ export default function SettingsPage() {
                         )}
                         />
                     <FormField
-                        control={form.control}
+                        control={emailForm.control}
                         name="smtpPass"
                         render={({ field }) => (
                             <FormItem>
@@ -219,7 +275,7 @@ export default function SettingsPage() {
                         />
                   </div>
                   <FormField
-                    control={form.control}
+                    control={emailForm.control}
                     name="smtpSecurity"
                     render={({ field }) => (
                       <FormItem>
@@ -238,7 +294,7 @@ export default function SettingsPage() {
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
-                      control={form.control}
+                      control={emailForm.control}
                       name="defaultSenderEmail"
                       render={({ field }) => (
                         <FormItem>
@@ -249,7 +305,7 @@ export default function SettingsPage() {
                       )}
                     />
                      <FormField
-                      control={form.control}
+                      control={emailForm.control}
                       name="defaultSenderName"
                       render={({ field }) => (
                         <FormItem>
@@ -261,7 +317,7 @@ export default function SettingsPage() {
                     />
                   </div>
                    <FormField
-                      control={form.control}
+                      control={emailForm.control}
                       name="sendRateLimit"
                       render={({ field }) => (
                         <FormItem>
@@ -280,8 +336,8 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <CardFooter className="p-0 pt-4">
-                    <Button type="submit" disabled={isSaving}>
-                      {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button type="submit" disabled={isSavingEmail}>
+                      {isSavingEmail && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       Guardar Configuración de Correo
                     </Button>
                   </CardFooter>
@@ -294,14 +350,102 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              Seguridad y Auditoría
+              <Smartphone className="h-5 w-5 text-primary" /> {/* Changed icon */}
+              Integración WhatsApp Business API
             </CardTitle>
             <CardDescription>
-              Configuraciones de seguridad y acceso al historial de auditoría del sistema.
+              Configura la conexión con la API de WhatsApp Business. (Funcionalidad avanzada, requiere aprobación de Meta).
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
+            {isLoadingSettings ? (
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+            <Form {...whatsAppForm}>
+                <form onSubmit={whatsAppForm.handleSubmit(onWhatsAppSubmitHandler)} className="space-y-6">
+                    <FormField
+                        control={whatsAppForm.control}
+                        name="phoneNumberId"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>ID del Número de Teléfono</FormLabel>
+                            <FormControl><Input placeholder="Ej. 123456789012345" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormDescriptionUI>Obtenido desde tu panel de desarrollador de Meta.</FormDescriptionUI>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={whatsAppForm.control}
+                        name="wabaId"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>ID de Cuenta de WhatsApp Business (WABA ID)</FormLabel>
+                            <FormControl><Input placeholder="Ej. 987654321098765" {...field} value={field.value ?? ""} /></FormControl>
+                             <FormDescriptionUI>ID de tu cuenta empresarial en Meta.</FormDescriptionUI>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={whatsAppForm.control}
+                        name="accessToken"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Token de Acceso Permanente</FormLabel>
+                            <FormControl><Input type="password" placeholder="Pega tu token de acceso aquí" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormDescriptionUI>Token generado para tu aplicación en Meta. Mantén esto seguro.</FormDescriptionUI>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                     <FormField
+                        control={whatsAppForm.control}
+                        name="webhookVerifyToken"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Token de Verificación del Webhook</FormLabel>
+                            <FormControl><Input placeholder="Crea un token seguro" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormDescriptionUI>Token que usarás para verificar las solicitudes a tu webhook desde Meta.</FormDescriptionUI>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                     <div className="p-3 border border-amber-500 bg-amber-50 rounded-md text-amber-700 text-sm flex items-start gap-2">
+                        <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                        <div>
+                        <span className="font-semibold">Importante:</span> Esta configuración es solo para almacenar tus credenciales. La lógica para enviar/recibir mensajes de WhatsApp y configurar el webhook debe implementarse en tu backend (Firebase Cloud Functions). Los tokens deben manejarse con extrema seguridad.
+                        </div>
+                    </div>
+                    <CardFooter className="p-0 pt-4">
+                        <Button type="submit" disabled={isSavingWhatsApp}>
+                        {isSavingWhatsApp && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Guardar Configuración de WhatsApp
+                        </Button>
+                    </CardFooter>
+                </form>
+            </Form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mt-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            Seguridad y Auditoría
+          </CardTitle>
+          <CardDescription>
+            Configuraciones de seguridad y acceso al historial de auditoría del sistema.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            {/* ... (contenido existente de Seguridad y Auditoría) ... */}
             <div>
               <h4 className="font-semibold">Autenticación Multifactor (MFA)</h4>
               <p className="text-sm text-muted-foreground">
@@ -334,9 +478,8 @@ export default function SettingsPage() {
                 </Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+        </CardContent>
+      </Card>
 
       <Card className="mt-2">
         <CardHeader>
@@ -350,7 +493,7 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-3">
-            Define cómo se verá y funcionará el chat en tu página. El widget real y su funcionalidad de chat en tiempo real están en desarrollo.
+            Define cómo se verá y funcionará el chat en tu página.
           </p>
           <Button asChild>
             <Link href="/settings/live-chat-widget">
@@ -365,28 +508,19 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Share2Icon className="h-5 w-5 text-primary" />
-              Integraciones
+              Otras Integraciones
             </CardTitle>
             <CardDescription>
-              Conecta tu CRM con otras herramientas y plataformas.
+              Conecta tu CRM con otras herramientas y plataformas (Facebook, Instagram, LinkedIn, etc.).
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
                <p className="text-sm text-muted-foreground">
-                Aquí podrás autorizar el acceso a:
+                Aquí podrás autorizar el acceso a otras plataformas.
               </p>
-              <ul className="list-disc list-inside text-muted-foreground space-y-1 text-sm pl-4">
-                <li>Facebook (Páginas y Mensajería)</li>
-                <li>Instagram (Perfiles de Empresa y Mensajería)</li>
-                <li>LinkedIn (Perfiles y Páginas de Empresa)</li>
-                <li>Twitter / X (Perfiles y Menciones)</li>
-              </ul>
               <p className="mt-4 text-sm font-semibold text-accent-foreground">
-                Integraciones en desarrollo. Próximamente podrás vincular tus cuentas.
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                La disponibilidad y el alcance de las integraciones dependerán de las APIs proporcionadas por cada plataforma.
+                Otras integraciones están en desarrollo.
               </p>
             </div>
           </CardContent>

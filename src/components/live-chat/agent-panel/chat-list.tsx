@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict, isValid, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { UserCheck, MessagesSquare, History, UserCircle } from "lucide-react";
+import { UserCheck, MessagesSquare, History, UserCircle, Smartphone } from "lucide-react"; // Added Smartphone
 
 interface ChatListProps {
   sessions: ChatSession[];
@@ -25,6 +25,10 @@ const VisitorDisplayIcon = ({ session }: { session: ChatSession }) => {
   const isGenericVisitor = !session.visitorName || session.visitorName.startsWith("Visitante ");
   const visitorName = session.visitorName || "Visitante";
   const fallbackInitial = (visitorName).substring(0,1).toUpperCase();
+
+  if (session.channel === 'whatsapp') {
+    return <Smartphone className="h-9 w-9 mr-3 text-green-500" />;
+  }
 
   if (isGenericVisitor) {
     return <UserCircle className="h-9 w-9 mr-3 text-muted-foreground" />;
@@ -74,13 +78,12 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
     <ScrollArea className="h-full">
       <div className="space-y-1">
         {sessions.map((session) => {
-          let timeAgo = "hace un momento"; 
+          let timeAgo = "hace un momento";
           if (session.lastMessageAt) {
             const lastMessageDate = parseISO(session.lastMessageAt);
             if (isValid(lastMessageDate)) {
               timeAgo = formatDistanceToNowStrict(lastMessageDate, { addSuffix: true, locale: es });
             } else {
-               // Fallback for potentially non-ISO string dates, though ideally dates should be consistently ISO
               const attemptParseWithNewDate = new Date(session.lastMessageAt);
               if (isValid(attemptParseWithNewDate)) {
                 timeAgo = formatDistanceToNowStrict(attemptParseWithNewDate, { addSuffix: true, locale: es });
@@ -96,7 +99,7 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
               variant="ghost"
               className={cn(
                 "w-full h-auto justify-start p-2 text-left",
-                selectedSessionId === session.id && "bg-primary/10 text-primary" // Changed selected style
+                selectedSessionId === session.id && "bg-primary/10 text-primary hover:bg-primary/15"
               )}
               onClick={() => onSelectSession(session)}
             >
@@ -120,6 +123,7 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
                   ) : (
                       <Badge variant="outline" className="text-xs">{session.status}</Badge>
                   )}
+                  {session.channel === 'whatsapp' && <Smartphone className="h-3 w-3 text-green-500 ml-1" />}
                   {session.initialMessage && <p className="text-xs text-muted-foreground truncate">{session.initialMessage.substring(0,25)}...</p>}
                 </div>
               </div>
@@ -130,4 +134,3 @@ export function ChatList({ sessions, selectedSessionId, onSelectSession, isLoadi
     </ScrollArea>
   );
 }
-

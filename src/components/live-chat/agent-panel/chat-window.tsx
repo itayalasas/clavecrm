@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, XCircle, Users, Info, MessageSquareDashed, Loader2, LogOut, ArrowLeftCircle, History, UserCircle } from "lucide-react";
+import { Send, XCircle, Users, Info, MessageSquareDashed, Loader2, LogOut, ArrowLeftCircle, History, UserCircle, Smartphone } from "lucide-react"; // Added Smartphone
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { VisitorInfo } from "./visitor-info";
@@ -22,8 +22,8 @@ interface ChatWindowProps {
   onSendMessage: (text: string) => void;
   isLoadingMessages: boolean;
   currentAgent: { id: string; name: string; avatarUrl?: string | null } | null;
-  onCloseChat: () => void; 
-  isReadOnly?: boolean; 
+  onCloseChat: () => void;
+  isReadOnly?: boolean;
   onOpenCreateLeadDialog: (session: ChatSession) => void;
   onOpenCreateTicketDialog: (session: ChatSession) => void;
   onOpenLinkEntityDialog: (session: ChatSession) => void;
@@ -35,6 +35,10 @@ const ChatWindowHeaderIcon = ({ session }: { session: ChatSession }) => {
   const isGenericVisitor = !session.visitorName || session.visitorName.startsWith("Visitante ");
   const visitorName = session.visitorName || "Visitante";
   const fallbackInitial = (visitorName).substring(0,1).toUpperCase();
+
+  if (session.channel === 'whatsapp') {
+    return <Smartphone className="h-8 w-8 text-green-500" />;
+  }
 
   if (isGenericVisitor) {
     return <UserCircle className="h-8 w-8 text-muted-foreground" />;
@@ -87,14 +91,14 @@ export function ChatWindow({
     if (senderType === 'visitor') return session.visitorName || `Visitante ${senderId.substring(0,6)}`;
     if (senderType === 'agent') {
         if (currentAgent?.id === senderId) return currentAgent.name;
-        return "Agente"; 
+        return "Agente";
     }
     return "Desconocido";
   };
 
   const getAgentAvatar = (senderId: string) => {
     if (currentAgent?.id === senderId && currentAgent.avatarUrl) return currentAgent.avatarUrl;
-    return `https://avatar.vercel.sh/${getSenderName(senderId, 'agent')}.png?size=32`; 
+    return `https://avatar.vercel.sh/${getSenderName(senderId, 'agent')}.png?size=32`;
   };
    const getAgentAvatarFallback = (senderId: string) => {
     const name = getSenderName(senderId, 'agent');
@@ -108,9 +112,10 @@ export function ChatWindow({
         <div className="flex items-center gap-2 min-w-0">
           <ChatWindowHeaderIcon session={session} />
           <div className="min-w-0">
-            <CardTitle className="text-base truncate">
+            <CardTitle className="text-base truncate flex items-center">
               {isReadOnly && <History className="inline h-4 w-4 mr-1.5 text-muted-foreground" />}
               {session.visitorName || `Visitante ${session.visitorId.substring(0,6)}`}
+              {session.channel === 'whatsapp' && <Smartphone className="h-4 w-4 text-green-500 ml-1.5" title="Chat de WhatsApp" />}
             </CardTitle>
             <p className="text-xs text-muted-foreground">
                 {isReadOnly ? `Transcripción - ID: ${session.id.substring(0,8)}...` : `ID Sesión: ${session.id.substring(0,8)}...`}
@@ -157,20 +162,22 @@ export function ChatWindow({
                 )}
               >
                 {msg.senderType === 'visitor' && (
-                  <UserCircle className="h-7 w-7 self-start text-muted-foreground" />
+                   session.channel === 'whatsapp' ?
+                   <Smartphone className="h-7 w-7 self-start text-green-500" /> :
+                   <UserCircle className="h-7 w-7 self-start text-muted-foreground" />
                 )}
                 <div
                   className={cn(
                     "p-2.5 rounded-lg max-w-[70%] text-sm shadow-sm",
                     msg.senderType === 'agent'
-                      ? "bg-secondary text-secondary-foreground rounded-br-none" 
+                      ? "bg-primary/90 text-primary-foreground rounded-br-none"
                       : "bg-background border rounded-bl-none"
                   )}
                 >
                   <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                    <p className={cn(
                        "text-xs mt-1",
-                       msg.senderType === 'agent' ? "text-muted-foreground/80 text-right" : "text-muted-foreground/80 text-left" 
+                       msg.senderType === 'agent' ? "text-primary-foreground/80 text-right" : "text-muted-foreground/80 text-left"
                     )}>
                         {format(new Date(msg.timestamp), "p", { locale: es })}
                     </p>
@@ -187,8 +194,8 @@ export function ChatWindow({
         </ScrollArea>
         
         <div className="hidden lg:flex lg:flex-col lg:col-span-1 border-l p-3 space-y-3 bg-background">
-            <VisitorInfo 
-                session={session} 
+            <VisitorInfo
+                session={session}
                 onOpenCreateLeadDialog={onOpenCreateLeadDialog}
                 onOpenCreateTicketDialog={onOpenCreateTicketDialog}
                 onOpenLinkEntityDialog={onOpenLinkEntityDialog}
@@ -220,4 +227,3 @@ export function ChatWindow({
     </div>
   );
 }
-

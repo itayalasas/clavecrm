@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS } from "@/lib/constants";
-import { MessagesSquare, Settings2, MessageCircle, Bot, Users, History, PlusCircle, Zap, LayoutGrid } from "lucide-react";
+import { MessagesSquare, Settings2, MessageCircle, Bot, Users, History, PlusCircle, Zap, LayoutGrid, Smartphone } from "lucide-react"; // Added Smartphone
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -63,7 +63,7 @@ export default function LiveChatPage() {
                 {navItem?.label || "Chat en Vivo y Chatbots"}
               </CardTitle>
               <CardDescription>
-                Integra un widget de chat en vivo en tu sitio web y/o configura chatbots para respuestas rápidas y captura de leads.
+                Integra un widget de chat en vivo en tu sitio web y/o configura chatbots para respuestas rápidas y captura de leads. La integración con WhatsApp Business API también se gestiona aquí.
               </CardDescription>
             </div>
             <Button asChild>
@@ -76,7 +76,9 @@ export default function LiveChatPage() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground py-4">
-            Utiliza la sección de <Link href="/settings/live-chat-widget" className="text-primary hover:underline">Configuración del Widget de Chat en Vivo</Link> para personalizar y obtener el script de incrustación para tu sitio web. El panel de agente te permite gestionar las conversaciones.
+            Utiliza la sección de <Link href="/settings/live-chat-widget" className="text-primary hover:underline">Configuración del Widget de Chat en Vivo</Link> para personalizar y obtener el script de incrustación para tu sitio web.
+            La configuración de <Link href="/settings" className="text-primary hover:underline">WhatsApp Business API</Link> se encuentra en los Ajustes Generales.
+            El panel de agente te permite gestionar las conversaciones.
           </p>
         </CardContent>
       </Card>
@@ -98,26 +100,27 @@ export default function LiveChatPage() {
           Users,
           "Interfaz para que los agentes atiendan las conversaciones de chat en tiempo real.",
           [
-            "Visualización de chats entrantes y en curso (Básico Implementado).",
+            "Visualización de chats entrantes y en curso (Implementado).",
             "Asignación de chats pendientes (Implementado).",
             "Envío y recepción de mensajes en tiempo real (Implementado).",
             "Cierre de chats (Implementado).",
+            "Indicador de canal (Web/WhatsApp) (Placeholder).",
             "Respuestas predefinidas (canned responses) (En desarrollo).",
             "Información básica del visitante (si está disponible) (En desarrollo).",
             "Transferencia de chat entre agentes (Planeado).",
           ],
-          "parcial" 
+          "parcial"
         )}
         {renderFeatureCard(
           "Historial de Conversaciones",
           History,
           "Almacena y revisa todas las conversaciones de chat.",
           [
-            "Listado de conversaciones pasadas (Básico implementado).",
+            "Listado de conversaciones pasadas (Implementado).",
+            "Visualización de mensajes de chats cerrados (Implementado).",
             "Búsqueda y filtrado de historial (En desarrollo).",
-            "Transcripciones de chat (Planeado).",
           ],
-          "parcial" 
+          "parcial"
         )}
         {renderFeatureCard(
           "Integración CRM",
@@ -128,7 +131,19 @@ export default function LiveChatPage() {
             "Creación de tickets de soporte desde un chat (Implementado).",
             "Vinculación de chats a perfiles de clientes existentes (Implementado).",
           ],
-          "implementado" 
+          "implementado"
+        )}
+        {renderFeatureCard(
+          "Integración con WhatsApp Business API",
+          Smartphone, // Changed icon
+          "Conecta con la API de WhatsApp Business para gestionar mensajes desde el CRM.",
+          [
+            "Configuración de credenciales API (Placeholder en Ajustes).",
+            "Recepción de mensajes de WhatsApp en el Panel de Agente (Planeado, requiere backend).",
+            "Envío de mensajes de WhatsApp desde el Panel de Agente (Planeado, requiere backend).",
+            "Limitado por las políticas y costos de la API de Meta.",
+          ],
+          "planeado"
         )}
         {renderFeatureCard(
           "Constructor de Chatbot Básico",
@@ -139,7 +154,7 @@ export default function LiveChatPage() {
             "Opciones de ramificación simple.",
             "Captura de información básica (nombre, email).",
           ],
-          "desarrollo" 
+          "desarrollo"
         )}
          {renderFeatureCard(
           "Transferencia Bot a Humano",
@@ -150,21 +165,9 @@ export default function LiveChatPage() {
             "Notificar a agentes disponibles sobre la transferencia.",
             "Interfaz para configurar reglas de transferencia.",
           ],
-          "desarrollo" 
-        )}
-        {renderFeatureCard(
-          "Integración con WhatsApp Business API",
-          Settings2, 
-          "Conecta con la API de WhatsApp Business para gestionar mensajes desde el CRM (funcionalidad avanzada).",
-          [
-            "Configuración de la conexión con WhatsApp Business API.",
-            "Recepción y envío de mensajes de WhatsApp.",
-            "Limitado por las políticas y costos de la API de WhatsApp.",
-          ],
-          "planeado"
+          "desarrollo"
         )}
       </div>
     </div>
   );
 }
-
