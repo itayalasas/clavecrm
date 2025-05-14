@@ -27,7 +27,30 @@ import { Skeleton }
 from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
 import { logSystemEvent } from "@/lib/auditLogger";
-import { useSearchParams, useRouter } from "next/navigation"; // Added useSearchParams and useRouter
+import { useSearchParams, useRouter } from "next/navigation"; 
+import { isValid, parseISO } from "date-fns";
+
+const parseDateField = (fieldValue: any): string | undefined => {
+    if (!fieldValue) return undefined;
+    if (fieldValue instanceof Timestamp) { // Firestore Timestamp
+        return fieldValue.toDate().toISOString();
+    }
+    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
+        return fieldValue;
+    }
+     // Handle cases where it might be a Firestore serverTimestamp pending write (less likely for reads)
+    if (fieldValue && typeof fieldValue === 'object' && fieldValue.hasOwnProperty('_methodName') && fieldValue._methodName === 'serverTimestamp') {
+        return new Date().toISOString(); // Or handle as "Pending"
+    }
+    console.warn("Formato de fecha inesperado en parseDateField para Pipeline:", fieldValue);
+    // Fallback if it's already a string that's not ISO but might be usable by new Date()
+    if (typeof fieldValue === 'string') {
+        const parsed = new Date(fieldValue);
+        if (isValid(parsed)) return parsed.toISOString();
+    }
+    return undefined; 
+};
+
 
 export default function PipelinePage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -35,13 +58,13 @@ export default function PipelinePage() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
   const [isSubmittingLead, setIsSubmittingLead] = useState(false);
-  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false); // Added state for dialog
+  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false); 
 
   const pipelineNavItem = NAV_ITEMS.find(item => item.href === '/pipeline');
   const { toast } = useToast();
   const { currentUser } = useAuth(); 
-  const searchParams = useSearchParams(); // For reading query parameters
-  const router = useRouter(); // For potentially clearing query params
+  const searchParams = useSearchParams(); 
+  const router = useRouter(); 
 
   const fetchLeads = useCallback(async () => {
     setIsLoadingLeads(true);
@@ -54,12 +77,12 @@ export default function PipelinePage() {
         return {
           id: docSnap.id,
           ...data,
-          createdAt: typeof data.createdAt === 'string' ? data.createdAt : (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-          expectedCloseDate: typeof data.expectedCloseDate === 'string' ? data.expectedCloseDate : (data.expectedCloseDate as Timestamp)?.toDate().toISOString() || undefined,
+          createdAt: parseDateField(data.createdAt) || new Date().toISOString(),
+          expectedCloseDate: parseDateField(data.expectedCloseDate),
         } as Lead;
       });
       setLeads(fetchedLeads);
-      return fetchedLeads; // Return fetched leads for immediate use
+      return fetchedLeads; 
     } catch (error) {
       console.error("Error al obtener leads:", error);
       toast({
@@ -67,7 +90,7 @@ export default function PipelinePage() {
         description: "No se pudieron cargar los leads del embudo.",
         variant: "destructive",
       });
-      return []; // Return empty array on error
+      return []; 
     } finally {
       setIsLoadingLeads(false);
     }
@@ -103,15 +126,22 @@ export default function PipelinePage() {
         
         const firestoreSafeLead = {
             ...leadData,
-            id: leadId,
+            id: leadId, // ensure id is part of the object for firestore if it's new
             createdAt: leadData.createdAt ? Timestamp.fromDate(new Date(leadData.createdAt)) : Timestamp.now(),
             updatedAt: Timestamp.now(),
             expectedCloseDate: leadData.expectedCloseDate ? Timestamp.fromDate(new Date(leadData.expectedCloseDate)) : null,
         };
         
-        const { id, ...dataToSave } = firestoreSafeLead;
+        const { id, ...dataToSave } = firestoreSafeLead; // Exclude id for setDoc if it's not needed (Firestore auto-generates)
+                                                          // However, we are using a pre-generated or existing id, so it's fine to keep it.
 
-        await setDoc(leadDocRef, dataToSave, { merge: true });
+        await setDoc(leadDocRef, dataToSave, { merge: true }); // Use dataToSave which excludes the id field if Firestore auto-generates
+                                                              // Or include id in dataToSave if you're managing IDs explicitly.
+                                                              // For consistency, it's often better to manage IDs explicitly.
+                                                              // Let's assume firestoreSafeLead is what we want to save.
+        
+        await setDoc(leadDocRef, firestoreSafeLead, { merge: true });
+
         
         fetchLeads(); 
         toast({
@@ -126,7 +156,7 @@ export default function PipelinePage() {
         await logSystemEvent(currentUser, actionType, 'Lead', leadId, actionDetails);
 
         setEditingLead(null);
-        setIsLeadDialogOpen(false); // Close dialog on save
+        setIsLeadDialogOpen(false); 
     } catch (error) {
         console.error("Error al guardar lead:", error);
         toast({
@@ -141,12 +171,12 @@ export default function PipelinePage() {
 
   const handleEditLead = (lead: Lead) => {
     setEditingLead(lead);
-    setIsLeadDialogOpen(true); // Open dialog for editing
+    setIsLeadDialogOpen(true); 
   };
   
   const openNewLeadDialog = () => {
     setEditingLead(null); 
-    setIsLeadDialogOpen(true); // Open dialog for new lead
+    setIsLeadDialogOpen(true); 
   };
 
 
@@ -183,14 +213,15 @@ export default function PipelinePage() {
         </ScrollArea>
       )}
       <AddEditLeadDialog
-          isOpen={isLeadDialogOpen} // Control dialog visibility
-          onOpenChange={setIsLeadDialogOpen} // Control dialog visibility
+          isOpen={isLeadDialogOpen} 
+          onOpenChange={setIsLeadDialogOpen} 
           stages={stages}
           leadToEdit={editingLead}
           onSave={handleSaveLead}
           isSubmitting={isSubmittingLead}
-          // Removed trigger as it's now controlled by isLeadDialogOpen
+          trigger={<></>} // Empty trigger as it's controlled by isLeadDialogOpen
         />
     </div>
   );
 }
+
