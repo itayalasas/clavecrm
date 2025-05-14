@@ -1,10 +1,11 @@
+
 "use client";
 
 import type { Ticket, Lead, User, TicketPriority, TicketStatus, Comment } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase, X, Brain, SmilePlus, Info } from "lucide-react";
+import { Edit3, Trash2, User as UserIconLk, CalendarDays, LinkIcon, ShieldAlert, CheckCircle2, Waypoints, XCircle, Paperclip, MessageSquarePlus, Send, UploadCloud, MessageCircle, Briefcase, X, Brain, SmilePlus, Info, LayersIcon, ShieldCheck } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale'; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
