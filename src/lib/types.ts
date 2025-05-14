@@ -33,7 +33,7 @@ export interface Task {
   completed: boolean;
   relatedLeadId?: string;
   createdAt: string; // Store as ISO string
-  priority?: 'Alta' | 'Media' | 'Baja'; // Corrected to match TICKET_PRIORITIES
+  priority?: 'Alta' | 'Media' | 'Baja';
   assigneeUserId?: string; // ID of the user assigned to the task
   reporterUserId: string; // ID of the user who reported or created the task
   solutionDescription?: string; // Description of the solution
@@ -548,13 +548,13 @@ export interface EscalationRule {
   name: string;
   description?: string;
   conditionType: EscalationConditionType;
-  conditionValue?: string | number; // e.g., hours for 'ticket_idle_for_x_hours', or priority value for 'ticket_priority_is', or queueId for 'ticket_in_queue'
+  conditionValue?: string | number | null; // Updated to allow null
   actionType: EscalationActionType;
   actionTargetUserId?: string | null; // For notify_user, assign_to_user, create_follow_up_task
   actionTargetGroupId?: string | null; // For notify_group (placeholder)
   actionTargetQueueId?: string | null; // For assign_to_queue
   actionTargetPriority?: TicketPriority | null; // For change_priority
-  actionValue?: string; // For webhook URL, or task details (future)
+  actionValue?: string | null; // For webhook URL, or task details (future)
   order: number; // Execution order for rules
   isEnabled: boolean;
   createdAt: string; // ISO string
@@ -570,32 +570,51 @@ export interface EscalationLog {
   actionTaken: string;
   timestamp: string; // ISO string
   details?: string;
-  loggedBySystem: boolean; // To differentiate from manual log entries if any
+  loggedBySystem?: boolean; // Default to true if not specified
 }
 
 
-// Knowledge Base & Surveys (Placeholders - to be detailed later)
-export interface KnowledgeBaseArticle {
-    id: string;
-    title: string;
-    content: string; // Rich text or Markdown
-    category?: string;
-    tags?: string[];
-    visibility: 'internal' | 'public';
-    createdAt: string;
-    updatedAt?: string;
-    authorId: string;
-    viewCount?: number;
-    helpfulVotes?: number;
-    unhelpfulVotes?: number;
+// Satisfaction Survey Types
+export type SurveyType = 'CSAT' | 'NPS' | 'Custom';
+export type SurveyQuestionType = 'RatingScale' | 'OpenText' | 'MultipleChoice' | 'SingleChoice';
+
+export interface SurveyQuestion {
+  id: string; // Unique within the survey template
+  text: string;
+  type: SurveyQuestionType;
+  options?: { label: string; value: string | number }[]; // For MultipleChoice, SingleChoice, RatingScale (e.g. 1-5 stars)
+  isRequired?: boolean;
+  order: number;
 }
 
-export interface SatisfactionSurvey {
-    id: string;
-    ticketId: string; // Link to the resolved ticket
-    userId: string; // User who submitted the survey
-    rating: number; // e.g., 1-5 CSAT or 0-10 NPS
-    comment?: string;
-    submittedAt: string;
-    type: 'CSAT' | 'NPS';
+export interface SurveyTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  type: SurveyType; // CSAT, NPS, Custom
+  questions: SurveyQuestion[];
+  thankYouMessage?: string;
+  createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
+  createdByUserId: string;
+  isEnabled?: boolean;
+}
+
+export interface SurveyResponseAnswer {
+  questionId: string;
+  value: string | number | string[]; // String for OpenText, Number for Rating, Array for MultipleChoice
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyTemplateId: string;
+  ticketId?: string; // If triggered by a ticket
+  contactId?: string; // Who responded (if known)
+  userId?: string; // If a logged-in user responded
+  submittedAt: string; // ISO string
+  answers: SurveyResponseAnswer[];
+  ipAddress?: string; // For analytics, handle privacy
+  userAgent?: string; // For analytics
+  csatScore?: number; // If CSAT type, overall score
+  npsScore?: number; // If NPS type, score
 }

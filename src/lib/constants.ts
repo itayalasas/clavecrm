@@ -1,6 +1,6 @@
 
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle } from 'lucide-react';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -57,7 +57,7 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
       { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain, disabled: true },
       { href: '/live-chat', label: 'Chat en Vivo / Chatbots', icon: MessagesSquare },
-      { href: '/satisfaction-surveys', label: 'Encuestas de Satisfacción', icon: Smile, disabled: true },
+      { href: '/satisfaction-surveys', label: 'Encuestas de Satisfacción', icon: Smile },
     ],
     parentActiveIf: (pathname) => ['/tickets', '/knowledge-base', '/live-chat', '/satisfaction-surveys'].some(p => pathname.startsWith(p)),
   },
@@ -81,7 +81,7 @@ export const NAV_ITEMS: NavItem[] = [
         '/settings/slas',
         '/settings/support-queues',
         '/settings/escalation-rules',
-        '/settings/escalation-logs', // Added new log page
+        '/settings/escalation-logs',
     ].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/live-chat-widget'),
   },
 ];
@@ -141,9 +141,9 @@ export const INITIAL_LEADS: Lead[] = [
 ];
 
 export const INITIAL_USERS: User[] = [
-  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://picsum.photos/seed/juan/100/100', role: 'user', createdAt: new Date().toISOString() },
-  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://picsum.photos/seed/maria/100/100', role: 'supervisor', createdAt: new Date().toISOString() },
-  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://picsum.photos/seed/carlos/100/100', role: 'admin', createdAt: new Date().toISOString() },
+  { id: 'user-1', name: 'Juan Pérez', email: 'juan.perez@example.com', avatarUrl: 'https://placehold.co/100x100.png', role: 'user', createdAt: new Date().toISOString() },
+  { id: 'user-2', name: 'Maria García', email: 'maria.garcia@example.com', avatarUrl: 'https://placehold.co/100x100.png', role: 'supervisor', createdAt: new Date().toISOString() },
+  { id: 'user-3', name: 'Carlos Rodríguez', email: 'carlos.rodriguez@example.com', avatarUrl: 'https://placehold.co/100x100.png', role: 'admin', createdAt: new Date().toISOString() },
 ];
 
 export const INITIAL_TASKS: Task[] = [
@@ -286,4 +286,18 @@ export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: stri
 export const INITIAL_ESCALATION_RULES: EscalationRule[] = [
   { id: 'rule-1', name: 'Escalar si ticket Alta prioridad no respondido en 1h', conditionType: 'sla_response_breached', actionType: 'notify_user', actionTargetUserId: 'user-2', order: 1, isEnabled: true, createdAt: new Date().toISOString(), description: 'Notifica al supervisor M. García si un ticket de Alta prioridad no tiene primera respuesta en 1 hora.' },
   { id: 'rule-2', name: 'Reasignar ticket inactivo > 24h', conditionType: 'ticket_idle_for_x_hours', conditionValue: 24, actionType: 'assign_to_queue', actionTargetQueueId: 'q-general', order: 2, isEnabled: true, createdAt: new Date().toISOString(), description: 'Mueve a cola General si no hay actividad en 24h.'},
+];
+
+
+export const SURVEY_TYPES: { value: SurveyType; label: string }[] = [
+  { value: 'CSAT', label: 'Satisfacción del Cliente (CSAT)' },
+  { value: 'NPS', label: 'Net Promoter Score (NPS)' },
+  { value: 'Custom', label: 'Personalizada' },
+];
+
+export const SURVEY_QUESTION_TYPES: { value: SurveyQuestionType; label: string }[] = [
+  { value: 'RatingScale', label: 'Escala de Calificación (ej. 1-5 estrellas)' },
+  { value: 'OpenText', label: 'Pregunta Abierta (Texto)' },
+  { value: 'MultipleChoice', label: 'Opción Múltiple' },
+  { value: 'SingleChoice', label: 'Opción Única' },
 ];

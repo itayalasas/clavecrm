@@ -16,9 +16,16 @@
     name: settings.agentName || "Asistente Virtual",
     avatar: settings.agentAvatarUrl || "https://cdn-icons-png.flaticon.com/512/4712/4712027.png"
   };
-
+  const firebaseConfig = {
+    apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
+    authDomain: "minicrm-express.firebaseapp.com",
+    projectId: "minicrm-express",
+    storageBucket: "minicrm-express.firebasestorage.app",
+    messagingSenderId: "600153365017",
+    appId: "1:600153365017:web:7be7b7109ddc0ccab4e888",
+    measurementId: "G-XXXXXXXXXX"
+  };
   // Configuración de Firebase
-  const firebaseConfig = settings.firebaseConfig;
 
   // Inicializar Firebase y Firestore
   function initializeFirebase() {
