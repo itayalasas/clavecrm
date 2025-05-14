@@ -32,13 +32,16 @@ import { isValid, parseISO } from "date-fns";
 
 const parseDateField = (fieldValue: any): string | undefined => {
     if (!fieldValue) return undefined;
-    if (fieldValue instanceof Timestamp) { // Firestore Timestamp
+    if (fieldValue instanceof Timestamp) { 
         return fieldValue.toDate().toISOString();
     }
-    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
-        return fieldValue;
+    if (typeof fieldValue === 'string') {
+        const parsedDate = parseISO(fieldValue);
+        if (isValid(parsedDate)) {
+            return parsedDate.toISOString();
+        }
     }
-     // Handle cases where it might be a Firestore serverTimestamp pending write (less likely for reads)
+    // Handle cases where it might be a Firestore serverTimestamp pending write (less likely for reads)
     if (fieldValue && typeof fieldValue === 'object' && fieldValue.hasOwnProperty('_methodName') && fieldValue._methodName === 'serverTimestamp') {
         return new Date().toISOString(); // Or handle as "Pending"
     }
@@ -134,11 +137,7 @@ export default function PipelinePage() {
         
         const { id, ...dataToSave } = firestoreSafeLead; // Exclude id for setDoc if it's not needed (Firestore auto-generates)
                                                           // However, we are using a pre-generated or existing id, so it's fine to keep it.
-
-        await setDoc(leadDocRef, dataToSave, { merge: true }); // Use dataToSave which excludes the id field if Firestore auto-generates
-                                                              // Or include id in dataToSave if you're managing IDs explicitly.
-                                                              // For consistency, it's often better to manage IDs explicitly.
-                                                              // Let's assume firestoreSafeLead is what we want to save.
+                                                          // Let's assume firestoreSafeLead is what we want to save.
         
         await setDoc(leadDocRef, firestoreSafeLead, { merge: true });
 
@@ -219,7 +218,7 @@ export default function PipelinePage() {
           leadToEdit={editingLead}
           onSave={handleSaveLead}
           isSubmitting={isSubmittingLead}
-          trigger={<></>} // Empty trigger as it's controlled by isLeadDialogOpen
+          trigger={<span style={{ display: 'none' }} />} // Empty, non-visible trigger
         />
     </div>
   );
