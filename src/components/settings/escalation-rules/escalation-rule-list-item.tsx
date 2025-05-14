@@ -86,4 +86,3 @@ export function EscalationRuleListItem({ rule, users, supportQueues, onEdit, onD
     </Card>
   );
 }
-```
