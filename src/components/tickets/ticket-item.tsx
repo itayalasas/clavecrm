@@ -39,7 +39,7 @@ interface TicketItemProps {
   defaultOpen?: boolean; // New prop to control initial open state
 }
 
-const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, label: string, icon?: React.ElementType }) => {
+const UserAvatarNameTooltip = ({ user, label, icon: IconComp, currentAuthUser }: { user?: User, label: string, icon?: React.ElementType, currentAuthUser?: User | null }) => {
     if (!user) return <span className="text-xs text-muted-foreground">{label}: N/A</span>;
     return (
       <TooltipProvider delayDuration={100}>
@@ -51,7 +51,7 @@ const UserAvatarNameTooltip = ({ user, label, icon: IconComp }: { user?: User, l
                   <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.email}.png`} alt={user.name} data-ai-hint="user avatar"/>
                   <AvatarFallback>{getUserInitials(user.name)}</AvatarFallback>
                 </Avatar>
-                <span className="text-xs hidden sm:inline">{user.name} {currentUser && user.id === currentUser.id ? "(Yo)" : ""}</span>
+                <span className="text-xs hidden sm:inline">{user.name} {currentAuthUser && user.id === currentAuthUser.id ? "(Yo)" : ""}</span>
             </div>
           </TooltipTrigger>
           <TooltipContent>
@@ -330,8 +330,8 @@ Por favor, házmelo saber si esto resuelve tu problema o si necesitas más asist
                             <CalendarDays className="h-3 w-3 text-blue-500" /> Actualizado: {format(parseISO(ticket.updatedAt), "PPp", { locale: es })}
                         </span>
                     )}
-                    {reporter && <UserAvatarNameTooltip user={reporter} label="Reportado por" />}
-                    {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" /> :
+                    {reporter && <UserAvatarNameTooltip user={reporter} label="Reportado por" currentAuthUser={currentUser} />}
+                    {assignee ? <UserAvatarNameTooltip user={assignee} label="Asignado a" currentAuthUser={currentUser} /> :
                         <span className="flex items-center gap-1 p-1 px-1.5 bg-muted rounded-md text-xs">
                             <UserIconLk className="h-3 w-3" /> Sin asignar
                         </span>
@@ -608,3 +608,4 @@ Por favor, házmelo saber si esto resuelve tu problema o si necesitas más asist
 }
 
     
+
