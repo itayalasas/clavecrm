@@ -78,8 +78,8 @@ export interface Ticket {
   attachments?: { name: string, url: string }[]; // Attachments for the ticket itself
   solutionDescription?: string | null; // Description of the solution provided by assignee
   solutionAttachments?: { name: string, url: string }[]; // Attachments for the solution
-  slaId?: string; // Optional: ID of the applied SLA
-  queueId?: string; // Optional: ID of the support queue it belongs to
+  slaId?: string | null; // Optional: ID of the applied SLA
+  queueId?: string | null; // Optional: ID of the support queue it belongs to
   resolvedAt?: string; // ISO string, when status changed to 'Resuelto'
   closedAt?: string; // ISO string, when status changed to 'Cerrado'
   firstResponseAt?: string; // ISO string, when first comment by an agent (not reporter) was made
@@ -652,3 +652,15 @@ export interface StoredLicenseInfo {
   validationResponse?: LicenseDetailsApiResponse | null; // Store the last raw response
   projectId?: string; // Store the projectId this license was validated against
 }
+
+export type EffectiveLicenseStatus =
+  | 'pending' // Still loading or checking
+  | 'valid'
+  | 'invalid_key' // Key itself is reported as invalid by the server
+  | 'mismatched_project_id' // Key is valid but for a different project
+  | 'expired'
+  | 'user_limit_exceeded'
+  | 'api_error' // Error contacting license server
+  | 'not_configured'; // No license info found in Firestore
+
+```

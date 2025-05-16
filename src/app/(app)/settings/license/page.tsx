@@ -1,6 +1,7 @@
 
 "use client";
 
+import * as React from "react";
 import { useState, useEffect } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescriptionUI } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { KeyRound, Loader2, AlertTriangle, CheckCircle, XCircle, Users, CalendarClock, Info } from "lucide-react"; // Added Info here
+import { KeyRound, Loader2, AlertTriangle, CheckCircle, XCircle, Users, CalendarClock, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { db } from "@/lib/firebase";
@@ -63,6 +64,7 @@ export default function LicensePage() {
             licenseKey: "",
             lastValidatedAt: "",
             status: "NotChecked",
+            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown",
           });
         }
       } catch (error) {
@@ -79,10 +81,8 @@ export default function LicensePage() {
             setCurrentUsersCount(users.length);
         } catch (error) {
             console.error("Error fetching user count:", error);
-            // Not critical to block UI, so don't set loading false here
         }
     };
-
 
     if (currentUser) {
       fetchLicenseInfo();
@@ -96,9 +96,12 @@ export default function LicensePage() {
       return;
     }
     setIsSubmitting(true);
-    setStoredLicenseInfo(prev => ({...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked' }), status: 'NotChecked'} as StoredLicenseInfo)); // Reset status visually
+    setStoredLicenseInfo(prev => ({
+        ...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked' }), 
+        status: 'NotChecked', 
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID 
+    } as StoredLicenseInfo));
 
-    
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
         method: 'POST',
@@ -119,28 +122,38 @@ export default function LicensePage() {
       const newLicenseInfo: StoredLicenseInfo = {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
-        status: result.isValid ? 'Valid' : 'Invalid',
+        status: 'Invalid', // Default to invalid, then update based on checks
         validationResponse: result,
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
       };
 
-      // Check expiry
-      if (result.isValid && result.expiresAt && new Date(result.expiresAt) < new Date()) {
-        newLicenseInfo.status = 'Expired';
+      if (result.isValid) {
+        if (result.productId !== process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+          newLicenseInfo.status = 'Invalid'; // Still invalid if project ID doesn't match
+          toast({ title: "Error de Licencia", description: "La clave de licencia es válida, pero para un proyecto diferente.", variant: "destructive", duration: 7000 });
+        } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
+          newLicenseInfo.status = 'Expired';
+          toast({ title: "Licencia Expirada", description: `La licencia expiró el ${format(parseISO(result.expiresAt), "PPpp", { locale: es })}.`, variant: "destructive", duration: 7000 });
+        } else {
+          newLicenseInfo.status = 'Valid';
+          toast({ title: "Licencia Validada Exitosamente", description: `Estado: ${newLicenseInfo.status}. ${result.terms || ''}`, duration: 7000 });
+        }
+      } else {
+        newLicenseInfo.status = 'Invalid';
+        toast({ title: "Licencia Inválida", description: result.terms || "La clave de licencia proporcionada no es válida.", variant: "destructive", duration: 7000 });
       }
       
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
       await setDoc(licenseDocRef, {
         ...newLicenseInfo,
-        lastValidatedAt: serverTimestamp(), // Use server timestamp for accuracy
+        lastValidatedAt: serverTimestamp(), 
       }, { merge: true });
       
-      setStoredLicenseInfo(newLicenseInfo); // Update local state with full details
-      toast({ title: "Licencia Validada", description: `Estado: ${newLicenseInfo.status}. ${result.terms || ''}`, duration: 7000 });
+      setStoredLicenseInfo(newLicenseInfo);
 
     } catch (error: any) {
       console.error("Error al validar licencia:", error);
-      toast({ title: "Error de Validación", description: error.message, variant: "destructive" });
+      toast({ title: "Error de Validación de Licencia", description: error.message, variant: "destructive" });
       const errorLicenseInfo: StoredLicenseInfo = {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
@@ -149,7 +162,6 @@ export default function LicensePage() {
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
       };
       setStoredLicenseInfo(errorLicenseInfo);
-      // Optionally save error state to Firestore
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
       await setDoc(licenseDocRef, {
         ...errorLicenseInfo,
@@ -157,12 +169,21 @@ export default function LicensePage() {
       }, { merge: true });
     } finally {
       setIsSubmitting(false);
+      // Force re-check in AuthProvider after a short delay
+      setTimeout(() => {
+        if (currentUser) {
+            // This is a bit of a hack; ideally AuthProvider would have a re-check function
+            // or listen to Firestore changes on settings/licenseConfiguration.
+            // For now, just reloading the user might trigger its useEffect.
+             window.dispatchEvent(new Event('authChanged')); 
+        }
+      }, 1000);
     }
   };
 
   const renderLicenseStatus = () => {
     if (isLoading) return <p className="text-muted-foreground">Cargando estado de licencia...</p>;
-    if (!storedLicenseInfo || storedLicenseInfo.status === 'NotChecked' || !storedLicenseInfo.validationResponse) {
+    if (!storedLicenseInfo || storedLicenseInfo.status === 'NotChecked') {
       return <div className="p-4 border rounded-md bg-muted/50 text-center">
         <Info className="h-8 w-8 mx-auto text-muted-foreground mb-2"/>
         <p className="font-semibold">No hay información de licencia o no ha sido validada.</p>
@@ -170,28 +191,74 @@ export default function LicensePage() {
       </div>;
     }
 
-    const { status, validationResponse: details, lastValidatedAt, licenseKey } = storedLicenseInfo;
-    const isCurrentlyValid = status === 'Valid';
-    const isExpired = status === 'Expired';
-    const isApiError = status === 'ApiError';
-    const userLimitExceeded = currentUsersCount !== null && details?.maxUsers !== null && typeof details?.maxUsers === 'number' && currentUsersCount > details.maxUsers;
+    const { status, validationResponse: details, lastValidatedAt, licenseKey, projectId: appProjectId } = storedLicenseInfo;
+    
+    let displayStatus = status;
+    let statusIcon = <Info className="h-5 w-5" />;
+    let cardClasses = "border-blue-500 bg-blue-50";
+    let textClasses = "text-blue-700";
+    let specificMessage = "";
+
+    const userLimitExceeded = currentUsersCount !== null && details?.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
+    const isExpired = details?.expiresAt && new Date(details.expiresAt) < new Date();
+    const isMismatchedProjectId = details?.productId && appProjectId && details.productId !== appProjectId;
+
+    if (isMismatchedProjectId) {
+        displayStatus = 'Proyecto Incorrecto';
+        statusIcon = <XCircle className="h-5 w-5" />;
+        cardClasses = "border-red-500 bg-red-50";
+        textClasses = "text-red-700";
+        specificMessage = "Esta clave de licencia es válida, pero pertenece a un proyecto diferente.";
+    } else if (status === 'Valid') {
+        if (isExpired) {
+            displayStatus = 'Expirada';
+            statusIcon = <XCircle className="h-5 w-5" />;
+            cardClasses = "border-red-500 bg-red-50";
+            textClasses = "text-red-700";
+        } else if (userLimitExceeded) {
+            displayStatus = 'Límite Usuarios Excedido';
+            statusIcon = <XCircle className="h-5 w-5" />;
+            cardClasses = "border-orange-500 bg-orange-50"; // Use orange for user limit
+            textClasses = "text-orange-700";
+        } else {
+            displayStatus = 'Válida';
+            statusIcon = <CheckCircle className="h-5 w-5" />;
+            cardClasses = "border-green-500 bg-green-50";
+            textClasses = "text-green-700";
+        }
+    } else if (status === 'Invalid') {
+        displayStatus = 'Inválida';
+        statusIcon = <XCircle className="h-5 w-5" />;
+        cardClasses = "border-red-500 bg-red-50";
+        textClasses = "text-red-700";
+    } else if (status === 'Expired') {
+        displayStatus = 'Expirada';
+        statusIcon = <XCircle className="h-5 w-5" />;
+        cardClasses = "border-red-500 bg-red-50";
+        textClasses = "text-red-700";
+    } else if (status === 'ApiError') {
+        displayStatus = 'Error de API';
+        statusIcon = <AlertTriangle className="h-5 w-5" />;
+        cardClasses = "border-yellow-500 bg-yellow-50";
+        textClasses = "text-yellow-700";
+        specificMessage = "Hubo un error al contactar el servidor de licencias. Intenta de nuevo más tarde.";
+    }
 
 
     return (
-      <Card className={`${isCurrentlyValid && !userLimitExceeded ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}`}>
+      <Card className={cardClasses}>
         <CardHeader>
-          <CardTitle className={`flex items-center gap-2 ${isCurrentlyValid && !userLimitExceeded ? 'text-green-700' : 'text-red-700'}`}>
-            {isCurrentlyValid && !userLimitExceeded && <CheckCircle className="h-5 w-5" />}
-            {(!isCurrentlyValid || userLimitExceeded || isExpired) && <XCircle className="h-5 w-5" />}
-            {isApiError && <AlertTriangle className="h-5 w-5" />}
-            Estado de la Licencia: {status}
+          <CardTitle className={`flex items-center gap-2 ${textClasses}`}>
+            {statusIcon}
+            Estado de la Licencia: {displayStatus}
           </CardTitle>
           {licenseKey && <CardDescription className="text-xs">Clave: {licenseKey.substring(0,8)}...{licenseKey.substring(licenseKey.length - 8)}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {details && (
+          {specificMessage && <p className={`font-semibold ${textClasses}`}>{specificMessage}</p>}
+          {details && !isMismatchedProjectId && ( // Don't show product details if project ID is mismatched
             <>
-              <p><strong>Producto:</strong> {details.productName} ({details.productId})</p>
+              <p><strong>Producto:</strong> {details.productName} (ID Producto de Licencia: {details.productId})</p>
               {details.maxUsers !== null && typeof details.maxUsers === 'number' && (
                 <p className={`flex items-center gap-1 ${userLimitExceeded ? 'text-red-700 font-semibold' : ''}`}>
                   <Users className="h-4 w-4"/> 
@@ -211,12 +278,10 @@ export default function LicensePage() {
             </>
           )}
           {lastValidatedAt && <p className="text-xs text-muted-foreground mt-2">Última validación: {format(typeof lastValidatedAt === 'string' ? parseISO(lastValidatedAt) : (lastValidatedAt as Timestamp).toDate(), "PPpp", {locale:es})}</p>}
-           {isApiError && <p className="font-semibold text-red-700">Hubo un error al contactar el servidor de licencias. Intenta de nuevo más tarde.</p>}
         </CardContent>
       </Card>
     );
   };
-
 
   if (currentUser?.role !== 'admin') {
     return (
@@ -229,7 +294,6 @@ export default function LicensePage() {
     );
   }
 
-
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -239,7 +303,7 @@ export default function LicensePage() {
             {navItem?.label || "Licencia de Aplicación"}
           </CardTitle>
           <CardDescription>
-            Gestiona la clave de licencia de tu aplicación CRM Rápido. Tu ID de Proyecto (appId): {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "No disponible"}
+            Gestiona la clave de licencia de tu aplicación CRM Rápido. Tu ID de Proyecto (appId): <code className="bg-muted px-1 py-0.5 rounded text-sm">{process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "No disponible"}</code>
           </CardDescription>
         </CardHeader>
       </Card>
@@ -288,4 +352,3 @@ export default function LicensePage() {
     </div>
   );
 }
-

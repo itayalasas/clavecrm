@@ -1,7 +1,5 @@
 
 // src/contexts/auth-context.tsx
-'use client';
-
 import * as React from 'react';
 import {
   onAuthStateChanged,
@@ -12,9 +10,9 @@ import {
   sendPasswordResetEmail,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { User, UserRole } from '@/lib/types';
+import type { User, UserRole, StoredLicenseInfo, EffectiveLicenseStatus, LicenseDetailsApiResponse } from '@/lib/types';
 import { DEFAULT_USER_ROLE } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import { logSystemEvent } from '@/lib/auditLogger';
@@ -28,6 +26,9 @@ interface AuthContextType {
   logout: () => Promise<void>;
   getAllUsers: () => Promise<User[]>;
   updateUserInFirestore: (userId: string, data: Partial<Pick<User, 'name' | 'role'>>, adminUser: User) => Promise<void>;
+  licenseInfo: StoredLicenseInfo | null;
+  effectiveLicenseStatus: EffectiveLicenseStatus;
+  userCount: number | null;
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
@@ -39,49 +40,119 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { toast } = useToast();
   const [adminUserForSignup, setAdminUserForSignup] = React.useState<User | null>(null);
 
+  const [licenseInfo, setLicenseInfo] = React.useState<StoredLicenseInfo | null>(null);
+  const [effectiveLicenseStatus, setEffectiveLicenseStatus] = React.useState<EffectiveLicenseStatus>('pending');
+  const [userCount, setUserCount] = React.useState<number | null>(null);
+
+
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
+      let fetchedUser: User | null = null;
       if (user) {
         const userDocRef = doc(db, "users", user.uid);
         try {
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
-            const userData = { id: user.uid, ...userDocSnap.data() } as User;
-            setCurrentUser(userData);
+            fetchedUser = { id: user.uid, ...userDocSnap.data() } as User;
+            setCurrentUser(fetchedUser);
             if (adminUserForSignup && adminUserForSignup.id === user.uid) {
               setAdminUserForSignup(null);
             }
           } else {
              console.warn(`Firestore document for user UID ${user.uid} not found.`);
+             setCurrentUser(null); 
           }
         } catch (dbError) {
             console.error("Error fetching user document from Firestore:", dbError);
+            setCurrentUser(null);
         }
       } else {
         setCurrentUser(null);
         setAdminUserForSignup(null);
       }
-      setLoading(false);
-    });
 
-    return () => unsubscribe();
-  }, [adminUserForSignup]); // adminUserForSignup is a dependency now
+      let currentLicenseInfo: StoredLicenseInfo | null = null;
+      let allUsers: User[] = [];
+      let newEffectiveStatus: EffectiveLicenseStatus = 'not_configured';
+      const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+
+      try {
+        const licenseDocRef = doc(db, "settings", "licenseConfiguration");
+        const licenseDocSnap = await getDoc(licenseDocRef);
+        if (licenseDocSnap.exists()) {
+          currentLicenseInfo = licenseDocSnap.data() as StoredLicenseInfo;
+          setLicenseInfo(currentLicenseInfo);
+          
+          const validationResponse = currentLicenseInfo.validationResponse;
+
+          if (currentLicenseInfo.status === 'ApiError') {
+            newEffectiveStatus = 'api_error';
+          } else if (currentLicenseInfo.status === 'NotChecked' || !validationResponse) {
+            newEffectiveStatus = 'not_configured'; 
+          } else {
+            if (!validationResponse.isValid) {
+              newEffectiveStatus = 'invalid_key';
+            } else if (validationResponse.productId !== currentAppProjectId) { // Use currentAppProjectId
+              newEffectiveStatus = 'mismatched_project_id';
+            } else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) {
+              newEffectiveStatus = 'expired';
+            } else {
+              try {
+                const usersCollectionRef = collection(db, "users");
+                const querySnapshot = await getDocs(usersCollectionRef);
+                allUsers = querySnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data() } as User));
+                setUserCount(allUsers.length);
+
+                if (validationResponse.maxUsers !== null && typeof validationResponse.maxUsers === 'number' && allUsers.length > validationResponse.maxUsers) {
+                  newEffectiveStatus = 'user_limit_exceeded';
+                } else {
+                  newEffectiveStatus = 'valid';
+                }
+              } catch (userCountError) {
+                console.error("Error fetching user count for license check:", userCountError);
+                newEffectiveStatus = 'api_error'; 
+                setUserCount(null);
+              }
+            }
+          }
+        } else {
+          setLicenseInfo(null);
+          newEffectiveStatus = 'not_configured';
+        }
+      } catch (licenseError) {
+        console.error("Error fetching license information:", licenseError);
+        setLicenseInfo(null);
+        newEffectiveStatus = 'api_error';
+      }
+      setEffectiveLicenseStatus(newEffectiveStatus);
+      setLoading(false); 
+    });
+    
+    const handleAuthChange = () => {
+        onAuthStateChanged(auth, user => {
+            // This will re-trigger the main logic of the useEffect
+        });
+    };
+    window.addEventListener('authChanged', handleAuthChange);
+
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('authChanged', handleAuthChange);
+    }
+  }, [adminUserForSignup]); 
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // Fetch Firestore data for the logged-in user
       const userDocRef = doc(db, "users", userCredential.user.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (userDocSnap.exists()) {
         const userData = { id: userCredential.user.uid, ...userDocSnap.data() } as User;
         await logSystemEvent(userData, 'login', 'User', userCredential.user.uid, `Usuario ${email} inició sesión.`);
-      } else {
-        // Fallback if Firestore doc doesn't exist, which shouldn't happen for login
-        const tempUserForLog = { id: userCredential.user.uid, name: userCredential.user.displayName || email, email: email, role: 'user' as UserRole, avatarUrl: null };
-        await logSystemEvent(tempUserForLog, 'login', 'User', userCredential.user.uid, `Usuario ${email} inició sesión (documento Firestore no encontrado).`);
       }
     } catch (error: any) {
       console.error("Error en login:", error);
@@ -97,38 +168,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
       throw error;
     }
-    // setLoading(false) should be here or in a finally block if login is successful and not throwing
   };
 
   const signup = async (email: string, pass: string, name: string, role?: UserRole): Promise<FirebaseUser | null> => {
-    const adminPerformingSignup = currentUser; // Current admin trying to sign up a new user
-    
-    // Temporarily store the admin's auth state. THIS IS THE CRITICAL PART.
-    const previousAuthUser = auth.currentUser;
-
+    const adminPerformingSignup = currentUser;
     if (!adminPerformingSignup) {
         toast({ title: "Error de Permisos", description: "Solo un administrador autenticado puede crear nuevos usuarios.", variant: "destructive"});
         return null;
     }
+    
+    setAdminUserForSignup(adminPerformingSignup);
+    let newFirebaseUser: FirebaseUser | null = null;
 
-    setLoading(true); // Should be part of the signup process
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      const newUser = userCredential.user;
+      newFirebaseUser = userCredential.user;
 
-      const userDocRef = doc(db, "users", newUser.uid);
+      const userDocRef = doc(db, "users", newFirebaseUser.uid);
       const newUserFirestoreData = {
-        uid: newUser.uid,
-        email: newUser.email,
+        uid: newFirebaseUser.uid,
+        email: newFirebaseUser.email,
         name: name,
         role: role || DEFAULT_USER_ROLE,
         createdAt: serverTimestamp(),
-        avatarUrl: `https://avatar.vercel.sh/${newUser.email}.png`
+        avatarUrl: `https://avatar.vercel.sh/${newFirebaseUser.email}.png`
       };
       await setDoc(userDocRef, newUserFirestoreData);
 
       try {
-        await sendEmailVerification(newUser);
+        await sendEmailVerification(newFirebaseUser);
          toast({
             title: "Usuario Creado Exitosamente",
             description: `Se ha creado el usuario ${name}. Se ha enviado un correo de verificación.`,
@@ -142,26 +210,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             duration: 7000,
         });
       }
-
-      await logSystemEvent(adminPerformingSignup, 'create', 'User', newUser.uid, `Usuario ${name} (${email}) creado con rol ${role || DEFAULT_USER_ROLE}.`);
+      await logSystemEvent(adminPerformingSignup, 'create', 'User', newFirebaseUser.uid, `Usuario ${name} (${email}) creado con rol ${role || DEFAULT_USER_ROLE}.`);
       
-      // After new user is created, Firebase auth state might change to the new user.
-      // We need to restore the admin's session.
-      // This is tricky because direct re-login without password isn't simple.
-      // The onAuthStateChanged listener should ideally handle restoring the admin's state if Firebase still has it.
-      // However, explicitly trying to sign out the new user and relying on onAuthStateChanged to pick up the admin is more robust.
-      
-      if (auth.currentUser && auth.currentUser.uid === newUser.uid) {
-        await signOut(auth); // Sign out the newly created user
+      if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid) {
+        await signOut(auth);
       }
-
-      // After signing out the new user, onAuthStateChanged should detect the admin's previous session (if it was still valid)
-      // or prompt the admin to log in again if their session was truly lost.
-      // We rely on the onAuthStateChanged listener to update currentUser and firebaseUser correctly.
-      // No need to call login() for admin here, as that requires password.
-      
-      return newUser;
-
+      return newFirebaseUser;
     } catch (error: any) {
       console.error("Error en signup (admin):", error);
       let errorMessage = "Ocurrió un error al crear el usuario.";
@@ -175,15 +229,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      // If signup failed, ensure admin's session is restored if it changed.
-      if (previousAuthUser && auth.currentUser?.uid !== previousAuthUser.uid) {
-        // This path is complex and ideally Firebase handles session restoration.
-        // For now, we assume onAuthStateChanged will restore or the admin needs to re-login.
-        console.warn("Signup failed, admin session might need manual restoration if it changed.");
+      setAdminUserForSignup(null); 
+      if (auth.currentUser?.uid !== adminPerformingSignup.id) {
+          console.warn("Admin session might have been lost during failed signup. Admin may need to re-login if issues persist.");
       }
-      throw error; // Rethrow to be caught by the calling component
-    } finally {
-        setLoading(false); // Ensure loading is set to false
+      throw error;
     }
   };
 
@@ -208,13 +258,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     const userLoggingOut = currentUser;
-    setLoading(true); // Set loading true before logout
     try {
       await signOut(auth);
       if (userLoggingOut) {
         await logSystemEvent(userLoggingOut, 'logout', 'User', userLoggingOut.id, `Usuario ${userLoggingOut.name} cerró sesión.`);
       }
-      // setCurrentUser(null) and setFirebaseUser(null) will be handled by onAuthStateChanged
     } catch (error: any) {
       console.error("Error en logout:", error);
        toast({
@@ -223,8 +271,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         variant: "destructive",
       });
       throw error;
-    } finally {
-        setLoading(false); // Ensure loading is set to false
     }
   };
 
@@ -234,13 +280,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const querySnapshot = await getDocs(usersCollectionRef);
       const usersList = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
-        // Ensure createdAt is handled as a string, convert if it's a Timestamp
-        let createdAtStr = new Date().toISOString(); // Fallback
+        let createdAtStr = new Date().toISOString(); 
         if (data.createdAt instanceof Date) {
             createdAtStr = data.createdAt.toISOString();
-        } else if (data.createdAt && typeof data.createdAt.toDate === 'function') { // Firestore Timestamp
+        } else if (data.createdAt && typeof data.createdAt.toDate === 'function') { 
             createdAtStr = data.createdAt.toDate().toISOString();
-        } else if (typeof data.createdAt === 'string') { // Already a string
+        } else if (typeof data.createdAt === 'string') { 
             createdAtStr = data.createdAt;
         }
 
@@ -251,7 +296,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             avatarUrl: data.avatarUrl || null,
             role: data.role || DEFAULT_USER_ROLE,
             createdAt: createdAtStr,
-            // groups can be added if defined in your User type and Firestore
         } as User;
       });
       return usersList;
@@ -267,7 +311,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, firebaseUser, loading, login, signup, logout, getAllUsers, updateUserInFirestore }}>
+    <AuthContext.Provider value={{ 
+        currentUser, 
+        firebaseUser, 
+        loading, 
+        login, 
+        signup, 
+        logout, 
+        getAllUsers, 
+        updateUserInFirestore,
+        licenseInfo,
+        effectiveLicenseStatus,
+        userCount
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -280,5 +336,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-    
