@@ -97,7 +97,7 @@ export default function LicensePage() {
     }
     setIsSubmitting(true);
     const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    // Initialize storedLicenseInfo if it's null or ensure projectId is current
+    
     setStoredLicenseInfo(prev => ({
         ...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked', projectId: currentAppProjectId }),
         licenseKey: data.licenseKey,
@@ -105,15 +105,21 @@ export default function LicensePage() {
         projectId: currentAppProjectId 
     } as StoredLicenseInfo));
 
+    const requestBody = {
+      licenseKey: data.licenseKey,
+      appId: currentAppProjectId,
+    };
+
+    console.log("Attempting to validate license with:", {
+      endpoint: LICENSE_VALIDATION_ENDPOINT,
+      body: requestBody,
+    });
 
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          licenseKey: data.licenseKey,
-          appId: currentAppProjectId,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -128,18 +134,17 @@ export default function LicensePage() {
 
       const result = await response.json() as LicenseDetailsApiResponse;
       
-      const newLicenseInfoBase: Omit<StoredLicenseInfo, 'status'> = {
+      const newLicenseInfoBase: Omit<StoredLicenseInfo, 'status' | 'projectId'> = {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
         validationResponse: result,
-        projectId: currentAppProjectId,
       };
       
       let determinedStatus: StoredLicenseInfo['status'] = 'Invalid';
 
       if (result.isValid) {
         if (result.productId !== currentAppProjectId) {
-          determinedStatus = 'Invalid'; // Treat as invalid if productId mismatch, handled more specifically in UI rendering
+          determinedStatus = 'Invalid'; // This makes it invalid for *this* app
           toast({ title: "Error de Licencia", description: "La clave de licencia es válida, pero para un proyecto diferente.", variant: "destructive", duration: 7000 });
         } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
           determinedStatus = 'Expired';
@@ -156,6 +161,7 @@ export default function LicensePage() {
       const finalNewLicenseInfo: StoredLicenseInfo = {
         ...newLicenseInfoBase,
         status: determinedStatus,
+        projectId: currentAppProjectId, // Save the project ID this license was validated against
       };
       
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
@@ -210,7 +216,7 @@ export default function LicensePage() {
     const { status, validationResponse: details, lastValidatedAt, licenseKey, projectId: validatedAgainstProjectId } = storedLicenseInfo;
     const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown_project";
     
-    let displayStatus = status;
+    let displayStatusLabel = status;
     let statusIcon = <Info className="h-5 w-5" />;
     let cardClasses = "border-blue-500 bg-blue-50";
     let textClasses = "text-blue-700";
@@ -218,46 +224,45 @@ export default function LicensePage() {
 
     const userLimitExceeded = details && currentUsersCount !== null && details.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
     const isExpired = details && details.expiresAt && new Date(details.expiresAt) < new Date();
-    // The project ID check done during validation is the primary source for mismatch.
-    // Here, we mostly reflect the status that was set during validation.
+    // Check against validatedAgainstProjectId which is the projectId of the current app stored during validation
     const isMismatchedProjectId = details && details.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId;
 
 
     if (status === 'Valid') {
-        if (isMismatchedProjectId) { // This should ideally be caught by the AuthProvider now and status changed.
-            displayStatus = 'Proyecto Incorrecto';
+        if (isMismatchedProjectId) {
+            displayStatusLabel = 'Proyecto Incorrecto';
             statusIcon = <XCircle className="h-5 w-5" />;
             cardClasses = "border-red-500 bg-red-50";
             textClasses = "text-red-700";
             specificMessage = "Esta clave de licencia es válida, pero pertenece a un proyecto diferente al actual.";
         } else if (isExpired) {
-            displayStatus = 'Expirada';
+            displayStatusLabel = 'Expirada';
             statusIcon = <XCircle className="h-5 w-5" />;
             cardClasses = "border-red-500 bg-red-50";
             textClasses = "text-red-700";
         } else if (userLimitExceeded) {
-            displayStatus = 'Límite Usuarios Excedido';
+            displayStatusLabel = 'Límite Usuarios Excedido';
             statusIcon = <AlertTriangle className="h-5 w-5" />;
             cardClasses = "border-orange-500 bg-orange-50"; 
             textClasses = "text-orange-700";
         } else {
-            displayStatus = 'Válida';
+            displayStatusLabel = 'Válida';
             statusIcon = <CheckCircle className="h-5 w-5" />;
             cardClasses = "border-green-500 bg-green-50";
             textClasses = "text-green-700";
         }
     } else if (status === 'Invalid') {
-        displayStatus = 'Inválida';
+        displayStatusLabel = 'Inválida';
         statusIcon = <XCircle className="h-5 w-5" />;
         cardClasses = "border-red-500 bg-red-50";
         textClasses = "text-red-700";
-        if (details && details.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId) {
+        if (isMismatchedProjectId) { // If status is Invalid AND it's due to mismatch
             specificMessage = "Esta clave de licencia es válida, pero pertenece a un proyecto diferente al actual.";
         } else {
             specificMessage = details?.terms || "La clave de licencia no es válida o no es para este producto.";
         }
     } else if (status === 'Expired') {
-        displayStatus = 'Expirada';
+        displayStatusLabel = 'Expirada';
         statusIcon = <XCircle className="h-5 w-5" />;
         cardClasses = "border-red-500 bg-red-50";
         textClasses = "text-red-700";
@@ -265,7 +270,7 @@ export default function LicensePage() {
             specificMessage = `La licencia expiró el ${format(parseISO(details.expiresAt), "PPpp", { locale: es })}.`;
         }
     } else if (status === 'ApiError') {
-        displayStatus = 'Error de API';
+        displayStatusLabel = 'Error de API';
         statusIcon = <AlertTriangle className="h-5 w-5" />;
         cardClasses = "border-yellow-500 bg-yellow-50";
         textClasses = "text-yellow-700";
@@ -278,13 +283,13 @@ export default function LicensePage() {
         <CardHeader>
           <CardTitle className={`flex items-center gap-2 ${textClasses}`}>
             {statusIcon}
-            Estado de la Licencia: {displayStatus}
+            Estado de la Licencia: {displayStatusLabel}
           </CardTitle>
           {licenseKey && <CardDescription className="text-xs">Clave: {licenseKey.substring(0,8)}...{licenseKey.substring(licenseKey.length - 8)}</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           {specificMessage && <p className={`font-semibold ${textClasses}`}>{specificMessage}</p>}
-          {details && !isMismatchedProjectId && status !== 'Invalid' && (
+          {details && status !== 'Invalid' && !isMismatchedProjectId && ( // Show details only if not invalid for mismatch reason
             <>
               <p><strong>Producto:</strong> {details.productName} (ID Licencia Prod.: {details.productId})</p>
               {details.maxUsers !== null && typeof details.maxUsers === 'number' && (
