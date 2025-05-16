@@ -1,7 +1,7 @@
 
 "use client";
 
-import { createContext, useState, useEffect, useContext, type ReactNode, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -17,9 +17,9 @@ import type { User, UserRole, StoredLicenseInfo, EffectiveLicenseStatus, License
 import { DEFAULT_USER_ROLE } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import { logSystemEvent } from '@/lib/auditLogger';
+import { parseISO, isValid, format } from 'date-fns'; // Import parseISO and isValid
 
-const LICENSE_VALIDATION_ENDPOINT = "https://studio--licensekeygenius-18qwi.us-central1.hosted.app/api/validate-license"; // Asegúrate que esta sea la URL correcta
-
+const LICENSE_VALIDATION_ENDPOINT = "https://studio--licensekeygenius-18qwi.us-central1.hosted.app/api/validate-license";
 
 interface AuthContextType {
   currentUser: User | null;
@@ -35,20 +35,20 @@ interface AuthContextType {
   userCount: number | null;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [currentUser, setCurrentUser] = React.useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = React.useState<FirebaseUser | null>(null);
+  const [loading, setLoading] = React.useState(true);
   const { toast } = useToast();
-  const [adminUserForSignup, setAdminUserForSignup] = useState<User | null>(null);
+  const [adminUserForSignup, setAdminUserForSignup] = React.useState<User | null>(null);
 
-  const [licenseInfo, setLicenseInfo] = useState<StoredLicenseInfo | null>(null);
-  const [effectiveLicenseStatus, setEffectiveLicenseStatus] = useState<EffectiveLicenseStatus>('pending');
-  const [userCount, setUserCount] = useState<number | null>(null);
+  const [licenseInfo, setLicenseInfo] = React.useState<StoredLicenseInfo | null>(null);
+  const [effectiveLicenseStatus, setEffectiveLicenseStatus] = React.useState<EffectiveLicenseStatus>('pending');
+  const [userCount, setUserCount] = React.useState<number | null>(null);
 
-  const getAllUsers = useCallback(async (): Promise<User[]> => {
+  const getAllUsers = React.useCallback(async (): Promise<User[]> => {
     try {
       const usersCollectionRef = collection(db, "users");
       const querySnapshot = await getDocs(usersCollectionRef);
@@ -58,9 +58,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (data.createdAt instanceof Date) {
             createdAtStr = data.createdAt.toISOString();
         } else if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-            createdAtStr = data.createdAt.toDate().toISOString();
+            createdAtStr = (data.createdAt as Timestamp).toDate().toISOString();
         } else if (typeof data.createdAt === 'string') {
-            createdAtStr = data.createdAt;
+            const parsedDate = parseISO(data.createdAt);
+            if (isValid(parsedDate)) {
+                createdAtStr = parsedDate.toISOString();
+            }
         }
 
         return {
@@ -84,32 +87,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
-  const performLicenseRevalidation = useCallback(async (storedKey: string, storedProjectId?: string) => {
+  const performLicenseRevalidation = React.useCallback(async (storedKey: string, storedProjectId?: string) => {
     console.log("AuthProvider: Iniciando revalidación de licencia...");
+    const currentAppProjectIdToUse = storedProjectId || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
+
     if (!storedKey) {
         console.log("AuthProvider: No hay clave de licencia almacenada para revalidar.");
-        // Si no hay clave, podría ser 'not_configured' o mantener el estado actual si ya era un error.
-        // Por seguridad, si no hay clave, podríamos marcarlo como 'not_configured'.
         const newStoredInfo: StoredLicenseInfo = {
             licenseKey: '',
             lastValidatedAt: new Date().toISOString(),
             status: 'NotChecked',
             validationResponse: null,
-            projectId: storedProjectId || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO"
+            projectId: currentAppProjectIdToUse
         };
-        await setDoc(doc(db, "settings", "licenseConfiguration"), newStoredInfo, { merge: true });
+        try {
+            await setDoc(doc(db, "settings", "licenseConfiguration"), newStoredInfo, { merge: true });
+        } catch (dbError) {
+            console.error("AuthProvider: Error guardando estado de licencia 'NotChecked':", dbError);
+        }
         setLicenseInfo(newStoredInfo);
         return newStoredInfo;
     }
-
-    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
-    const projectIdToUse = storedProjectId || currentAppProjectId;
 
     try {
         const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ licenseKey: storedKey, appId: projectIdToUse }),
+            body: JSON.stringify({ licenseKey: storedKey, appId: currentAppProjectIdToUse }),
         });
 
         let newStatus: StoredLicenseInfo['status'] = 'ApiError';
@@ -118,8 +122,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (response.ok) {
             apiResponse = await response.json();
             if (apiResponse.isValid) {
-                if (apiResponse.productId !== projectIdToUse) {
-                    newStatus = 'Invalid'; // Mismatched project ID makes it invalid for this app
+                if (apiResponse.productId !== currentAppProjectIdToUse) {
+                    newStatus = 'Invalid';
                 } else if (apiResponse.expiresAt && new Date(apiResponse.expiresAt) < new Date()) {
                     newStatus = 'Expired';
                 } else {
@@ -139,13 +143,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             lastValidatedAt: new Date().toISOString(),
             status: newStatus,
             validationResponse: apiResponse,
-            projectId: projectIdToUse,
+            projectId: currentAppProjectIdToUse,
         };
 
         await setDoc(doc(db, "settings", "licenseConfiguration"), newStoredInfo, { merge: true });
         setLicenseInfo(newStoredInfo);
         console.log("AuthProvider: Revalidación completada. Nuevo estado almacenado:", newStatus, "Respuesta API:", apiResponse);
-        window.dispatchEvent(new Event('authChanged')); // Notify layout or other components
         return newStoredInfo;
     } catch (error) {
         console.error("AuthProvider: Error de red durante la revalidación de licencia:", error);
@@ -154,16 +157,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             lastValidatedAt: new Date().toISOString(),
             status: 'ApiError',
             validationResponse: null,
-            projectId: projectIdToUse,
+            projectId: currentAppProjectIdToUse,
         };
-        await setDoc(doc(db, "settings", "licenseConfiguration"), errorStoredInfo, { merge: true });
+        await setDoc(doc(db, "settings", "licenseConfiguration"), errorStoredInfo, { merge: true }).catch(dbError => console.error("Error guardando estado de error de licencia:", dbError));
         setLicenseInfo(errorStoredInfo);
-        window.dispatchEvent(new Event('authChanged'));
         return errorStoredInfo;
     }
-  }, []); // No dependencies, so it uses the latest values from closure
+  }, []);
 
-  useEffect(() => {
+
+  React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       let fetchedUser: User | null = null;
@@ -172,7 +175,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
-            fetchedUser = { id: user.uid, ...userDocSnap.data() } as User;
+            const data = userDocSnap.data();
+            let createdAtStr = new Date().toISOString(); // Default
+            if (data.createdAt instanceof Date) {
+                createdAtStr = data.createdAt.toISOString();
+            } else if (data.createdAt && typeof data.createdAt.toDate === 'function') { // Firestore Timestamp
+                createdAtStr = (data.createdAt as Timestamp).toDate().toISOString();
+            } else if (typeof data.createdAt === 'string') { // Already an ISO string
+                 const parsedDate = parseISO(data.createdAt);
+                 if (isValid(parsedDate)) {
+                    createdAtStr = parsedDate.toISOString();
+                 }
+            }
+            fetchedUser = { id: user.uid, ...data, createdAt: createdAtStr } as User;
             setCurrentUser(fetchedUser);
             if (adminUserForSignup && adminUserForSignup.id === user.uid) {
               setAdminUserForSignup(null);
@@ -203,15 +218,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (licenseDocSnap.exists()) {
           currentStoredLicenseInfo = licenseDocSnap.data() as StoredLicenseInfo;
           
-          const today = new Date().toISOString().split('T')[0];
-          const lastValidatedDate = currentStoredLicenseInfo.lastValidatedAt ? new Date(currentStoredLicenseInfo.lastValidatedAt).toISOString().split('T')[0] : null;
+          const today = format(new Date(), 'yyyy-MM-dd');
+          let lastValidatedDateString = null;
+          if (currentStoredLicenseInfo.lastValidatedAt && typeof currentStoredLicenseInfo.lastValidatedAt === 'string') {
+              const parsedLastValidated = parseISO(currentStoredLicenseInfo.lastValidatedAt);
+              if (isValid(parsedLastValidated)) {
+                  lastValidatedDateString = format(parsedLastValidated, 'yyyy-MM-dd');
+              }
+          }
 
-          if (lastValidatedDate !== today && currentStoredLicenseInfo.licenseKey) {
+          if (lastValidatedDateString !== today && currentStoredLicenseInfo.licenseKey) {
             console.log("AuthProvider: Licencia no validada hoy. Realizando revalidación...");
             currentStoredLicenseInfo = await performLicenseRevalidation(currentStoredLicenseInfo.licenseKey, currentStoredLicenseInfo.projectId);
           }
         } else {
-           // No license configured yet, attempt to create a default 'NotChecked' one
            currentStoredLicenseInfo = {
                 licenseKey: '',
                 lastValidatedAt: new Date().toISOString(),
@@ -222,7 +242,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await setDoc(doc(db, "settings", "licenseConfiguration"), currentStoredLicenseInfo, { merge: true });
             console.log("AuthProvider: No hay configuración de licencia, creando una por defecto como 'NotChecked'.");
         }
-        setLicenseInfo(currentStoredLicenseInfo); // Set licenseInfo state regardless of revalidation outcome
+        setLicenseInfo(currentStoredLicenseInfo);
 
         const validationResponse = currentStoredLicenseInfo?.validationResponse;
 
@@ -237,24 +257,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) {
           newEffectiveStatus = 'expired';
         } else {
-          // License seems valid from API, now check user count
           try {
             allUsersList = await getAllUsers();
             setUserCount(allUsersList.length);
             if (validationResponse.maxUsers !== null && typeof validationResponse.maxUsers === 'number' && validationResponse.maxUsers > 0 && allUsersList.length > validationResponse.maxUsers) {
               newEffectiveStatus = 'user_limit_exceeded';
             } else {
-              newEffectiveStatus = 'valid'; // All checks passed
+              newEffectiveStatus = 'valid';
             }
           } catch (userCountError) {
             console.error("Error fetching user count for license check:", userCountError);
-            newEffectiveStatus = 'api_error'; // Treat as API error if user count fails
+            newEffectiveStatus = 'api_error';
             setUserCount(null);
           }
         }
       } catch (licenseError) {
         console.error("Error fetching/validating license information:", licenseError);
-        setLicenseInfo(null); // Clear licenseInfo on error
+        setLicenseInfo(null);
         newEffectiveStatus = 'api_error';
       }
       
@@ -268,21 +287,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let currentLicenseInfo: StoredLicenseInfo | null = null;
         let allUsersList: User[] = [];
         let newEffectiveStatus: EffectiveLicenseStatus = 'not_configured';
+        const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
         
         try {
             const licenseDocRef = doc(db, "settings", "licenseConfiguration");
             const licenseDocSnap = await getDoc(licenseDocRef);
             if (licenseDocSnap.exists()) {
                 currentLicenseInfo = licenseDocSnap.data() as StoredLicenseInfo;
-                // Perform revalidation if needed (e.g., if triggered by license page save)
                 if (currentLicenseInfo.licenseKey) {
-                     // Directly revalidating as an action from UI might have updated the key
-                    currentLicenseInfo = await performLicenseRevalidation(currentLicenseInfo.licenseKey, currentLicenseInfo.projectId);
+                    currentLicenseInfo = await performLicenseRevalidation(currentLicenseInfo.licenseKey, currentLicenseInfo.projectId || currentAppProjectId);
                 }
             } else {
                  currentLicenseInfo = {
                     licenseKey: '', lastValidatedAt: new Date().toISOString(), status: 'NotChecked', 
-                    validationResponse: null, projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO"
+                    validationResponse: null, projectId: currentAppProjectId
                 };
                 await setDoc(doc(db, "settings", "licenseConfiguration"), currentLicenseInfo, { merge: true });
             }
@@ -291,7 +309,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const validationResponse = currentLicenseInfo?.validationResponse;
             if (!currentLicenseInfo || currentLicenseInfo.status === 'NotChecked' || !validationResponse) newEffectiveStatus = 'not_configured';
             else if (currentLicenseInfo.status === 'ApiError') newEffectiveStatus = 'api_error';
-            else if (validationResponse.productId !== currentLicenseInfo.projectId) newEffectiveStatus = 'mismatched_project_id';
+            else if (validationResponse.productId !== (currentLicenseInfo.projectId || currentAppProjectId) ) newEffectiveStatus = 'mismatched_project_id';
             else if (!validationResponse.isValid) newEffectiveStatus = 'invalid_key';
             else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) newEffectiveStatus = 'expired';
             else {
@@ -316,7 +334,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       unsubscribe();
       window.removeEventListener('authChanged', handleAuthChangeRecheck);
     }
-  }, [adminUserForSignup, getAllUsers, toast, performLicenseRevalidation]);
+  }, [adminUserForSignup, getAllUsers, toast, performLicenseRevalidation]); // Added performLicenseRevalidation to dependency array
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
@@ -325,7 +343,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userDocRef = doc(db, "users", userCredential.user.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (userDocSnap.exists()) {
-        const userData = { id: userCredential.user.uid, ...userDocSnap.data() } as User;
+        const data = userDocSnap.data();
+         let createdAtStr = new Date().toISOString(); // Default
+        if (data.createdAt instanceof Date) {
+            createdAtStr = data.createdAt.toISOString();
+        } else if (data.createdAt && typeof data.createdAt.toDate === 'function') { // Firestore Timestamp
+            createdAtStr = (data.createdAt as Timestamp).toDate().toISOString();
+        } else if (typeof data.createdAt === 'string') { // Already an ISO string
+            const parsedDate = parseISO(data.createdAt);
+            if (isValid(parsedDate)) {
+                createdAtStr = parsedDate.toISOString();
+            }
+        }
+        const userData = { id: userCredential.user.uid, ...data, createdAt: createdAtStr } as User;
          if (userData) {
             await logSystemEvent(userData, 'login', 'User', userCredential.user.uid, `Usuario ${email} inició sesión.`);
         }
@@ -341,10 +371,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      setLoading(false); // Ensure loading is set to false on login error
+      setLoading(false); 
       throw error;
     }
-    // setLoading(false) será manejado por el efecto de onAuthStateChanged
   };
 
   const signup = async (email: string, pass: string, name: string, roleParam?: UserRole): Promise<FirebaseUser | null> => {
@@ -364,7 +393,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userDocRef = doc(db, "users", newFirebaseUser.uid);
       const role = roleParam || DEFAULT_USER_ROLE;
       const newUserFirestoreData = {
-        uid: newFirebaseUser.uid, // Storing uid is redundant as it's the doc ID
         email: newFirebaseUser.email,
         name: name,
         role: role,
@@ -390,24 +418,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       await logSystemEvent(adminPerformingSignup, 'create', 'User', newFirebaseUser.uid, `Usuario ${name} (${email}) creado con rol ${role}.`);
       
+      // Re-login admin - This logic has known issues and is a temporary workaround.
+      // Proper admin user creation should ideally happen via a secure backend (e.g., Admin SDK in Cloud Function).
       if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid && adminPerformingSignup.email && adminPerformingSignup.password) {
-          await signOut(auth);
-          // Re-authenticate the admin. This assumes you have admin's pass, which is not ideal.
-          // A better long-term solution is using Admin SDK for user creation via a Cloud Function.
+          await signOut(auth); 
           try {
             await signInWithEmailAndPassword(auth, adminPerformingSignup.email, adminPerformingSignup.password);
           } catch (reauthError) {
              console.error("AuthProvider: Error re-autenticando al admin:", reauthError);
-             // Admin might need to log in manually if re-auth fails.
-             // Forcing a full page reload or redirect to login might be necessary here.
              // window.location.reload(); // Or router.push('/login');
           }
       } else if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid) {
-          // If admin's password is not available, sign out new user and the admin will need to manually log back in.
           await signOut(auth);
           console.warn("AuthProvider: Nuevo usuario creado. El administrador puede necesitar re-autenticarse.");
           toast({title: "Acción Requerida", description: "Nuevo usuario creado. Por favor, re-autentícate como administrador.", duration: 10000});
-          // router.push('/login'); // Optionally redirect admin to login
       }
       window.dispatchEvent(new Event('authChanged'));
       return newFirebaseUser;
@@ -442,7 +466,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
         const changes = Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(', ');
         await logSystemEvent(adminUser, 'update', 'User', userId, `Datos de usuario actualizados. Cambios: ${changes}.`);
-        window.dispatchEvent(new Event('authChanged')); // To re-fetch user count and license status
+        window.dispatchEvent(new Event('authChanged'));
 
     } catch (error) {
         console.error("Error actualizando usuario en Firestore:", error);
@@ -488,7 +512,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context = React.useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth debe ser utilizado dentro de un AuthProvider');
   }
