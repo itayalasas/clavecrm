@@ -11,13 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescriptionUI } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { KeyRound, Loader2, AlertTriangle, CheckCircle, XCircle, Users, CalendarClock } from "lucide-react";
+import { KeyRound, Loader2, AlertTriangle, CheckCircle, XCircle, Users, CalendarClock, Info } from "lucide-react"; // Added Info here
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { Badge } from "@/components/ui/badge";
 
 const licenseFormSchema = z.object({
   licenseKey: z.string().min(10, "La clave de licencia parece demasiado corta.").max(100, "La clave de licencia parece demasiado larga."),
@@ -95,7 +96,8 @@ export default function LicensePage() {
       return;
     }
     setIsSubmitting(true);
-    setStoredLicenseInfo(prev => ({...prev, status: 'NotChecked'} as StoredLicenseInfo)); // Reset status visually
+    setStoredLicenseInfo(prev => ({...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked' }), status: 'NotChecked'} as StoredLicenseInfo)); // Reset status visually
+
     
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
@@ -149,7 +151,10 @@ export default function LicensePage() {
       setStoredLicenseInfo(errorLicenseInfo);
       // Optionally save error state to Firestore
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
-      await setDoc(licenseDocRef, errorLicenseInfo, { merge: true });
+      await setDoc(licenseDocRef, {
+        ...errorLicenseInfo,
+        lastValidatedAt: serverTimestamp(),
+      }, { merge: true });
     } finally {
       setIsSubmitting(false);
     }
@@ -283,3 +288,4 @@ export default function LicensePage() {
     </div>
   );
 }
+
