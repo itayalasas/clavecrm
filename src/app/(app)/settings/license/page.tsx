@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescriptionUI } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { StoredLicenseInfo, LicenseDetailsApiResponse, EffectiveLicenseStatus, User } from "@/lib/types";
+import type { StoredLicenseInfo, LicenseDetailsApiResponse, User } from "@/lib/types";
 import { Settings, KeyRound, Loader2, CheckCircle, XCircle, AlertTriangle, Info, Users, CalendarDays } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
@@ -73,7 +73,7 @@ export default function LicensePage() {
     if (currentUser?.role === 'admin') {
       fetchLicenseData();
     } else {
-      setIsLoadingPage(false); // Not an admin, no need to load
+      setIsLoadingPage(false); 
     }
   }, [currentUser, fetchLicenseData]);
 
@@ -91,7 +91,7 @@ export default function LicensePage() {
     };
 
     console.log("Enviando solicitud de validación a:", LICENSE_VALIDATION_ENDPOINT);
-    console.log("Cuerpo de la solicitud:", JSON.stringify(requestBody));
+    console.log("Cuerpo de la solicitud:", JSON.stringify(requestBody, null, 2));
 
 
     try {
@@ -118,7 +118,7 @@ export default function LicensePage() {
 
       if (result.isValid) {
         if (result.productId !== currentAppProjectId) {
-          newLicenseInfo.status = 'Invalid'; // Still invalid if project ID doesn't match
+          newLicenseInfo.status = 'Invalid'; 
           toast({ title: "Clave de Licencia Inválida", description: "La clave de licencia es válida, pero para un proyecto diferente.", variant: "destructive", duration: 7000 });
         } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
           newLicenseInfo.status = 'Expired';
@@ -135,13 +135,13 @@ export default function LicensePage() {
       await setDoc(licenseDocRef, newLicenseInfo, { merge: true });
       setStoredLicenseInfo(newLicenseInfo);
       await logSystemEvent(currentUser, 'config_change', 'LicenseSettings', 'licenseConfiguration', `Clave de licencia actualizada y validada. Estado: ${newLicenseInfo.status}.`);
-      window.dispatchEvent(new Event('authChanged')); // Trigger re-check in AuthProvider
+      window.dispatchEvent(new Event('authChanged')); 
 
     } catch (error: any) {
       console.error("Error al validar licencia:", error);
       let description = error.message;
-      if (error instanceof TypeError && (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror'))) {
-        description = "No se pudo conectar al servidor de licencias. Verifica tu conexión y la configuración CORS del servidor de licencias.";
+        if (error instanceof TypeError && (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror'))) {
+        description = "No se pudo conectar al servidor de licencias. Verifica tu conexión a internet y que el servidor de licencias esté accesible. Esto podría ser un problema de CORS en el servidor de licencias o un problema de red.";
         console.error(
             "POSIBLE PROBLEMA DE CORS o RED: Revisa la consola de Red del navegador para más detalles sobre la solicitud fallida. " +
             "Asegúrate de que el servidor en " + LICENSE_VALIDATION_ENDPOINT + " está accesible y tiene configurados los encabezados CORS para permitir solicitudes desde este dominio CRM."
@@ -185,10 +185,6 @@ export default function LicensePage() {
     let cardBorderClass = "border-gray-300";
     let specificMessage = "";
 
-    const userLimitExceeded = currentUsersCount !== null && details && details.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
-    const isExpired = details && details.expiresAt && new Date(details.expiresAt) < new Date();
-    const isMismatchedProjectId = details && currentAppProjectId && details.productId !== currentAppProjectId;
-
     if (!storedLicenseInfo || storedLicenseInfo.status === 'NotChecked' || !details) {
       return <div className="p-4 border rounded-md bg-muted/50 text-center">
         <Info className="h-8 w-8 mx-auto text-muted-foreground mb-2"/>
@@ -197,6 +193,12 @@ export default function LicensePage() {
       </div>;
     }
     
+    const userLimitExceeded = details && currentUsersCount !== null && details.maxUsers !== null && typeof details.maxUsers === 'number' && details.maxUsers > 0 && currentUsersCount > details.maxUsers;
+    const isExpired = details && details.expiresAt && new Date(details.expiresAt) < new Date();
+    // Ensure storedLicenseInfo.projectId is used for comparison, as currentAppProjectId might not be directly on 'details'
+    const isMismatchedProjectId = details && storedLicenseInfo.projectId && details.productId !== storedLicenseInfo.projectId;
+
+
     statusText = storedLicenseInfo.status || "No Verificada";
 
     if (isMismatchedProjectId) {
@@ -216,13 +218,13 @@ export default function LicensePage() {
         statusText = "Expirada";
         statusColorClass = "text-red-600";
         cardBorderClass = "border-red-500";
-        specificMessage = `La licencia expiró el ${details.expiresAt ? format(parseISO(details.expiresAt), 'PP', { locale: es }) : 'N/A'}.`;
+        specificMessage = `La licencia expiró el ${details.expiresAt && isValid(parseISO(details.expiresAt)) ? format(parseISO(details.expiresAt), 'PP', { locale: es }) : 'N/A'}.`;
     } else if (userLimitExceeded) {
         StatusIcon = AlertTriangle;
         statusText = "Límite de Usuarios Excedido";
         statusColorClass = "text-orange-600";
         cardBorderClass = "border-orange-500";
-        specificMessage = `Se ha excedido el límite de ${details.maxUsers} usuarios permitidos. Actualmente hay ${currentUsersCount} usuarios.`;
+        specificMessage = `Se ha excedido el límite de ${details.maxUsers} usuarios permitidos. Actualmente hay ${currentUsersCount || 0} usuarios.`;
     } else if (storedLicenseInfo.status === 'ApiError') {
         StatusIcon = AlertTriangle;
         statusText = "Error de API";
@@ -235,7 +237,6 @@ export default function LicensePage() {
         statusColorClass = "text-green-600";
         cardBorderClass = "border-green-500";
     }
-
 
     return (
       <Card className={`mt-6 ${cardBorderClass}`}>
@@ -258,7 +259,7 @@ export default function LicensePage() {
                     <Users className="h-4 w-4"/> Usuarios Actuales: {currentUsersCount}
                 </div>
               }
-              {details.expiresAt && (
+              {details.expiresAt && isValid(parseISO(details.expiresAt)) && (
                 <div className={`flex items-center gap-1 ${isExpired ? 'text-red-600 font-semibold' : ''}`}>
                     <CalendarDays className="h-4 w-4"/> Expira: {format(parseISO(details.expiresAt), 'PPpp', { locale: es })}
                 </div>
@@ -266,7 +267,14 @@ export default function LicensePage() {
               {details.terms && <div><strong>Términos:</strong> <span className="text-xs text-muted-foreground">{details.terms}</span></div>}
             </>
           )}
-          {storedLicenseInfo.lastValidatedAt && <div><strong>Última Validación:</strong> {format(parseISO(storedLicenseInfo.lastValidatedAt), 'PPpp', { locale: es })}</div>}
+          {storedLicenseInfo.lastValidatedAt && 
+           typeof storedLicenseInfo.lastValidatedAt === 'string' && 
+           isValid(parseISO(storedLicenseInfo.lastValidatedAt)) && (
+            <div>
+              <strong>Última Validación:</strong>{' '}
+              {format(parseISO(storedLicenseInfo.lastValidatedAt), 'PPpp', { locale: es })}
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -331,3 +339,4 @@ export default function LicensePage() {
     </div>
   );
 }
+
