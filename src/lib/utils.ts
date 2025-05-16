@@ -6,17 +6,20 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getUserInitials(name?: string | null): string {
-  if (!name || name.trim() === "") return "?"; // Default for empty or null name
-  const nameParts = name.trim().split(/\s+/).filter(part => part.length > 0); // Filter out empty parts
+  if (!name || typeof name !== 'string' || name.trim() === "") return "?";
 
-  if (nameParts.length === 1 && nameParts[0]) {
-    return nameParts[0].substring(0, 2).toUpperCase(); // "Juan" -> "JU"
-  }
-  if (nameParts.length > 1 && nameParts[0] && nameParts[1]) {
-    return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase(); // "Juan Pérez" -> "JP"
-  }
-  if (nameParts.length > 0 && nameParts[0]) { // If only one part after filtering (e.g., single name with spaces)
+  const nameParts = name.trim().split(/\s+/).filter(part => part.length > 0);
+
+  if (nameParts.length === 0) return "?";
+
+  if (nameParts.length === 1) {
+    // For a single name part, take the first two letters if available
     return nameParts[0].substring(0, 2).toUpperCase();
+  } else {
+    // For multiple name parts, take the first letter of the first part
+    // and the first letter of the last part.
+    const firstInitial = nameParts[0][0];
+    const lastInitial = nameParts[nameParts.length - 1][0];
+    return `${firstInitial}${lastInitial}`.toUpperCase();
   }
-  return "?"; // Final fallback if name is unusual
 }
