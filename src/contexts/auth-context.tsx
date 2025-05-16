@@ -1,8 +1,7 @@
 
 "use client";
 
-import { createContext, useState, useEffect, useContext, type ReactNode } from 'react';
-import * as React from 'react'; // Keep for other React specific needs if any, or could be removed if all used React parts are explicitly imported.
+import { createContext, useState, useEffect, useContext, type ReactNode, useCallback } from 'react';
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -18,6 +17,9 @@ import type { User, UserRole, StoredLicenseInfo, EffectiveLicenseStatus, License
 import { DEFAULT_USER_ROLE } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import { logSystemEvent } from '@/lib/auditLogger';
+
+const LICENSE_VALIDATION_ENDPOINT = "https://studio--licensekeygenius-18qwi.us-central1.hosted.app/api/validate-license"; // Asegúrate que esta sea la URL correcta
+
 
 interface AuthContextType {
   currentUser: User | null;
@@ -46,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [effectiveLicenseStatus, setEffectiveLicenseStatus] = useState<EffectiveLicenseStatus>('pending');
   const [userCount, setUserCount] = useState<number | null>(null);
 
-  const getAllUsers = React.useCallback(async (): Promise<User[]> => {
+  const getAllUsers = useCallback(async (): Promise<User[]> => {
     try {
       const usersCollectionRef = collection(db, "users");
       const querySnapshot = await getDocs(usersCollectionRef);
@@ -78,9 +80,88 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: "No se pudieron cargar los datos de los usuarios.",
         variant: "destructive",
       });
-      throw error; // Re-throw so caller knows about the error
+      throw error;
     }
-  }, [toast]); // Added toast as a dependency
+  }, [toast]);
+
+  const performLicenseRevalidation = useCallback(async (storedKey: string, storedProjectId?: string) => {
+    console.log("AuthProvider: Iniciando revalidación de licencia...");
+    if (!storedKey) {
+        console.log("AuthProvider: No hay clave de licencia almacenada para revalidar.");
+        // Si no hay clave, podría ser 'not_configured' o mantener el estado actual si ya era un error.
+        // Por seguridad, si no hay clave, podríamos marcarlo como 'not_configured'.
+        const newStoredInfo: StoredLicenseInfo = {
+            licenseKey: '',
+            lastValidatedAt: new Date().toISOString(),
+            status: 'NotChecked',
+            validationResponse: null,
+            projectId: storedProjectId || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO"
+        };
+        await setDoc(doc(db, "settings", "licenseConfiguration"), newStoredInfo, { merge: true });
+        setLicenseInfo(newStoredInfo);
+        return newStoredInfo;
+    }
+
+    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
+    const projectIdToUse = storedProjectId || currentAppProjectId;
+
+    try {
+        const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ licenseKey: storedKey, appId: projectIdToUse }),
+        });
+
+        let newStatus: StoredLicenseInfo['status'] = 'ApiError';
+        let apiResponse: LicenseDetailsApiResponse | null = null;
+
+        if (response.ok) {
+            apiResponse = await response.json();
+            if (apiResponse.isValid) {
+                if (apiResponse.productId !== projectIdToUse) {
+                    newStatus = 'Invalid'; // Mismatched project ID makes it invalid for this app
+                } else if (apiResponse.expiresAt && new Date(apiResponse.expiresAt) < new Date()) {
+                    newStatus = 'Expired';
+                } else {
+                    newStatus = 'Valid';
+                }
+            } else {
+                newStatus = 'Invalid';
+            }
+        } else {
+            const errorData = await response.json().catch(() => ({ message: response.statusText }));
+            console.error(`AuthProvider: Error del servidor de licencias (${response.status}): ${errorData.message || response.statusText}`);
+            newStatus = 'ApiError';
+        }
+
+        const newStoredInfo: StoredLicenseInfo = {
+            licenseKey: storedKey,
+            lastValidatedAt: new Date().toISOString(),
+            status: newStatus,
+            validationResponse: apiResponse,
+            projectId: projectIdToUse,
+        };
+
+        await setDoc(doc(db, "settings", "licenseConfiguration"), newStoredInfo, { merge: true });
+        setLicenseInfo(newStoredInfo);
+        console.log("AuthProvider: Revalidación completada. Nuevo estado almacenado:", newStatus, "Respuesta API:", apiResponse);
+        window.dispatchEvent(new Event('authChanged')); // Notify layout or other components
+        return newStoredInfo;
+    } catch (error) {
+        console.error("AuthProvider: Error de red durante la revalidación de licencia:", error);
+        const errorStoredInfo: StoredLicenseInfo = {
+            licenseKey: storedKey,
+            lastValidatedAt: new Date().toISOString(),
+            status: 'ApiError',
+            validationResponse: null,
+            projectId: projectIdToUse,
+        };
+        await setDoc(doc(db, "settings", "licenseConfiguration"), errorStoredInfo, { merge: true });
+        setLicenseInfo(errorStoredInfo);
+        window.dispatchEvent(new Event('authChanged'));
+        return errorStoredInfo;
+    }
+  }, []); // No dependencies, so it uses the latest values from closure
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -110,113 +191,124 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // License and user count logic
-      let currentLicenseInfo: StoredLicenseInfo | null = null;
+      let currentStoredLicenseInfo: StoredLicenseInfo | null = null;
       let allUsersList: User[] = [];
-      let newEffectiveStatus: EffectiveLicenseStatus = 'not_configured';
-      const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+      let newEffectiveStatus: EffectiveLicenseStatus = 'pending';
+      const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
 
       try {
         const licenseDocRef = doc(db, "settings", "licenseConfiguration");
         const licenseDocSnap = await getDoc(licenseDocRef);
+        
         if (licenseDocSnap.exists()) {
-          currentLicenseInfo = licenseDocSnap.data() as StoredLicenseInfo;
-          setLicenseInfo(currentLicenseInfo);
+          currentStoredLicenseInfo = licenseDocSnap.data() as StoredLicenseInfo;
           
-          const validationResponse = currentLicenseInfo.validationResponse;
+          const today = new Date().toISOString().split('T')[0];
+          const lastValidatedDate = currentStoredLicenseInfo.lastValidatedAt ? new Date(currentStoredLicenseInfo.lastValidatedAt).toISOString().split('T')[0] : null;
 
-          if (currentLicenseInfo.status === 'ApiError') {
-            newEffectiveStatus = 'api_error';
-          } else if (currentLicenseInfo.status === 'NotChecked' || !validationResponse) {
-            newEffectiveStatus = 'not_configured'; 
-          } else {
-            if (validationResponse.productId !== currentLicenseInfo.projectId) { // Check against projectId stored with license
-              newEffectiveStatus = 'mismatched_project_id';
-            } else if (!validationResponse.isValid) {
-              newEffectiveStatus = 'invalid_key';
-            } else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) {
-              newEffectiveStatus = 'expired';
-            } else {
-              try {
-                allUsersList = await getAllUsers(); // Use the memoized getAllUsers
-                setUserCount(allUsersList.length);
-
-                if (validationResponse.maxUsers !== null && typeof validationResponse.maxUsers === 'number' && allUsersList.length > validationResponse.maxUsers) {
-                  newEffectiveStatus = 'user_limit_exceeded';
-                } else {
-                  newEffectiveStatus = 'valid';
-                }
-              } catch (userCountError) {
-                console.error("Error fetching user count for license check:", userCountError);
-                newEffectiveStatus = 'api_error'; 
-                setUserCount(null);
-              }
-            }
+          if (lastValidatedDate !== today && currentStoredLicenseInfo.licenseKey) {
+            console.log("AuthProvider: Licencia no validada hoy. Realizando revalidación...");
+            currentStoredLicenseInfo = await performLicenseRevalidation(currentStoredLicenseInfo.licenseKey, currentStoredLicenseInfo.projectId);
           }
         } else {
-          setLicenseInfo(null);
+           // No license configured yet, attempt to create a default 'NotChecked' one
+           currentStoredLicenseInfo = {
+                licenseKey: '',
+                lastValidatedAt: new Date().toISOString(),
+                status: 'NotChecked',
+                validationResponse: null,
+                projectId: currentAppProjectId
+            };
+            await setDoc(doc(db, "settings", "licenseConfiguration"), currentStoredLicenseInfo, { merge: true });
+            console.log("AuthProvider: No hay configuración de licencia, creando una por defecto como 'NotChecked'.");
+        }
+        setLicenseInfo(currentStoredLicenseInfo); // Set licenseInfo state regardless of revalidation outcome
+
+        const validationResponse = currentStoredLicenseInfo?.validationResponse;
+
+        if (!currentStoredLicenseInfo || currentStoredLicenseInfo.status === 'NotChecked' || !validationResponse) {
           newEffectiveStatus = 'not_configured';
+        } else if (currentStoredLicenseInfo.status === 'ApiError') {
+          newEffectiveStatus = 'api_error';
+        } else if (validationResponse.productId !== currentStoredLicenseInfo.projectId) {
+          newEffectiveStatus = 'mismatched_project_id';
+        } else if (!validationResponse.isValid) {
+          newEffectiveStatus = 'invalid_key';
+        } else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) {
+          newEffectiveStatus = 'expired';
+        } else {
+          // License seems valid from API, now check user count
+          try {
+            allUsersList = await getAllUsers();
+            setUserCount(allUsersList.length);
+            if (validationResponse.maxUsers !== null && typeof validationResponse.maxUsers === 'number' && validationResponse.maxUsers > 0 && allUsersList.length > validationResponse.maxUsers) {
+              newEffectiveStatus = 'user_limit_exceeded';
+            } else {
+              newEffectiveStatus = 'valid'; // All checks passed
+            }
+          } catch (userCountError) {
+            console.error("Error fetching user count for license check:", userCountError);
+            newEffectiveStatus = 'api_error'; // Treat as API error if user count fails
+            setUserCount(null);
+          }
         }
       } catch (licenseError) {
-        console.error("Error fetching license information:", licenseError);
-        setLicenseInfo(null);
+        console.error("Error fetching/validating license information:", licenseError);
+        setLicenseInfo(null); // Clear licenseInfo on error
         newEffectiveStatus = 'api_error';
       }
+      
+      console.log("AuthProvider: Effective license status determined:", newEffectiveStatus);
       setEffectiveLicenseStatus(newEffectiveStatus);
-      setLoading(false); 
+      setLoading(false);
     });
     
-    const handleAuthChangeRecheck = () => { // Renamed to avoid conflict
-        // This event listener is intended to allow other parts of the app to trigger a re-check.
-        // The core logic is within onAuthStateChanged.
-        // Forcing a re-fetch might be needed if license is updated elsewhere and context needs refresh.
-        // However, the primary driver of context update for auth state is onAuthStateChanged.
-        // If license is stored in Firestore and updated, ideally components would re-fetch or listen to Firestore.
-        // For now, just re-triggering the onAuthStateChanged logic (if possible, or simply re-fetching license data)
-        // might be what's intended by 'authChanged' event.
+    const handleAuthChangeRecheck = async () => {
+        setLoading(true);
+        let currentLicenseInfo: StoredLicenseInfo | null = null;
+        let allUsersList: User[] = [];
+        let newEffectiveStatus: EffectiveLicenseStatus = 'not_configured';
         
-        // This is a simplified re-check. A more robust solution might involve
-        // re-calling the license and user count fetching logic directly.
-        const recheck = async () => {
-            setLoading(true); // Indicate re-checking
-            // Re-fetch license and user count
-            let currentLicenseInfo: StoredLicenseInfo | null = null;
-            let allUsersList: User[] = [];
-            let newEffectiveStatus: EffectiveLicenseStatus = 'not_configured';
-            // const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID; // Already defined above
-            try {
-                const licenseDocRef = doc(db, "settings", "licenseConfiguration");
-                const licenseDocSnap = await getDoc(licenseDocRef);
-                if (licenseDocSnap.exists()) {
+        try {
+            const licenseDocRef = doc(db, "settings", "licenseConfiguration");
+            const licenseDocSnap = await getDoc(licenseDocRef);
+            if (licenseDocSnap.exists()) {
                 currentLicenseInfo = licenseDocSnap.data() as StoredLicenseInfo;
-                setLicenseInfo(currentLicenseInfo);
-                
-                const validationResponse = currentLicenseInfo.validationResponse;
-                if (currentLicenseInfo.status === 'ApiError') newEffectiveStatus = 'api_error';
-                else if (currentLicenseInfo.status === 'NotChecked' || !validationResponse) newEffectiveStatus = 'not_configured';
-                else {
-                    if (validationResponse.productId !== currentLicenseInfo.projectId) newEffectiveStatus = 'mismatched_project_id';
-                    else if (!validationResponse.isValid) newEffectiveStatus = 'invalid_key';
-                    else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) newEffectiveStatus = 'expired';
-                    else {
-                        allUsersList = await getAllUsers();
-                        setUserCount(allUsersList.length);
-                        if (validationResponse.maxUsers !== null && typeof validationResponse.maxUsers === 'number' && allUsersList.length > validationResponse.maxUsers) {
-                            newEffectiveStatus = 'user_limit_exceeded';
-                        } else {
-                            newEffectiveStatus = 'valid';
-                        }
-                    }
+                // Perform revalidation if needed (e.g., if triggered by license page save)
+                if (currentLicenseInfo.licenseKey) {
+                     // Directly revalidating as an action from UI might have updated the key
+                    currentLicenseInfo = await performLicenseRevalidation(currentLicenseInfo.licenseKey, currentLicenseInfo.projectId);
                 }
-                } else {
-                    setLicenseInfo(null); newEffectiveStatus = 'not_configured';
-                }
-            } catch (e) {
-                setLicenseInfo(null); newEffectiveStatus = 'api_error';
+            } else {
+                 currentLicenseInfo = {
+                    licenseKey: '', lastValidatedAt: new Date().toISOString(), status: 'NotChecked', 
+                    validationResponse: null, projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO"
+                };
+                await setDoc(doc(db, "settings", "licenseConfiguration"), currentLicenseInfo, { merge: true });
             }
-            setEffectiveLicenseStatus(newEffectiveStatus);
-            setLoading(false);
-        };
-        recheck();
+            setLicenseInfo(currentLicenseInfo);
+
+            const validationResponse = currentLicenseInfo?.validationResponse;
+            if (!currentLicenseInfo || currentLicenseInfo.status === 'NotChecked' || !validationResponse) newEffectiveStatus = 'not_configured';
+            else if (currentLicenseInfo.status === 'ApiError') newEffectiveStatus = 'api_error';
+            else if (validationResponse.productId !== currentLicenseInfo.projectId) newEffectiveStatus = 'mismatched_project_id';
+            else if (!validationResponse.isValid) newEffectiveStatus = 'invalid_key';
+            else if (validationResponse.expiresAt && new Date(validationResponse.expiresAt) < new Date()) newEffectiveStatus = 'expired';
+            else {
+                allUsersList = await getAllUsers();
+                setUserCount(allUsersList.length);
+                if (validationResponse.maxUsers !== null && typeof validationResponse.maxUsers === 'number' && validationResponse.maxUsers > 0 && allUsersList.length > validationResponse.maxUsers) {
+                    newEffectiveStatus = 'user_limit_exceeded';
+                } else {
+                    newEffectiveStatus = 'valid';
+                }
+            }
+        } catch (e) {
+            console.error("AuthProvider: Error during explicit re-check:", e);
+            setLicenseInfo(null); newEffectiveStatus = 'api_error';
+        }
+        setEffectiveLicenseStatus(newEffectiveStatus);
+        setLoading(false);
     };
     window.addEventListener('authChanged', handleAuthChangeRecheck);
 
@@ -224,18 +316,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       unsubscribe();
       window.removeEventListener('authChanged', handleAuthChangeRecheck);
     }
-  }, [adminUserForSignup, getAllUsers, toast]); // Added getAllUsers and toast as dependencies to useEffect for getAllUsers
+  }, [adminUserForSignup, getAllUsers, toast, performLicenseRevalidation]);
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // onAuthStateChanged will handle setting currentUser and fetching license
       const userDocRef = doc(db, "users", userCredential.user.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (userDocSnap.exists()) {
         const userData = { id: userCredential.user.uid, ...userDocSnap.data() } as User;
-         if (userData) { // Ensure userData is not null before logging
+         if (userData) {
             await logSystemEvent(userData, 'login', 'User', userCredential.user.uid, `Usuario ${email} inició sesión.`);
         }
       }
@@ -250,31 +341,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      setLoading(false);
+      setLoading(false); // Ensure loading is set to false on login error
       throw error;
     }
-    // setLoading(false) will be called by onAuthStateChanged's effect
+    // setLoading(false) será manejado por el efecto de onAuthStateChanged
   };
 
   const signup = async (email: string, pass: string, name: string, roleParam?: UserRole): Promise<FirebaseUser | null> => {
-    const adminPerformingSignup = currentUser; // Get current admin *before* potential re-authentication
+    const adminPerformingSignup = currentUser; 
     if (!adminPerformingSignup) {
         toast({ title: "Error de Permisos", description: "Solo un administrador autenticado puede crear nuevos usuarios.", variant: "destructive"});
         return null;
     }
     
-    setAdminUserForSignup(adminPerformingSignup); // Store the admin user
+    setAdminUserForSignup(adminPerformingSignup);
     let newFirebaseUser: FirebaseUser | null = null;
 
     try {
-      // This might sign out the current admin and sign in as the new user temporarily
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       newFirebaseUser = userCredential.user;
 
       const userDocRef = doc(db, "users", newFirebaseUser.uid);
-      const role = roleParam || DEFAULT_USER_ROLE; // Ensure role has a value
+      const role = roleParam || DEFAULT_USER_ROLE;
       const newUserFirestoreData = {
-        uid: newFirebaseUser.uid,
+        uid: newFirebaseUser.uid, // Storing uid is redundant as it's the doc ID
         email: newFirebaseUser.email,
         name: name,
         role: role,
@@ -293,25 +383,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.warn("Error enviando email de verificación:", emailError);
         toast({
             title: "Usuario Creado (Sin Email de Verificación)",
-            description: `Se creó ${name}, pero falló el envío del correo de verificación. Contacta soporte.`,
+            description: `Se creó ${name}, pero falló el envío del correo de verificación.`,
             variant: "default",
             duration: 7000,
         });
       }
       await logSystemEvent(adminPerformingSignup, 'create', 'User', newFirebaseUser.uid, `Usuario ${name} (${email}) creado con rol ${role}.`);
       
-      // IMPORTANT: Sign out the newly created user and re-sign in the admin
-      if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid) {
-        await signOut(auth);
-        // Attempt to re-authenticate the admin. This is tricky.
-        // Ideally, admin operations are done via Admin SDK in Cloud Functions.
-        // For client-side, this forces a state refresh.
-        // The onAuthStateChanged listener will pick up the null user, then
-        // the admin would need to log back in, or we'd need a mechanism to restore admin session.
-        // For now, this simplifies by just signing out the new user. The admin might need to re-login if their session was lost.
-        // Triggering a custom event for onAuthStateChanged to re-evaluate.
-        window.dispatchEvent(new Event('authChanged'));
+      if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid && adminPerformingSignup.email && adminPerformingSignup.password) {
+          await signOut(auth);
+          // Re-authenticate the admin. This assumes you have admin's pass, which is not ideal.
+          // A better long-term solution is using Admin SDK for user creation via a Cloud Function.
+          try {
+            await signInWithEmailAndPassword(auth, adminPerformingSignup.email, adminPerformingSignup.password);
+          } catch (reauthError) {
+             console.error("AuthProvider: Error re-autenticando al admin:", reauthError);
+             // Admin might need to log in manually if re-auth fails.
+             // Forcing a full page reload or redirect to login might be necessary here.
+             // window.location.reload(); // Or router.push('/login');
+          }
+      } else if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid) {
+          // If admin's password is not available, sign out new user and the admin will need to manually log back in.
+          await signOut(auth);
+          console.warn("AuthProvider: Nuevo usuario creado. El administrador puede necesitar re-autenticarse.");
+          toast({title: "Acción Requerida", description: "Nuevo usuario creado. Por favor, re-autentícate como administrador.", duration: 10000});
+          // router.push('/login'); // Optionally redirect admin to login
       }
+      window.dispatchEvent(new Event('authChanged'));
       return newFirebaseUser;
     } catch (error: any) {
       console.error("Error en signup (admin):", error);
@@ -326,9 +424,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: errorMessage,
         variant: "destructive",
       });
-      setAdminUserForSignup(null); // Reset admin placeholder on error
-      // If the admin was signed out, they might need to re-login.
-      // Trigger a re-check of auth state.
+      setAdminUserForSignup(null);
       window.dispatchEvent(new Event('authChanged'));
       throw error;
     }
@@ -346,6 +442,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
         const changes = Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(', ');
         await logSystemEvent(adminUser, 'update', 'User', userId, `Datos de usuario actualizados. Cambios: ${changes}.`);
+        window.dispatchEvent(new Event('authChanged')); // To re-fetch user count and license status
 
     } catch (error) {
         console.error("Error actualizando usuario en Firestore:", error);
@@ -357,8 +454,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userLoggingOut = currentUser;
     try {
       await signOut(auth);
-      // onAuthStateChanged will handle setting currentUser to null and updating license status
-       if (userLoggingOut) { // Ensure userLoggingOut is not null
+       if (userLoggingOut) {
         await logSystemEvent(userLoggingOut, 'logout', 'User', userLoggingOut.id, `Usuario ${userLoggingOut.name} cerró sesión.`);
       }
     } catch (error: any) {
@@ -394,9 +490,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth debe ser utilizado dentro de un AuthProvider');
   }
   return context;
 };
-
-    

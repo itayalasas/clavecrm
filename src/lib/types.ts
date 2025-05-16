@@ -529,17 +529,17 @@ export type EscalationConditionType =
   | 'ticket_idle_for_x_hours'
   | 'ticket_priority_is'
   | 'ticket_in_queue'
-  | 'ticket_sentiment_is_negative'
-  | 'customer_response_pending_for_x_hours';
+  | 'ticket_sentiment_is_negative' // Example advanced
+  | 'customer_response_pending_for_x_hours'; // Example advanced
 
 export type EscalationActionType =
   | 'notify_user'
-  | 'notify_group'
+  | 'notify_group' // Example advanced
   | 'change_priority'
   | 'assign_to_user'
   | 'assign_to_queue'
-  | 'trigger_webhook'
-  | 'create_follow_up_task';
+  | 'trigger_webhook' // Example advanced
+  | 'create_follow_up_task'; // Example advanced
 
 
 export interface EscalationRule {
@@ -553,7 +553,7 @@ export interface EscalationRule {
   actionTargetGroupId?: string | null; // Placeholder for future group selection
   actionTargetQueueId?: string | null;
   actionTargetPriority?: TicketPriority | null;
-  actionValue?: string | null;
+  actionValue?: string | null; // For actions like trigger_webhook
   order: number;
   isEnabled: boolean;
   createdAt: string;
@@ -637,22 +637,24 @@ export interface KnowledgeBaseArticle {
 // Application License
 export interface LicenseDetailsApiResponse {
   isValid: boolean;
-  productId: string;
+  productId: string; // ID of the product this license is for (should match your app's Firebase Project ID)
   productName: string;
   expiresAt?: string | null; // ISO date string
-  maxUsers?: number | null;
-  terms?: string | null;
-  // Potentially other fields like features enabled, customerId, etc.
+  maxUsers?: number | null; // Max concurrent users or total users, depending on your model
+  terms?: string | null; // URL or text of license terms
+  // Potentially other fields like featuresEnabled, customerId, etc.
 }
 
 export interface StoredLicenseInfo {
   licenseKey: string;
   lastValidatedAt: string; // ISO string of when it was last successfully validated
-  status: 'Valid' | 'Invalid' | 'Expired' | 'NotChecked' | 'ApiError';
-  validationResponse?: LicenseDetailsApiResponse | null; // Store the last raw response
-  projectId?: string; // Store the projectId this license was validated against
+  status: 'Valid' | 'Invalid' | 'Expired' | 'NotChecked' | 'ApiError'; // Overall status after validation
+  validationResponse?: LicenseDetailsApiResponse | null; // Store the last raw response from the validation endpoint
+  projectId?: string; // Store the Firebase Project ID this license was validated against
 }
 
+// This type represents the *effective* status of the license considering all factors
+// (API validation, expiry, user limits, project ID match)
 export type EffectiveLicenseStatus =
   | 'pending' // Still loading or checking
   | 'valid'
@@ -660,7 +662,14 @@ export type EffectiveLicenseStatus =
   | 'mismatched_project_id' // Key is valid but for a different project
   | 'expired'
   | 'user_limit_exceeded'
-  | 'api_error' // Error contacting license server
+  | 'api_error' // Error contacting license server OR error fetching user count
   | 'not_configured'; // No license info found in Firestore
 
-```
+// WhatsApp API Settings (Placeholder)
+export interface WhatsAppApiSettings {
+    phoneNumberId?: string;
+    wabaId?: string; // WhatsApp Business Account ID
+    accessToken?: string;
+    webhookVerifyToken?: string; // Your custom verify token for the webhook
+    // Potentially other provider-specific settings
+}
