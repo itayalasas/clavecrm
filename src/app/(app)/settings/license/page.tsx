@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { LicenseDetailsApiResponse, StoredLicenseInfo, User } from "@/lib/types";
+import type { LicenseDetailsApiResponse, StoredLicenseInfo, User, EffectiveLicenseStatus } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescriptionUI } from "@/components/ui/form";
@@ -27,6 +27,7 @@ const licenseFormSchema = z.object({
 
 type LicenseFormValues = z.infer<typeof licenseFormSchema>;
 
+// Endpoint para validación de licencia
 const LICENSE_VALIDATION_ENDPOINT = "https://studio--licensekeygenius-18qwi.us-central1.hosted.app/api/validate-license";
 
 export default function LicensePage() {
@@ -65,6 +66,7 @@ export default function LicensePage() {
             lastValidatedAt: "",
             status: "NotChecked",
             projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown_project",
+            validationResponse: null,
           });
         }
       } catch (error) {
@@ -98,22 +100,17 @@ export default function LicensePage() {
     setIsSubmitting(true);
     const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     
-    setStoredLicenseInfo(prev => ({
-        ...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked', projectId: currentAppProjectId }),
-        licenseKey: data.licenseKey,
-        status: 'NotChecked', 
-        projectId: currentAppProjectId 
-    } as StoredLicenseInfo));
-
     const requestBody = {
       licenseKey: data.licenseKey,
       appId: currentAppProjectId,
     };
-
-    console.log("Attempting to validate license with:", {
+    
+    console.log("Intentando validar licencia con:", {
       endpoint: LICENSE_VALIDATION_ENDPOINT,
       body: requestBody,
     });
+    console.log("Clave de Licencia enviada:", data.licenseKey);
+    console.log("App ID (Project ID) enviado:", currentAppProjectId);
 
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
@@ -127,24 +124,18 @@ export default function LicensePage() {
         try {
             errorData = await response.json();
         } catch (e) {
-            errorData = { message: "Error desconocido del servidor de licencias. Respuesta no es JSON." };
+            errorData = { message: `Error del servidor de licencias: ${response.status}. Respuesta no es JSON.` };
         }
         throw new Error(errorData.message || `Error del servidor de licencias: ${response.status}`);
       }
 
       const result = await response.json() as LicenseDetailsApiResponse;
       
-      const newLicenseInfoBase: Omit<StoredLicenseInfo, 'status' | 'projectId'> = {
-        licenseKey: data.licenseKey,
-        lastValidatedAt: new Date().toISOString(),
-        validationResponse: result,
-      };
-      
       let determinedStatus: StoredLicenseInfo['status'] = 'Invalid';
 
       if (result.isValid) {
         if (result.productId !== currentAppProjectId) {
-          determinedStatus = 'Invalid'; // This makes it invalid for *this* app
+          determinedStatus = 'Invalid'; // O 'mismatched_project_id' si lo tienes como estado separado
           toast({ title: "Error de Licencia", description: "La clave de licencia es válida, pero para un proyecto diferente.", variant: "destructive", duration: 7000 });
         } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
           determinedStatus = 'Expired';
@@ -159,9 +150,11 @@ export default function LicensePage() {
       }
       
       const finalNewLicenseInfo: StoredLicenseInfo = {
-        ...newLicenseInfoBase,
+        licenseKey: data.licenseKey,
+        lastValidatedAt: new Date().toISOString(),
         status: determinedStatus,
-        projectId: currentAppProjectId, // Save the project ID this license was validated against
+        validationResponse: result,
+        projectId: currentAppProjectId, 
       };
       
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
@@ -205,7 +198,10 @@ export default function LicensePage() {
 
   const renderLicenseStatus = () => {
     if (isLoading) return <p className="text-muted-foreground">Cargando estado de licencia...</p>;
-    if (!storedLicenseInfo || storedLicenseInfo.status === 'NotChecked') {
+    
+    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown_project";
+
+    if (!storedLicenseInfo || storedLicenseInfo.status === 'NotChecked' || !storedLicenseInfo.validationResponse) {
       return <div className="p-4 border rounded-md bg-muted/50 text-center">
         <Info className="h-8 w-8 mx-auto text-muted-foreground mb-2"/>
         <p className="font-semibold">No hay información de licencia o no ha sido validada.</p>
@@ -214,7 +210,6 @@ export default function LicensePage() {
     }
 
     const { status, validationResponse: details, lastValidatedAt, licenseKey, projectId: validatedAgainstProjectId } = storedLicenseInfo;
-    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown_project";
     
     let displayStatusLabel = status;
     let statusIcon = <Info className="h-5 w-5" />;
@@ -224,12 +219,13 @@ export default function LicensePage() {
 
     const userLimitExceeded = details && currentUsersCount !== null && details.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
     const isExpired = details && details.expiresAt && new Date(details.expiresAt) < new Date();
-    // Check against validatedAgainstProjectId which is the projectId of the current app stored during validation
-    const isMismatchedProjectId = details && details.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId;
+    const isMismatchedProjectIdCurrentApp = details?.productId && currentAppProjectId && details.productId !== currentAppProjectId;
+    // Check against validatedAgainstProjectId if it exists (the project ID this license was *last validated against*)
+    const isMismatchedProjectIdStored = details?.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId;
 
 
     if (status === 'Valid') {
-        if (isMismatchedProjectId) {
+        if (isMismatchedProjectIdCurrentApp || isMismatchedProjectIdStored) {
             displayStatusLabel = 'Proyecto Incorrecto';
             statusIcon = <XCircle className="h-5 w-5" />;
             cardClasses = "border-red-500 bg-red-50";
@@ -256,7 +252,7 @@ export default function LicensePage() {
         statusIcon = <XCircle className="h-5 w-5" />;
         cardClasses = "border-red-500 bg-red-50";
         textClasses = "text-red-700";
-        if (isMismatchedProjectId) { // If status is Invalid AND it's due to mismatch
+        if (isMismatchedProjectIdStored || isMismatchedProjectIdCurrentApp) { 
             specificMessage = "Esta clave de licencia es válida, pero pertenece a un proyecto diferente al actual.";
         } else {
             specificMessage = details?.terms || "La clave de licencia no es válida o no es para este producto.";
@@ -289,14 +285,14 @@ export default function LicensePage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           {specificMessage && <p className={`font-semibold ${textClasses}`}>{specificMessage}</p>}
-          {details && status !== 'Invalid' && !isMismatchedProjectId && ( // Show details only if not invalid for mismatch reason
+          {details && status !== 'Invalid' && !(isMismatchedProjectIdCurrentApp || isMismatchedProjectIdStored) && (
             <>
-              <p><strong>Producto:</strong> {details.productName} (ID Licencia Prod.: {details.productId})</p>
+              <p><strong>Producto (según licencia):</strong> {details.productName} (ID Licencia Prod.: {details.productId})</p>
               {details.maxUsers !== null && typeof details.maxUsers === 'number' && (
                 <p className={`flex items-center gap-1 ${userLimitExceeded ? 'text-orange-700 font-semibold' : ''}`}>
                   <Users className="h-4 w-4"/> 
                   <strong>Usuarios Permitidos:</strong> {details.maxUsers} 
-                  {currentUsersCount !== null && ` (Actuales: ${currentUsersCount})`}
+                  {currentUsersCount !== null && ` (Actuales en CRM: ${currentUsersCount})`}
                   {userLimitExceeded && <Badge variant="destructive" className="ml-2 bg-orange-600 text-white">LÍMITE EXCEDIDO</Badge>}
                 </p>
               )}
@@ -310,9 +306,9 @@ export default function LicensePage() {
               {details.terms && <p className="text-xs border-t pt-2 mt-2"><strong>Términos:</strong> {details.terms}</p>}
             </>
           )}
-           {validatedAgainstProjectId && details?.productId && validatedAgainstProjectId !== details.productId && (
+           {(isMismatchedProjectIdCurrentApp || isMismatchedProjectIdStored) && (
              <p className="text-xs text-red-600 mt-1">
-                Esta licencia fue validada para el ID de producto: <code className="bg-red-100 px-1 rounded">{details.productId}</code>, pero el ID de proyecto/producto actual de esta app es <code className="bg-red-100 px-1 rounded">{validatedAgainstProjectId}</code>.
+                ID del Producto en licencia: <code className="bg-red-100 px-1 rounded">{details?.productId}</code>. ID de Proyecto/Producto de esta app: <code className="bg-red-100 px-1 rounded">{currentAppProjectId}</code>.
              </p>
             )}
           {lastValidatedAt && <p className="text-xs text-muted-foreground mt-2">Última validación: {format(typeof lastValidatedAt === 'string' ? parseISO(lastValidatedAt) : (lastValidatedAt as Timestamp).toDate(), "PPpp", {locale:es})}</p>}
@@ -341,7 +337,7 @@ export default function LicensePage() {
             {navItem?.label || "Licencia de Aplicación"}
           </CardTitle>
           <CardDescription>
-            Gestiona la clave de licencia de tu aplicación CRM Rápido. Tu ID de Proyecto (appId): <code className="bg-muted px-1 py-0.5 rounded text-sm">{process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "No disponible"}</code>
+            Gestiona la clave de licencia de tu aplicación CRM Rápido. Tu ID de Proyecto (appId) es: <code className="bg-muted px-1 py-0.5 rounded text-sm">{process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "No disponible"}</code>
           </CardDescription>
         </CardHeader>
       </Card>
