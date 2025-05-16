@@ -64,7 +64,7 @@ export default function LicensePage() {
             licenseKey: "",
             lastValidatedAt: "",
             status: "NotChecked",
-            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown",
+            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown_project",
           });
         }
       } catch (error) {
@@ -96,12 +96,15 @@ export default function LicensePage() {
       return;
     }
     setIsSubmitting(true);
+    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    // Initialize storedLicenseInfo if it's null or ensure projectId is current
     setStoredLicenseInfo(prev => ({
-        ...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked', projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID }),
-        licenseKey: data.licenseKey, // Ensure the new key is used
+        ...(prev || { licenseKey: data.licenseKey, lastValidatedAt: "", status: 'NotChecked', projectId: currentAppProjectId }),
+        licenseKey: data.licenseKey,
         status: 'NotChecked', 
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID 
+        projectId: currentAppProjectId 
     } as StoredLicenseInfo));
+
 
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
@@ -109,48 +112,59 @@ export default function LicensePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           licenseKey: data.licenseKey,
-          appId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+          appId: currentAppProjectId,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Error desconocido del servidor de licencias." }));
+        let errorData;
+        try {
+            errorData = await response.json();
+        } catch (e) {
+            errorData = { message: "Error desconocido del servidor de licencias. Respuesta no es JSON." };
+        }
         throw new Error(errorData.message || `Error del servidor de licencias: ${response.status}`);
       }
 
       const result = await response.json() as LicenseDetailsApiResponse;
       
-      const newLicenseInfo: StoredLicenseInfo = {
+      const newLicenseInfoBase: Omit<StoredLicenseInfo, 'status'> = {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
-        status: 'Invalid', 
         validationResponse: result,
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        projectId: currentAppProjectId,
       };
+      
+      let determinedStatus: StoredLicenseInfo['status'] = 'Invalid';
 
       if (result.isValid) {
-        if (result.productId !== process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-          newLicenseInfo.status = 'Invalid'; 
+        if (result.productId !== currentAppProjectId) {
+          determinedStatus = 'Invalid'; // Treat as invalid if productId mismatch, handled more specifically in UI rendering
           toast({ title: "Error de Licencia", description: "La clave de licencia es válida, pero para un proyecto diferente.", variant: "destructive", duration: 7000 });
         } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
-          newLicenseInfo.status = 'Expired';
+          determinedStatus = 'Expired';
           toast({ title: "Licencia Expirada", description: `La licencia expiró el ${format(parseISO(result.expiresAt), "PPpp", { locale: es })}.`, variant: "destructive", duration: 7000 });
         } else {
-          newLicenseInfo.status = 'Valid';
-          toast({ title: "Licencia Validada Exitosamente", description: `Estado: ${newLicenseInfo.status}. ${result.terms || ''}`, duration: 7000 });
+          determinedStatus = 'Valid';
+          toast({ title: "Licencia Validada Exitosamente", description: `Estado: Válida. ${result.terms || ''}`, duration: 7000 });
         }
       } else {
-        newLicenseInfo.status = 'Invalid';
+        determinedStatus = 'Invalid';
         toast({ title: "Licencia Inválida", description: result.terms || "La clave de licencia proporcionada no es válida.", variant: "destructive", duration: 7000 });
       }
       
+      const finalNewLicenseInfo: StoredLicenseInfo = {
+        ...newLicenseInfoBase,
+        status: determinedStatus,
+      };
+      
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
       await setDoc(licenseDocRef, {
-        ...newLicenseInfo,
+        ...finalNewLicenseInfo,
         lastValidatedAt: serverTimestamp(), 
       }, { merge: true });
       
-      setStoredLicenseInfo(newLicenseInfo);
+      setStoredLicenseInfo(finalNewLicenseInfo);
 
     } catch (error: any) {
       console.error("Error al validar licencia:", error);
@@ -165,7 +179,7 @@ export default function LicensePage() {
         lastValidatedAt: new Date().toISOString(),
         status: 'ApiError',
         validationResponse: null,
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        projectId: currentAppProjectId,
       };
       setStoredLicenseInfo(errorLicenseInfo);
       const licenseDocRef = doc(db, "settings", "licenseConfiguration");
@@ -194,7 +208,7 @@ export default function LicensePage() {
     }
 
     const { status, validationResponse: details, lastValidatedAt, licenseKey, projectId: validatedAgainstProjectId } = storedLicenseInfo;
-    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unknown_project";
     
     let displayStatus = status;
     let statusIcon = <Info className="h-5 w-5" />;
@@ -202,12 +216,15 @@ export default function LicensePage() {
     let textClasses = "text-blue-700";
     let specificMessage = "";
 
-    const userLimitExceeded = currentUsersCount !== null && details?.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
-    const isExpired = details?.expiresAt && new Date(details.expiresAt) < new Date();
-    const isMismatchedProjectId = details?.productId && currentAppProjectId && details.productId !== currentAppProjectId;
+    const userLimitExceeded = details && currentUsersCount !== null && details.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
+    const isExpired = details && details.expiresAt && new Date(details.expiresAt) < new Date();
+    // The project ID check done during validation is the primary source for mismatch.
+    // Here, we mostly reflect the status that was set during validation.
+    const isMismatchedProjectId = details && details.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId;
+
 
     if (status === 'Valid') {
-        if (isMismatchedProjectId) {
+        if (isMismatchedProjectId) { // This should ideally be caught by the AuthProvider now and status changed.
             displayStatus = 'Proyecto Incorrecto';
             statusIcon = <XCircle className="h-5 w-5" />;
             cardClasses = "border-red-500 bg-red-50";
@@ -234,16 +251,19 @@ export default function LicensePage() {
         statusIcon = <XCircle className="h-5 w-5" />;
         cardClasses = "border-red-500 bg-red-50";
         textClasses = "text-red-700";
-        if (details?.productId && currentAppProjectId && details.productId !== currentAppProjectId) {
+        if (details && details.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId) {
             specificMessage = "Esta clave de licencia es válida, pero pertenece a un proyecto diferente al actual.";
         } else {
-            specificMessage = details?.terms || "La clave de licencia no es válida.";
+            specificMessage = details?.terms || "La clave de licencia no es válida o no es para este producto.";
         }
     } else if (status === 'Expired') {
         displayStatus = 'Expirada';
         statusIcon = <XCircle className="h-5 w-5" />;
         cardClasses = "border-red-500 bg-red-50";
         textClasses = "text-red-700";
+        if (details?.expiresAt) {
+            specificMessage = `La licencia expiró el ${format(parseISO(details.expiresAt), "PPpp", { locale: es })}.`;
+        }
     } else if (status === 'ApiError') {
         displayStatus = 'Error de API';
         statusIcon = <AlertTriangle className="h-5 w-5" />;
@@ -266,7 +286,7 @@ export default function LicensePage() {
           {specificMessage && <p className={`font-semibold ${textClasses}`}>{specificMessage}</p>}
           {details && !isMismatchedProjectId && status !== 'Invalid' && (
             <>
-              <p><strong>Producto:</strong> {details.productName} (ID Licencia: {details.productId})</p>
+              <p><strong>Producto:</strong> {details.productName} (ID Licencia Prod.: {details.productId})</p>
               {details.maxUsers !== null && typeof details.maxUsers === 'number' && (
                 <p className={`flex items-center gap-1 ${userLimitExceeded ? 'text-orange-700 font-semibold' : ''}`}>
                   <Users className="h-4 w-4"/> 
@@ -285,9 +305,9 @@ export default function LicensePage() {
               {details.terms && <p className="text-xs border-t pt-2 mt-2"><strong>Términos:</strong> {details.terms}</p>}
             </>
           )}
-           {validatedAgainstProjectId && validatedAgainstProjectId !== currentAppProjectId && (
+           {validatedAgainstProjectId && details?.productId && validatedAgainstProjectId !== details.productId && (
              <p className="text-xs text-red-600 mt-1">
-                Esta licencia fue validada contra el ID de proyecto: <code className="bg-red-100 px-1 rounded">{validatedAgainstProjectId}</code>, pero el ID de proyecto actual es <code className="bg-red-100 px-1 rounded">{currentAppProjectId}</code>.
+                Esta licencia fue validada para el ID de producto: <code className="bg-red-100 px-1 rounded">{details.productId}</code>, pero el ID de proyecto/producto actual de esta app es <code className="bg-red-100 px-1 rounded">{validatedAgainstProjectId}</code>.
              </p>
             )}
           {lastValidatedAt && <p className="text-xs text-muted-foreground mt-2">Última validación: {format(typeof lastValidatedAt === 'string' ? parseISO(lastValidatedAt) : (lastValidatedAt as Timestamp).toDate(), "PPpp", {locale:es})}</p>}
