@@ -105,12 +105,10 @@ export default function LicensePage() {
       appId: currentAppProjectId,
     };
     
-    console.log("Intentando validar licencia con:", {
-      endpoint: LICENSE_VALIDATION_ENDPOINT,
-      body: requestBody,
-    });
-    console.log("Clave de Licencia enviada:", data.licenseKey);
-    console.log("App ID (Project ID) enviado:", currentAppProjectId);
+    console.log("Intentando validar licencia con endpoint:", LICENSE_VALIDATION_ENDPOINT);
+    console.log("Cuerpo de la solicitud (Request Body):", JSON.stringify(requestBody));
+    console.log("Si 'Failed to fetch' ocurre, revisa la pestaña 'Network' en las herramientas de desarrollador del navegador para detalles del error de CORS. El servidor del endpoint debe permitir solicitudes desde tu dominio.");
+
 
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
@@ -135,7 +133,7 @@ export default function LicensePage() {
 
       if (result.isValid) {
         if (result.productId !== currentAppProjectId) {
-          determinedStatus = 'Invalid'; // O 'mismatched_project_id' si lo tienes como estado separado
+          determinedStatus = 'Invalid'; // Considered invalid for this app
           toast({ title: "Error de Licencia", description: "La clave de licencia es válida, pero para un proyecto diferente.", variant: "destructive", duration: 7000 });
         } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
           determinedStatus = 'Expired';
@@ -219,13 +217,14 @@ export default function LicensePage() {
 
     const userLimitExceeded = details && currentUsersCount !== null && details.maxUsers !== null && typeof details.maxUsers === 'number' && currentUsersCount > details.maxUsers;
     const isExpired = details && details.expiresAt && new Date(details.expiresAt) < new Date();
-    const isMismatchedProjectIdCurrentApp = details?.productId && currentAppProjectId && details.productId !== currentAppProjectId;
-    // Check against validatedAgainstProjectId if it exists (the project ID this license was *last validated against*)
-    const isMismatchedProjectIdStored = details?.productId && validatedAgainstProjectId && details.productId !== validatedAgainstProjectId;
+    // Check against the projectId stored during the last validation AND the current app's project ID
+    const isMismatchedProjectId = details?.productId && 
+                                  ((validatedAgainstProjectId && details.productId !== validatedAgainstProjectId) || 
+                                   (currentAppProjectId && details.productId !== currentAppProjectId));
 
 
     if (status === 'Valid') {
-        if (isMismatchedProjectIdCurrentApp || isMismatchedProjectIdStored) {
+        if (isMismatchedProjectId) {
             displayStatusLabel = 'Proyecto Incorrecto';
             statusIcon = <XCircle className="h-5 w-5" />;
             cardClasses = "border-red-500 bg-red-50";
@@ -252,7 +251,7 @@ export default function LicensePage() {
         statusIcon = <XCircle className="h-5 w-5" />;
         cardClasses = "border-red-500 bg-red-50";
         textClasses = "text-red-700";
-        if (isMismatchedProjectIdStored || isMismatchedProjectIdCurrentApp) { 
+        if (isMismatchedProjectId) { 
             specificMessage = "Esta clave de licencia es válida, pero pertenece a un proyecto diferente al actual.";
         } else {
             specificMessage = details?.terms || "La clave de licencia no es válida o no es para este producto.";
@@ -285,7 +284,7 @@ export default function LicensePage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           {specificMessage && <p className={`font-semibold ${textClasses}`}>{specificMessage}</p>}
-          {details && status !== 'Invalid' && !(isMismatchedProjectIdCurrentApp || isMismatchedProjectIdStored) && (
+          {details && status !== 'Invalid' && !isMismatchedProjectId && (
             <>
               <p><strong>Producto (según licencia):</strong> {details.productName} (ID Licencia Prod.: {details.productId})</p>
               {details.maxUsers !== null && typeof details.maxUsers === 'number' && (
@@ -306,7 +305,7 @@ export default function LicensePage() {
               {details.terms && <p className="text-xs border-t pt-2 mt-2"><strong>Términos:</strong> {details.terms}</p>}
             </>
           )}
-           {(isMismatchedProjectIdCurrentApp || isMismatchedProjectIdStored) && (
+           {isMismatchedProjectId && (
              <p className="text-xs text-red-600 mt-1">
                 ID del Producto en licencia: <code className="bg-red-100 px-1 rounded">{details?.productId}</code>. ID de Proyecto/Producto de esta app: <code className="bg-red-100 px-1 rounded">{currentAppProjectId}</code>.
              </p>
@@ -386,4 +385,3 @@ export default function LicensePage() {
     </div>
   );
 }
-
