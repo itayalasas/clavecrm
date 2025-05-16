@@ -633,3 +633,22 @@ export interface KnowledgeBaseArticle {
   visibility: 'public' | 'internal'; // or more granular roles
   slug?: string; // For URL generation
 }
+
+// Application License
+export interface LicenseDetailsApiResponse {
+  isValid: boolean;
+  productId: string;
+  productName: string;
+  expiresAt?: string | null; // ISO date string
+  maxUsers?: number | null;
+  terms?: string | null;
+  // Potentially other fields like features enabled, customerId, etc.
+}
+
+export interface StoredLicenseInfo {
+  licenseKey: string;
+  lastValidatedAt: string; // ISO string of when it was last successfully validated
+  status: 'Valid' | 'Invalid' | 'Expired' | 'NotChecked' | 'ApiError';
+  validationResponse?: LicenseDetailsApiResponse | null; // Store the last raw response
+  projectId?: string; // Store the projectId this license was validated against
+}

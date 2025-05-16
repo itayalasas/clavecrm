@@ -1,6 +1,6 @@
 
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType, KnowledgeBaseArticle } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter } from 'lucide-react';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter, KeyRound } from 'lucide-react';
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -73,16 +73,13 @@ export const NAV_ITEMS: NavItem[] = [
       { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon },
       { href: '/settings/escalation-logs', label: 'Historial de Escalados', icon: AlertTriangle },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
+      { href: '/settings/license', label: 'Licencia de Aplicación', icon: KeyRound },
     ],
     parentActiveIf: (pathname) => [
         '/user-management',
         '/settings',
         '/audit-log',
-        '/settings/slas',
-        '/settings/support-queues',
-        '/settings/escalation-rules',
-        '/settings/escalation-logs',
-    ].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/live-chat-widget'),
+    ].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/'), // Simpler check for all /settings/*
   },
 ];
 
@@ -269,8 +266,8 @@ export const ESCALATION_CONDITION_TYPES: { value: EscalationConditionType, label
   { value: 'ticket_idle_for_x_hours', label: 'Ticket Inactivo por X Horas', requiresValue: 'number' },
   { value: 'ticket_priority_is', label: 'Prioridad del Ticket Es', requiresValue: 'priority'},
   { value: 'ticket_in_queue', label: 'Ticket está en Cola', requiresValue: 'queue'},
-  { value: 'ticket_sentiment_is_negative', label: 'Sentimiento del Ticket es Negativo (IA - Futuro)', requiresValue: undefined },
-  { value: 'customer_response_pending_for_x_hours', label: 'Respuesta Cliente Pendiente por X Horas (Futuro)', requiresValue: 'number' },
+  { value: 'ticket_sentiment_is_negative', label: 'Sentimiento del Ticket es Negativo (IA - Futuro)' }, // Example Advanced
+  { value: 'customer_response_pending_for_x_hours', label: 'Respuesta Cliente Pendiente por X Horas (Futuro)', requiresValue: 'number' }, // Example Advanced
 ];
 
 export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: string, targetType?: 'user' | 'group' | 'queue' | 'priority', requiresValue?: 'string' }[] = [
@@ -279,8 +276,8 @@ export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: stri
   { value: 'change_priority', label: 'Cambiar Prioridad del Ticket', targetType: 'priority' },
   { value: 'assign_to_user', label: 'Asignar a Usuario', targetType: 'user' },
   { value: 'assign_to_queue', label: 'Mover a Cola', targetType: 'queue' },
-  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string' },
-  { value: 'create_follow_up_task', label: 'Crear Tarea de Seguimiento (Futuro)', targetType: 'user' },
+  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string'}, // Example Advanced
+  { value: 'create_follow_up_task', label: 'Crear Tarea de Seguimiento (Futuro)', targetType: 'user'}, // Example Advanced
 ];
 
 export const INITIAL_ESCALATION_RULES: EscalationRule[] = [

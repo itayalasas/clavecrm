@@ -13,6 +13,35 @@
     avatar: settings.agentAvatarUrl || "https://cdn-icons-png.flaticon.com/512/4712/4712027.png"
   };
 
+  function getInitials(name, isVisitor = false) {
+    if (isVisitor) return 'V';
+    if (!name) return '';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  function createAvatarElement(initials, bgColor = '#ccc') {
+    const avatar = document.createElement('div');
+    avatar.textContent = initials;
+    Object.assign(avatar.style, {
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      backgroundColor: bgColor,
+      color: '#fff',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 'bold',
+      fontSize: '12px',
+      marginRight: '8px'
+    });
+    return avatar;
+  }
+  
+  
+
   const firebaseConfig = {
     apiKey: "AIzaSyA1PIzHg0qgOhXvHIp5duq6VgbuV3WIniE",
     authDomain: "minicrm-express.firebaseapp.com",
@@ -94,11 +123,21 @@
     Object.assign(inputContainer.style, { padding: '10px', borderTop: '1px solid #ddd', display: 'flex', alignItems: 'center', backgroundColor: '#fff' });
     const chatInput = document.createElement('input');
     chatInput.id = 'crm-rapido-chat-input';
+    chatInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    });
     chatInput.type = 'text';
     chatInput.placeholder = 'Escribe tu mensaje...';
     Object.assign(chatInput.style, { flexGrow: '1', padding: '8px', border: '1px solid #ccc', borderRadius: '20px', outline: 'none' });
     const sendBtn = document.createElement('button');
-    sendBtn.innerHTML = '➡️';
+    sendBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>`;
     Object.assign(sendBtn.style, { marginLeft: '8px', padding: '8px', backgroundColor: settings.primaryColor, border: 'none', borderRadius: '50%', cursor: 'pointer', color: '#fff' });
     sendBtn.onclick = handleSendMessage;
     inputContainer.appendChild(chatInput);
@@ -161,22 +200,53 @@
     addVisitorMessage(text);
   }
 
-  function addVisitorMessage(text) {
+  function addVisitorMessage(text, timestamp = new Date()) {
     const body = document.getElementById('crm-rapido-chat-body');
+  
     const wrap = document.createElement('div');
     wrap.style.display = 'flex';
     wrap.style.justifyContent = 'flex-end';
+    wrap.style.alignItems = 'flex-end';
     wrap.style.margin = '8px';
+  
+    const content = document.createElement('div');
+    content.style.maxWidth = '70%';
+    content.style.textAlign = 'right';
+  
     const bubble = document.createElement('div');
     bubble.style.background = settings.primaryColor;
     bubble.style.color = '#fff';
     bubble.style.padding = '8px';
     bubble.style.borderRadius = '10px';
+    bubble.style.wordWrap = 'break-word';
     bubble.textContent = text;
-    wrap.appendChild(bubble);
+  
+    const time = document.createElement('div');
+    time.style.fontSize = '10px';
+    time.style.color = '#fff';
+    time.style.marginTop = '4px';
+    time.style.textAlign = 'right';
+  
+    try {
+      const t = typeof timestamp === 'string' ? new Date(timestamp) :
+                timestamp.toDate ? timestamp.toDate() : timestamp;
+      time.textContent = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      time.textContent = '';
+    }
+  
+    content.appendChild(bubble);
+    content.appendChild(time);
+    wrap.appendChild(content);
+  
+    const visitorAvatar = createAvatarElement(getInitials(null, true), settings.primaryColor);
+    visitorAvatar.style.marginLeft = '8px';
+    wrap.appendChild(visitorAvatar);
+  
     body.appendChild(wrap);
     body.scrollTop = body.scrollHeight;
   }
+  
 
   async function getOrCreateChatSession(initialText) {
     if (currentSessionId) return currentSessionId;
@@ -187,6 +257,7 @@
       .get();
     if (!q.empty) {
       currentSessionId = q.docs[0].id;
+      listenForMessages(currentSessionId);
       return currentSessionId;
     }
     const doc = await db.collection('chatSessions').add({
@@ -199,6 +270,7 @@
       visitorName: localStorage.getItem('crmRapidoVisitorName') || settings.defaultVisitorName || ("Visitante " + visitorId.substring(0, 4))
     });
     currentSessionId = doc.id;
+    listenForMessages(currentSessionId);
     return currentSessionId;
   }
 
@@ -209,6 +281,97 @@
       localStorage.setItem('crmRapidoVisitorId', id);
     }
     return id;
+  }
+
+  function listenForMessages(sessionId) {
+    const chatBody = document.getElementById('crm-rapido-chat-body');
+    if (!chatBody || !db) return;
+    if (unsubscribeMessages) unsubscribeMessages();
+
+    const sessionRef = db.collection('chatSessions').doc(sessionId);
+
+    sessionRef.onSnapshot(doc => {
+      const data = doc.data();
+      if (data.agentName && data.agentAvatar) {
+        assignedAgent.name = data.agentName;
+        assignedAgent.avatar = data.agentAvatar;
+        const headerName = document.getElementById('crm-rapido-agent-name');
+        if (headerName) headerName.textContent = assignedAgent.name;
+      }
+    });
+
+    const messagesRef = sessionRef.collection('messages').orderBy('timestamp', 'asc');
+    unsubscribeMessages = messagesRef.onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const msg = change.doc.data();
+          if (msg.senderType === 'visitor') {
+            addVisitorMessage(msg.text, msg.timestamp);
+          } else if (msg.senderType === 'agent') {
+            addAgentMessage(msg.text, msg.timestamp);
+          } else if (msg.senderType === 'system') {
+            addSystemMessage(msg.text);
+          }
+        }
+      });
+    });
+  }
+
+  function addAgentMessage(text, timestamp = new Date()) {
+    const body = document.getElementById('crm-rapido-chat-body');
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'flex-start';
+    wrap.style.margin = '10px';
+
+    const avatar = createAvatarElement(getInitials(assignedAgent.name), '#007bff');
+    avatar.src = assignedAgent.avatar;
+    Object.assign(avatar.style, {
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      marginRight: '8px'
+    });
+
+    const content = document.createElement('div');
+    content.style.maxWidth = '80%';
+
+    const name = document.createElement('div');
+    name.textContent = assignedAgent.name;
+    name.style.fontSize = '12px';
+    name.style.fontWeight = 'bold';
+    name.style.marginBottom = '4px';
+    name.style.color = '#333';
+
+    const bubble = document.createElement('div');
+    bubble.style.background = '#e5f1fb';
+    bubble.style.color = '#333';
+    bubble.style.padding = '10px';
+    bubble.style.borderRadius = '10px';
+    bubble.style.wordWrap = 'break-word';
+    bubble.textContent = text;
+
+    const time = document.createElement('div');
+    time.style.fontSize = '10px';
+    time.style.color = '#777';
+    time.style.marginTop = '4px';
+    time.style.textAlign = 'right';
+
+    try {
+      const t = typeof timestamp === 'string' ? new Date(timestamp) :
+                timestamp.toDate ? timestamp.toDate() : timestamp;
+      time.textContent = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      time.textContent = '';
+    }
+
+    content.appendChild(name);
+    content.appendChild(bubble);
+    content.appendChild(time);
+    wrap.appendChild(avatar);
+    wrap.appendChild(content);
+    body.appendChild(wrap);
+    body.scrollTop = body.scrollHeight;
   }
 
   if (initializeFirebase()) {
