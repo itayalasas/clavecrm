@@ -11,7 +11,7 @@ export async function POST(request: Request) {
 
     // TODO: REEMPLAZA 'TU_PROYECTO' con tu ID de Proyecto de Firebase.
     // Asegúrate también de que la región (ej. 'us-central1') sea la correcta para tu Cloud Function.
-    const fnUrl = `https://us-central1-TU_PROYECTO.cloudfunctions.net/initiateTwilioCall`;
+    const fnUrl = `https://initiatetwiliocall-qmsru4jg3q-uc.a.run.app/initiateTwilioCall`;
 
     console.log(`API Route: Forwarding call request to ${toNumber} via Cloud Function: ${fnUrl}`);
 

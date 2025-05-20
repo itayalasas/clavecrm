@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { getUserInitials } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast"; // Import useToast
+import { useToast } from "@/hooks/use-toast";
 
 interface LeadCardProps {
   lead: Lead;
@@ -25,15 +25,41 @@ interface LeadCardProps {
 
 export function LeadCard({ lead, onEdit }: LeadCardProps) {
   const avatarFallback = getUserInitials(lead.name);
-  const { toast } = useToast(); // Initialize useToast
+  const { toast } = useToast();
 
-  const handleSimulatedCall = () => {
+  const handleCall = async () => {
     if (lead.phone) {
       toast({
-        title: "Simulando Llamada...",
-        description: `Llamando a ${lead.name} al ${lead.phone}. (Integración con telefonía pendiente)`,
+        title: "Iniciando llamada...",
+        description: `Conectando con ${lead.name} al ${lead.phone}.`,
       });
-      // Aquí iría la lógica real de Clic-to-Call en el futuro
+      try {
+        const response = await fetch('/api/initiate-call', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ toNumber: lead.phone }),
+        });
+        const result = await response.json();
+        if (response.ok && result.success) {
+          toast({
+            title: "Llamada iniciada",
+            description: `Llamada a ${lead.name} en curso. SID: ${result.callSid || 'N/A'}`,
+            variant: "default"
+          });
+          // Aquí podrías, por ejemplo, registrar una actividad de llamada iniciada en el CRM.
+        } else {
+          throw new Error(result.error || "Error desconocido al iniciar la llamada desde el servidor.");
+        }
+      } catch (error: any) {
+        console.error("Error al iniciar llamada (desde LeadCard):", error);
+        toast({
+          title: "Error al Iniciar Llamada",
+          description: error.message || "No se pudo conectar con el servicio de llamadas.",
+          variant: "destructive",
+        });
+      }
     } else {
       toast({
         title: "Número de Teléfono Faltante",
@@ -75,9 +101,9 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
                 </DropdownMenuItem>
               )}
               {lead.phone && (
-                <DropdownMenuItem onClick={handleSimulatedCall}>
+                <DropdownMenuItem onClick={handleCall}>
                   <PhoneCall className="mr-2 h-4 w-4" />
-                  Llamar (Simulado)
+                  Llamar
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

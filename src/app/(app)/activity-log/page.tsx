@@ -6,7 +6,7 @@ import type { ActivityLog, Lead, Contact, Ticket, User, Opportunity } from "@/li
 import { NAV_ITEMS, ACTIVITY_LOG_USER_ACTIVITY_TYPES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileClock, PlusCircle, Search, Filter, PhoneCall, Mic, Ear } from "lucide-react"; // Added PhoneCall, Mic, Ear
+import { FileClock, PlusCircle, Search, Filter, PhoneCall, Mic, Ear } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -239,11 +239,11 @@ export default function ActivityLogPage() {
             </li>
              <li>
               <strong>Gestión de Llamadas:</strong>
-              <Badge variant="outline" className="ml-2 border-blue-500 text-blue-600">En Desarrollo</Badge>
+              <Badge variant="outline" className="ml-2 border-blue-500 text-blue-600">En Desarrollo (Backend Twilio)</Badge>
               <ul className="list-circle list-inside ml-4 mt-1 text-xs">
-                <li><PhoneCall className="inline h-3 w-3 mr-1"/>Click-to-Call (Simulado en LeadCard, integración pendiente).</li>
-                <li>Registro automático de llamadas (Planeado, requiere integración con telefonía).</li>
-                <li><Mic className="inline h-3 w-3 mr-1"/>Grabación de llamadas (Futuro, requiere integración avanzada).</li>
+                <li><PhoneCall className="inline h-3 w-3 mr-1"/>Click-to-Call (Frontend listo, requiere Cloud Function de Twilio).</li>
+                <li>Registro automático de llamadas (Planeado, requiere webhook de Twilio).</li>
+                <li><Mic className="inline h-3 w-3 mr-1"/>Grabación de llamadas (Futuro, requiere configuración Twilio).</li>
                 <li><Ear className="inline h-3 w-3 mr-1"/>Análisis de sentimiento de llamadas (Futuro, IA y costos adicionales).</li>
               </ul>
             </li>
