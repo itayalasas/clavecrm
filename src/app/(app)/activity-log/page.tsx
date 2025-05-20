@@ -6,7 +6,7 @@ import type { ActivityLog, Lead, Contact, Ticket, User, Opportunity } from "@/li
 import { NAV_ITEMS, ACTIVITY_LOG_USER_ACTIVITY_TYPES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileClock, PlusCircle, Search, Filter } from "lucide-react";
+import { FileClock, PlusCircle, Search, Filter, PhoneCall, Mic, Ear } from "lucide-react"; // Added PhoneCall, Mic, Ear
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -115,6 +115,7 @@ export default function ActivityLogPage() {
         ...activityData,
         timestamp: Timestamp.fromDate(new Date(activityData.timestamp)),
         loggedByUserId: currentUser.id,
+        loggedByUserName: currentUser.name, // Add loggedByUserName
         createdAt: serverTimestamp(),
       });
       toast({ title: "Actividad Registrada", description: "La nueva actividad ha sido guardada." });
@@ -207,7 +208,7 @@ export default function ActivityLogPage() {
           leads={leads}
           contacts={contacts}
           tickets={tickets}
-          opportunities={opportunities} // Pass opportunities
+          opportunities={opportunities} 
           currentUser={currentUser}
         />
       )}
@@ -236,6 +237,16 @@ export default function ActivityLogPage() {
               <Badge variant="default" className="ml-2 bg-yellow-500 hover:bg-yellow-600 text-black">Básico Implementado</Badge>
               <p className="text-xs pl-5">Búsqueda básica implementada. Filtros avanzados por tipo, fecha, etc. están pendientes.</p>
             </li>
+             <li>
+              <strong>Gestión de Llamadas:</strong>
+              <Badge variant="outline" className="ml-2 border-blue-500 text-blue-600">En Desarrollo</Badge>
+              <ul className="list-circle list-inside ml-4 mt-1 text-xs">
+                <li><PhoneCall className="inline h-3 w-3 mr-1"/>Click-to-Call (Simulado en LeadCard, integración pendiente).</li>
+                <li>Registro automático de llamadas (Planeado, requiere integración con telefonía).</li>
+                <li><Mic className="inline h-3 w-3 mr-1"/>Grabación de llamadas (Futuro, requiere integración avanzada).</li>
+                <li><Ear className="inline h-3 w-3 mr-1"/>Análisis de sentimiento de llamadas (Futuro, IA y costos adicionales).</li>
+              </ul>
+            </li>
             <li>
               <strong>Visualización cronológica por cliente:</strong>
               <Badge variant="outline" className="ml-2 border-gray-500 text-gray-600">Planeado</Badge>
@@ -248,8 +259,7 @@ export default function ActivityLogPage() {
             </li>
             <li>
               <strong>Funcionalidades Avanzadas (Futuro):</strong>
-              <ul className="list-circle list-inside ml-4 mt-1">
-                <li>Grabación de llamadas (requiere integración con sistema de telefonía).</li>
+              <ul className="list-circle list-inside ml-4 mt-1 text-xs">
                 <li>Análisis de sentimiento de correos o transcripciones (requiere IA y puede tener costos adicionales).</li>
               </ul>
             </li>
@@ -260,4 +270,3 @@ export default function ActivityLogPage() {
     </div>
   );
 }
-

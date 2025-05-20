@@ -5,7 +5,7 @@ import type { Lead } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { DollarSign, Edit3, Mail, Phone, MoreVertical, Star, Percent, CalendarClock } from "lucide-react";
+import { DollarSign, Edit3, Mail, Phone, MoreVertical, Star, Percent, CalendarClock, PhoneCall } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { getUserInitials } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 interface LeadCardProps {
   lead: Lead;
@@ -24,6 +25,24 @@ interface LeadCardProps {
 
 export function LeadCard({ lead, onEdit }: LeadCardProps) {
   const avatarFallback = getUserInitials(lead.name);
+  const { toast } = useToast(); // Initialize useToast
+
+  const handleSimulatedCall = () => {
+    if (lead.phone) {
+      toast({
+        title: "Simulando Llamada...",
+        description: `Llamando a ${lead.name} al ${lead.phone}. (Integración con telefonía pendiente)`,
+      });
+      // Aquí iría la lógica real de Clic-to-Call en el futuro
+    } else {
+      toast({
+        title: "Número de Teléfono Faltante",
+        description: `El lead ${lead.name} no tiene un número de teléfono registrado.`,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Card className="mb-4 shadow-md hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="p-4">
@@ -53,6 +72,12 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
                 <DropdownMenuItem onClick={() => window.location.href = `mailto:${lead.email}`}>
                   <Mail className="mr-2 h-4 w-4" />
                   Enviar Correo
+                </DropdownMenuItem>
+              )}
+              {lead.phone && (
+                <DropdownMenuItem onClick={handleSimulatedCall}>
+                  <PhoneCall className="mr-2 h-4 w-4" />
+                  Llamar (Simulado)
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
