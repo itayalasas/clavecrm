@@ -28,6 +28,7 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
   const { toast } = useToast();
 
   const handleCall = async () => {
+    console.log(`LeadCard: Attempting to call ${lead.name} at ${lead.phone}`); // Minor log added
     if (lead.phone) {
       toast({
         title: "Iniciando llamada...",
