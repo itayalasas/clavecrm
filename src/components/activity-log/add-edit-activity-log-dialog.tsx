@@ -127,16 +127,15 @@ export function AddEditActivityLogDialog({
 
     const activityPayload = {
       type: data.type,
-      subject: data.subject,
+      subject: data.subject || null, // Ensure optional subject is null if empty
       details: data.details,
       timestamp: combinedTimestamp.toISOString(),
-      relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? undefined : data.relatedLeadId,
-      relatedContactId: data.relatedContactId === NO_SELECTION_VALUE ? undefined : data.relatedContactId,
-      relatedTicketId: data.relatedTicketId === NO_SELECTION_VALUE ? undefined : data.relatedTicketId,
-      relatedOpportunityId: data.relatedOpportunityId === NO_SELECTION_VALUE ? undefined : data.relatedOpportunityId,
-      durationMinutes: data.durationMinutes,
-      outcome: data.outcome,
-      // Ensure category is set correctly when saving
+      relatedLeadId: data.relatedLeadId === NO_SELECTION_VALUE ? null : data.relatedLeadId,
+      relatedContactId: data.relatedContactId === NO_SELECTION_VALUE ? null : data.relatedContactId,
+      relatedTicketId: data.relatedTicketId === NO_SELECTION_VALUE ? null : data.relatedTicketId,
+      relatedOpportunityId: data.relatedOpportunityId === NO_SELECTION_VALUE ? null : data.relatedOpportunityId,
+      durationMinutes: data.durationMinutes || null, // Ensure optional number is null if 0 or undefined
+      outcome: data.outcome || null, // Ensure optional outcome is null if empty
       category: 'user_activity' as const,
     };
 
@@ -271,3 +270,4 @@ export function AddEditActivityLogDialog({
     </Dialog>
   );
 }
+
