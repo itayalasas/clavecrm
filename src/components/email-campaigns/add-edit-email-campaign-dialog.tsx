@@ -24,7 +24,7 @@ import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2, Clock 
 import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds, isBefore, isEqual, startOfMinute } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
-import { toZonedTime, zonedTimeToUtc } from 'date-fns-tz'; // Reverted to named import
+// import * as dateFnsTz from 'date-fns-tz'; // Removed date-fns-tz
 import { Timestamp } from "firebase/firestore";
 
 
@@ -62,7 +62,7 @@ export function AddEditEmailCampaignDialog({
   emailTemplates,
 }: AddEditEmailCampaignDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC';
+  // const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC'; // Not needed without date-fns-tz
 
   const form = useForm<EmailCampaignFormValues>({
     resolver: zodResolver(formSchema),
@@ -82,9 +82,11 @@ export function AddEditEmailCampaignDialog({
   useEffect(() => {
     if (isOpen) {
       if (campaignToEdit && campaignToEdit.scheduledAt) {
-        const scheduledAtUTC = parseISO(campaignToEdit.scheduledAt);
-        if (isValid(scheduledAtUTC)) {
-          const scheduledAtLocal = toZonedTime(scheduledAtUTC, userTimeZone);
+        const scheduledAtUTCDate = parseISO(campaignToEdit.scheduledAt); // This is UTC
+        if (isValid(scheduledAtUTCDate)) {
+          // Convert UTC from Firestore to a local Date object for the picker
+          // The Date constructor and date-fns format will use the browser's local timezone
+          const localDateForPicker = new Date(campaignToEdit.scheduledAt);
           form.reset({
             name: campaignToEdit.name,
             subject: campaignToEdit.subject,
@@ -92,9 +94,9 @@ export function AddEditEmailCampaignDialog({
             fromEmail: campaignToEdit.fromEmail,
             contactListId: campaignToEdit.contactListId,
             emailTemplateId: campaignToEdit.emailTemplateId,
-            scheduledDate: scheduledAtLocal,
-            scheduledHour: format(scheduledAtLocal, "HH"),
-            scheduledMinute: format(scheduledAtLocal, "mm"),
+            scheduledDate: localDateForPicker,
+            scheduledHour: format(localDateForPicker, "HH"),
+            scheduledMinute: format(localDateForPicker, "mm"),
           });
         } else {
            form.reset({
@@ -121,7 +123,7 @@ export function AddEditEmailCampaignDialog({
       }
       setIsSubmitting(false);
     }
-  }, [campaignToEdit, isOpen, form, userTimeZone]);
+  }, [campaignToEdit, isOpen, form]);
 
 
   const onSubmitHandler: SubmitHandler<EmailCampaignFormValues> = async (data) => {
@@ -138,8 +140,9 @@ export function AddEditEmailCampaignDialog({
         localScheduledDateTime = setSeconds(localScheduledDateTime, 0);
         localScheduledDateTime = setMilliseconds(localScheduledDateTime, 0);
         
-        const utcDate = zonedTimeToUtc(localScheduledDateTime, userTimeZone); 
-        scheduledAtISO = utcDate.toISOString();
+        // .toISOString() always returns a Z-suffixed (UTC) ISO string
+        // based on the Date object's internal time value, which was set using local components.
+        scheduledAtISO = localScheduledDateTime.toISOString();
     }
 
     const dataToSave = {
@@ -245,7 +248,7 @@ export function AddEditEmailCampaignDialog({
                         />
                         </PopoverContent>
                     </Popover>
-                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual o muy próxima. La hora se interpreta en tu zona horaria local ({userTimeZone}).</FormDescriptionUI>
+                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual o muy próxima. La hora se interpreta en tu zona horaria local.</FormDescriptionUI>
                     <FormMessage />
                 </FormItem>
             )} />
