@@ -24,7 +24,7 @@ import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2, Clock 
 import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds, isBefore, isEqual, startOfMinute } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
-import * as dateFnsTz from 'date-fns-tz'; // Corrected import
+import { toZonedTime, zonedTimeToUtc } from 'date-fns-tz'; // Reverted to named import
 import { Timestamp } from "firebase/firestore";
 
 
@@ -84,7 +84,7 @@ export function AddEditEmailCampaignDialog({
       if (campaignToEdit && campaignToEdit.scheduledAt) {
         const scheduledAtUTC = parseISO(campaignToEdit.scheduledAt);
         if (isValid(scheduledAtUTC)) {
-          const scheduledAtLocal = dateFnsTz.toZonedTime(scheduledAtUTC, userTimeZone);
+          const scheduledAtLocal = toZonedTime(scheduledAtUTC, userTimeZone);
           form.reset({
             name: campaignToEdit.name,
             subject: campaignToEdit.subject,
@@ -138,7 +138,7 @@ export function AddEditEmailCampaignDialog({
         localScheduledDateTime = setSeconds(localScheduledDateTime, 0);
         localScheduledDateTime = setMilliseconds(localScheduledDateTime, 0);
         
-        const utcDate = dateFnsTz.zonedTimeToUtc(localScheduledDateTime, userTimeZone); 
+        const utcDate = zonedTimeToUtc(localScheduledDateTime, userTimeZone); 
         scheduledAtISO = utcDate.toISOString();
     }
 
