@@ -5,7 +5,7 @@ import type { EmailCampaign } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Edit3, Trash2, BarChart2, CalendarClock, TestTube2, Users } from "lucide-react"; 
+import { Send, Edit3, Trash2, BarChart2, CalendarClock, TestTube2, Users } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -17,7 +17,7 @@ interface EmailCampaignItemProps {
 }
 
 export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics }: EmailCampaignItemProps) {
-  
+
   const getStatusBadge = (status: EmailCampaign['status']) => {
     switch (status) {
       case 'Borrador': return <Badge variant="outline">{status}</Badge>;
@@ -31,6 +31,9 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics 
   };
 
   const analyticsAvailable = campaign.analytics && (typeof campaign.analytics.emailsSent === 'number' || typeof campaign.analytics.totalRecipients === 'number');
+  const canViewAnalytics = campaign.status === 'Enviada' || campaign.status === 'Fallida' || (campaign.status === 'Enviando' && analyticsAvailable);
+  const canEditCampaign = campaign.status === 'Borrador' || campaign.status === 'Programada' || campaign.status === 'Fallida';
+
 
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between h-full">
@@ -49,44 +52,40 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics 
         <div className="flex items-center justify-between">
             {getStatusBadge(campaign.status)}
         </div>
-        
+
         <div className="text-xs text-muted-foreground space-y-1">
             {campaign.scheduledAt && isValid(parseISO(campaign.scheduledAt)) && campaign.status === "Programada" && (
                 <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Programada para: {format(parseISO(campaign.scheduledAt), "PPp", { locale: es })}</p>
             )}
-            {campaign.sentAt && isValid(parseISO(campaign.sentAt)) && campaign.status === "Enviada" && (
-                <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3 text-green-500" /> Enviada el: {format(parseISO(campaign.sentAt), "PPp", { locale: es })}</p>
+            {campaign.sentAt && isValid(parseISO(campaign.sentAt)) && (campaign.status === "Enviada" || campaign.status === "Fallida") && (
+                <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3 text-green-500" /> {(campaign.status === "Enviada" ? "Enviada" : "Procesada")} el: {format(parseISO(campaign.sentAt), "PPp", { locale: es })}</p>
             )}
              <p className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Creada: {format(parseISO(campaign.createdAt), "P", { locale: es })}</p>
         </div>
          {analyticsAvailable && (
           <div className="text-xs text-muted-foreground pt-2 border-t mt-2 space-y-0.5">
-            {typeof campaign.analytics.totalRecipients === 'number' && 
+            {typeof campaign.analytics.totalRecipients === 'number' &&
                 <p className="flex items-center gap-1"><Users className="h-3 w-3" /> Destinatarios: {campaign.analytics.totalRecipients}</p>
             }
-            {typeof campaign.analytics.emailsSent === 'number' && 
+            {typeof campaign.analytics.emailsSent === 'number' &&
                 <p className="flex items-center gap-1"><Send className="h-3 w-3 text-green-500" />Enviados: {campaign.analytics.emailsSent}</p>
-            }
-            {/* Placeholder for more detailed analytics once available */}
-            {(typeof campaign.analytics.uniqueOpens === 'number' || typeof campaign.analytics.openRate === 'number') &&
-                <p className="text-xs">Aperturas: {campaign.analytics.uniqueOpens || 0} ({((campaign.analytics.openRate || 0) * 100).toFixed(1)}%)</p>
             }
           </div>
         )}
       </CardContent>
       <CardFooter className="flex flex-wrap justify-end gap-2 pt-3 border-t">
-        <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => onViewAnalytics(campaign)} 
-            disabled={campaign.status === 'Borrador' || campaign.status === 'Programada' || campaign.status === 'Enviando'}
-        > 
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onViewAnalytics(campaign)}
+            disabled={!canViewAnalytics}
+        >
           <BarChart2 className="mr-2 h-4 w-4" /> Analíticas
         </Button>
         <Button variant="outline" size="sm" disabled>
           <TestTube2 className="mr-2 h-4 w-4" /> Pruebas A/B
         </Button>
-        <Button variant="default" size="sm" onClick={() => onEdit(campaign.id)} disabled={campaign.status === 'Enviando' || campaign.status === 'Enviada'}>
+        <Button variant="default" size="sm" onClick={() => onEdit(campaign.id)} disabled={!canEditCampaign}>
           <Edit3 className="mr-2 h-4 w-4" /> Editar
         </Button>
         <Button variant="destructive" size="sm" onClick={() => onDelete(campaign.id)}>

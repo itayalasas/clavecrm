@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -19,10 +20,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2 } from "lucide-react";
-import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
+import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2, Clock } from "lucide-react";
+import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds, isBefore, startOfMinute } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
+import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 import { Timestamp } from "firebase/firestore";
 
 
@@ -60,6 +62,7 @@ export function AddEditEmailCampaignDialog({
   emailTemplates,
 }: AddEditEmailCampaignDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC';
 
   const form = useForm<EmailCampaignFormValues>({
     resolver: zodResolver(formSchema),
@@ -78,20 +81,39 @@ export function AddEditEmailCampaignDialog({
 
   useEffect(() => {
     if (isOpen) {
-      if (campaignToEdit) {
-        const scheduledAtDate = campaignToEdit.scheduledAt && isValid(parseISO(campaignToEdit.scheduledAt)) ? parseISO(campaignToEdit.scheduledAt) : undefined;
-        form.reset({
-          name: campaignToEdit.name,
-          subject: campaignToEdit.subject,
-          fromName: campaignToEdit.fromName,
-          fromEmail: campaignToEdit.fromEmail,
-          contactListId: campaignToEdit.contactListId,
-          emailTemplateId: campaignToEdit.emailTemplateId,
-          scheduledDate: scheduledAtDate, // This is local Date object
-          scheduledHour: scheduledAtDate ? format(scheduledAtDate, "HH") : "09",
-          scheduledMinute: scheduledAtDate ? format(scheduledAtDate, "mm") : "00",
-        });
-      } else {
+      if (campaignToEdit && campaignToEdit.scheduledAt) {
+        const scheduledAtUTC = parseISO(campaignToEdit.scheduledAt);
+        if (isValid(scheduledAtUTC)) {
+          const scheduledAtLocal = utcToZonedTime(scheduledAtUTC, userTimeZone);
+          form.reset({
+            name: campaignToEdit.name,
+            subject: campaignToEdit.subject,
+            fromName: campaignToEdit.fromName,
+            fromEmail: campaignToEdit.fromEmail,
+            contactListId: campaignToEdit.contactListId,
+            emailTemplateId: campaignToEdit.emailTemplateId,
+            scheduledDate: scheduledAtLocal,
+            scheduledHour: format(scheduledAtLocal, "HH"),
+            scheduledMinute: format(scheduledAtLocal, "mm"),
+          });
+        } else {
+          // Handle invalid date string in campaignToEdit.scheduledAt
+           form.reset({
+            ...campaignToEdit,
+            scheduledDate: undefined,
+            scheduledHour: "09",
+            scheduledMinute: "00",
+          });
+        }
+      } else if (campaignToEdit) {
+         form.reset({
+            ...campaignToEdit,
+            scheduledDate: undefined,
+            scheduledHour: "09",
+            scheduledMinute: "00",
+          });
+      }
+      else {
         form.reset({
           name: "", subject: "", fromName: "", fromEmail: "",
           contactListId: "", emailTemplateId: "", scheduledDate: undefined,
@@ -100,22 +122,26 @@ export function AddEditEmailCampaignDialog({
       }
       setIsSubmitting(false);
     }
-  }, [campaignToEdit, isOpen, form]);
+  }, [campaignToEdit, isOpen, form, userTimeZone]);
 
 
   const onSubmitHandler: SubmitHandler<EmailCampaignFormValues> = async (data) => {
     setIsSubmitting(true);
     let scheduledAtISO: string | undefined = undefined;
+
     if (data.scheduledDate) {
-        let finalDate = data.scheduledDate; // This is local date at 00:00 if from Calendar
+        let localScheduledDateTime = data.scheduledDate;
         const hour = parseInt(data.scheduledHour || "0");
         const minute = parseInt(data.scheduledMinute || "0");
-        finalDate = setHours(finalDate, hour);
-        finalDate = setMinutes(finalDate, minute);
-        finalDate = setSeconds(finalDate, 0); // Ensure seconds are zero for consistency
-        finalDate = setMilliseconds(finalDate, 0); // Ensure milliseconds are zero
-        // finalDate is now the user's intended local send time.
-        scheduledAtISO = finalDate.toISOString(); // This converts it to UTC ISO string.
+        
+        localScheduledDateTime = setHours(localScheduledDateTime, hour);
+        localScheduledDateTime = setMinutes(localScheduledDateTime, minute);
+        localScheduledDateTime = setSeconds(localScheduledDateTime, 0);
+        localScheduledDateTime = setMilliseconds(localScheduledDateTime, 0);
+        
+        // Convert the user's local selected date/time to UTC for storage
+        const utcDate = zonedTimeToUtc(localScheduledDateTime, userTimeZone);
+        scheduledAtISO = utcDate.toISOString();
     }
 
     const dataToSave = {
@@ -125,7 +151,7 @@ export function AddEditEmailCampaignDialog({
         fromEmail: data.fromEmail,
         contactListId: data.contactListId,
         emailTemplateId: data.emailTemplateId,
-        scheduledAt: scheduledAtISO, 
+        scheduledAt: scheduledAtISO,
     };
     const success = await onSave(dataToSave, campaignToEdit?.id);
     if (success) {
@@ -133,7 +159,7 @@ export function AddEditEmailCampaignDialog({
     }
     setIsSubmitting(false);
   };
-  
+
   const selectedScheduledDate = form.watch("scheduledDate");
 
   return (
@@ -209,13 +235,20 @@ export function AddEditEmailCampaignDialog({
                             locale={es}
                             mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))} // Disable past dates
+                            onSelect={(date) => {
+                                field.onChange(date);
+                                // Si se deselecciona la fecha, limpiar hora y minuto también
+                                if (!date) {
+                                    form.setValue("scheduledHour", "09");
+                                    form.setValue("scheduledMinute", "00");
+                                }
+                            }}
+                            disabled={(date) => isBefore(date, startOfMinute(new Date())) && !isEqual(startOfMinute(date), startOfMinute(new Date()))} // Disable past dates/times more accurately
                             initialFocus
                         />
                         </PopoverContent>
                     </Popover>
-                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual.</FormDescriptionUI>
+                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual o muy próxima. La hora se interpreta en tu zona horaria local.</FormDescriptionUI>
                     <FormMessage />
                 </FormItem>
             )} />
@@ -224,26 +257,39 @@ export function AddEditEmailCampaignDialog({
                     <FormField control={form.control} name="scheduledHour" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Hora (0-23)</FormLabel>
-                            <FormControl><Input type="number" min="0" max="23" placeholder="HH" {...field} /></FormControl>
+                            <Select onValueChange={field.onChange} value={field.value || "09"}>
+                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                             <FormMessage />
                         </FormItem>
                     )} />
                     <FormField control={form.control} name="scheduledMinute" render={({ field }) => (
                          <FormItem>
                             <FormLabel>Minuto (0-59)</FormLabel>
-                            <FormControl><Input type="number" min="0" max="59" placeholder="MM" {...field} /></FormControl>
+                             <Select onValueChange={field.onChange} value={field.value || "00"}>
+                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                             <FormMessage />
                         </FormItem>
                     )} />
                 </div>
             )}
-            
+
             <div className="p-4 border rounded-md bg-muted/50 text-sm text-muted-foreground">
-              <Construction className="inline h-4 w-4 mr-2 text-amber-500" />
-              <strong>Funcionalidades Avanzadas (En Desarrollo):</strong>
+              <Clock className="inline h-4 w-4 mr-2 text-blue-500" />
+              <strong>Programación y Envío:</strong>
               <ul className="list-disc list-inside ml-4 mt-1 text-xs space-y-1">
-                <li><BarChart2 className="inline h-3 w-3 mr-1 text-blue-500" />Analíticas de Rendimiento Detalladas (Aperturas, Clics, etc.)</li>
-                <li><TestTube2 className="inline h-3 w-3 mr-1 text-purple-500" />Pruebas A/B para Asuntos y Contenido</li>
+                <li>Las campañas programadas son procesadas por una Cloud Function.</li>
+                <li>El estado cambiará a &quot;Enviando&quot; cuando la Cloud Function comience el proceso.</li>
+                <li>Las analíticas básicas (enviados/destinatarios) se actualizan tras el envío por la Cloud Function.</li>
+                 <li><BarChart2 className="inline h-3 w-3 mr-1 text-purple-500" />Analíticas Detalladas (aperturas, clics): <span className="font-semibold text-amber-600">Próximamente</span> (requiere webhooks).</li>
+                <li><TestTube2 className="inline h-3 w-3 mr-1 text-teal-500" />Pruebas A/B: <span className="font-semibold text-amber-600">Próximamente</span>.</li>
               </ul>
             </div>
 

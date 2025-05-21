@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants"; // EMAIL_CAMPAIGN_STATUSES removed as it's not directly used
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2 } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,7 +47,7 @@ export default function EmailCampaignsPage() {
   const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
   const [contactLists, setContactLists] = useState<ContactList[]>([]);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]); 
+  const [contacts, setContacts] = useState<Contact[]>([]);
 
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
   const [isLoadingContactLists, setIsLoadingContactLists] = useState(true);
@@ -72,7 +72,7 @@ export default function EmailCampaignsPage() {
   const [editingCampaign, setEditingCampaign] = useState<EmailCampaign | null>(null);
   const [campaignToDelete, setCampaignToDelete] = useState<EmailCampaign | null>(null);
   const [isDeleteCampaignDialogOpen, setIsDeleteCampaignDialogOpen] = useState(false);
-  
+
   const [isAnalyticsDialogOpen, setIsAnalyticsDialogOpen] = useState(false);
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<EmailCampaign | null>(null);
 
@@ -116,7 +116,7 @@ export default function EmailCampaignsPage() {
             } else if (typeof createdAtRaw === 'string' && isValid(parseISO(createdAtRaw))) {
                 createdAtISO = createdAtRaw;
             }
-            
+
             return {
                 id: docSnap.id,
                 ...data,
@@ -152,7 +152,7 @@ export default function EmailCampaignsPage() {
       setIsLoadingTemplates(false);
     }
   }, [toast]);
-  
+
   const fetchCampaigns = useCallback(async () => {
     setIsLoadingCampaigns(true);
     try {
@@ -167,7 +167,7 @@ export default function EmailCampaignsPage() {
         } else if (typeof createdAtRaw === 'string' && isValid(parseISO(createdAtRaw))) {
           createdAtISO = createdAtRaw;
         }
-        
+
         return {
         id: docSnap.id,
         ...data,
@@ -209,7 +209,7 @@ export default function EmailCampaignsPage() {
       return false;
     }
   };
-  
+
   const confirmDeleteList = (list: ContactList) => {
     setListToDelete(list);
     setIsDeleteDialogOpen(true);
@@ -301,8 +301,8 @@ export default function EmailCampaignsPage() {
     try {
       const docRefId = id || doc(collection(db, "emailCampaigns")).id;
       const existingCampaign = id ? campaigns.find(c => c.id === id) : null;
-      
-      const initialAnalytics: EmailCampaignAnalytics = { 
+
+      const initialAnalytics: EmailCampaignAnalytics = {
         totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0,
         emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0,
         deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0,
@@ -310,48 +310,44 @@ export default function EmailCampaignsPage() {
 
       let determinedStatus: EmailCampaignStatus = 'Borrador';
       let effectiveScheduledAt: Timestamp | null = null;
-      let effectiveSentAt: Timestamp | null = null;
-
-      if(existingCampaign?.sentAt && isValid(parseISO(existingCampaign.sentAt))) {
-        effectiveSentAt = Timestamp.fromDate(parseISO(existingCampaign.sentAt));
-      }
+      let effectiveSentAt: Timestamp | null = existingCampaign?.sentAt ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
 
 
       if (campaignDataFromDialog.scheduledAt) {
-        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt);
+        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt); // This is already UTC
         if (isValid(scheduledDateObj)) {
           effectiveScheduledAt = Timestamp.fromDate(scheduledDateObj);
-          // If scheduled for past/now and not already sent/sending, set to 'Enviando'
-          // This will trigger the Cloud Function
-          if ((isPast(scheduledDateObj) || isEqual(scheduledDateObj, new Date())) && existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
+          const now = new Date();
+          // Trigger 'Enviando' if scheduled time is past or very near, and not already sent/sending
+          if ((isPast(scheduledDateObj) || Math.abs(scheduledDateObj.getTime() - now.getTime()) < 60000) && // within 1 minute
+              existingCampaign?.status !== 'Enviada' &&
+              existingCampaign?.status !== 'Enviando') {
             determinedStatus = 'Enviando';
-            // sentAt will be set by the Cloud Function upon successful processing
           } else if (isFuture(scheduledDateObj)) {
             determinedStatus = 'Programada';
-            effectiveSentAt = null; // Clear sentAt if re-scheduling
+            effectiveSentAt = null; // Clear sentAt if re-scheduling for future
           } else if (existingCampaign?.status) {
-            // If it was already Enviada or Enviando, and scheduled for past, keep that status.
-             determinedStatus = existingCampaign.status;
+             determinedStatus = existingCampaign.status; // Keep current status if it's already sent/sending and scheduled for past
           }
         }
-      } else {
-         // No scheduled date, it's a draft unless it was already sent/sending
-         if (existingCampaign?.status === 'Enviada' || existingCampaign?.status === 'Enviando') {
+      } else { // No scheduled date, implies draft unless it was already in a non-draft state
+         if (existingCampaign?.status && existingCampaign.status !== 'Borrador') {
             determinedStatus = existingCampaign.status;
          } else {
             determinedStatus = 'Borrador';
          }
+         effectiveSentAt = null; // A draft or re-drafted campaign shouldn't have a sentAt
       }
-      
+
       const dataToSave: any = {
         ...campaignDataFromDialog,
         analytics: existingCampaign?.analytics || initialAnalytics,
         updatedAt: serverTimestamp(),
         status: determinedStatus,
-        scheduledAt: effectiveScheduledAt, // Firestore Timestamp or null
-        sentAt: effectiveSentAt, // Firestore Timestamp or null, will be updated by function if sending
+        scheduledAt: effectiveScheduledAt,
+        sentAt: effectiveSentAt,
       };
-      
+
       if (!id) { // New campaign
         dataToSave.createdAt = serverTimestamp();
       } else { // Existing campaign, preserve original creation date
@@ -359,19 +355,18 @@ export default function EmailCampaignsPage() {
       }
 
       await setDoc(doc(db, "emailCampaigns", docRefId), dataToSave, { merge: true });
-      
+
       let toastMessage = `Campaña "${campaignDataFromDialog.name}" guardada con estado: ${dataToSave.status}.`;
       if (dataToSave.status === 'Enviando') {
-        toastMessage += " La campaña se está procesando para su envío.";
+        toastMessage += " La campaña se está procesando para su envío por la Cloud Function.";
       } else if (dataToSave.status === 'Programada' && effectiveScheduledAt) {
         toastMessage += ` Programada para: ${format(effectiveScheduledAt.toDate(), "Pp", {locale: es})}.`;
       } else if (dataToSave.status === 'Borrador') {
-         toastMessage += " La campaña está en borrador y no se enviará hasta que se programe.";
+         toastMessage += " La campaña está en borrador.";
       }
 
-
-      toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage });
-      fetchCampaigns(); // Re-fetch to update the list with the latest status
+      toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage, duration: 7000 });
+      fetchCampaigns();
       return true;
     } catch (error) {
       console.error("Error al guardar campaña:", error);
@@ -476,12 +471,12 @@ export default function EmailCampaignsPage() {
           ) : campaigns.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {campaigns.map(campaign => (
-                <EmailCampaignItem 
-                  key={campaign.id} 
-                  campaign={campaign} 
+                <EmailCampaignItem
+                  key={campaign.id}
+                  campaign={campaign}
                   onEdit={() => { setEditingCampaign(campaign); setIsCampaignDialogOpen(true); }}
                   onDelete={() => confirmDeleteCampaign(campaign)}
-                  onViewAnalytics={handleViewAnalytics} 
+                  onViewAnalytics={handleViewAnalytics}
                 />
               ))}
             </div>
@@ -508,10 +503,10 @@ export default function EmailCampaignsPage() {
             </Card>
           )}
            {renderPlaceHolderContent("Funciones Avanzadas de Campaña", [
-                "Creación y programación de envíos (Mejorado, envío por Cloud Functions).",
-                "Selección de listas de contactos y plantillas (Implementado).",
-                "Analíticas de rendimiento básicas (Recuento de envíos por Cloud Function).",
-                "Detalles de analíticas de apertura/clics (Próximamente, requiere webhooks).",
+                "Envío por Cloud Functions (Implementado).",
+                "Programación de envíos con hora específica (Implementado).",
+                "Analíticas básicas: destinatarios, enviados (Implementado, vía Cloud Function).",
+                "Detalles de analíticas: aperturas, clics, rebotes (Próximamente, requiere webhooks con ESP).",
                 "Pruebas A/B para asuntos y contenido (Próximamente).",
             ], Send, false, true)}
         </TabsContent>
@@ -538,10 +533,10 @@ export default function EmailCampaignsPage() {
           ) : contactLists.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {contactLists.map(list => (
-                <ContactListItem 
-                  key={list.id} 
-                  list={list} 
-                  onDelete={() => confirmDeleteList(list)} 
+                <ContactListItem
+                  key={list.id}
+                  list={list}
+                  onDelete={() => confirmDeleteList(list)}
                   onManageContacts={() => handleOpenManageContacts(list)}
                 />
               ))}
@@ -567,7 +562,7 @@ export default function EmailCampaignsPage() {
           )}
            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
              {renderPlaceHolderContent("Importar/Exportar", ["Importación y exportación de contactos (CSV) (Próximamente)."], Import, false)}
-             {renderPlaceHolderContent("Segmentación y Gestión", ["Gestión individual de contactos (Implementado).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], Sliders, true)}
+             {renderPlaceHolderContent("Segmentación y Gestión", ["Gestión individual de contactos (Crear, Editar, Eliminar de lista - Implementado).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], Sliders, true)}
              {renderPlaceHolderContent("Formularios Suscripción", ["Formularios de suscripción/desuscripción (Próximamente)."], FileSignature, false)}
            </div>
         </TabsContent>
@@ -595,9 +590,9 @@ export default function EmailCampaignsPage() {
           ) : templates.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {templates.map(template => (
-                <EmailTemplateItem 
-                    key={template.id} 
-                    template={template} 
+                <EmailTemplateItem
+                    key={template.id}
+                    template={template}
                     onEdit={() => { setEditingTemplate(template); setIsTemplateDialogOpen(true); }}
                     onDelete={() => confirmDeleteTemplate(template)}
                     onPreview={handlePreviewTemplate}
@@ -633,7 +628,7 @@ export default function EmailCampaignsPage() {
              ], Palette, true)}
         </TabsContent>
       </Tabs>
-      
+
       {/* Dialogs for Deletion Confirmation */}
       {listToDelete && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
@@ -641,7 +636,7 @@ export default function EmailCampaignsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
-                  Esta acción no se puede deshacer. Esto eliminará permanentemente la lista de contactos &quot;{listToDelete.name}&quot;. 
+                  Esta acción no se puede deshacer. Esto eliminará permanentemente la lista de contactos &quot;{listToDelete.name}&quot;.
                   Los contactos asociados no serán eliminados de la base de datos general, solo la asociación a esta lista.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -699,8 +694,8 @@ export default function EmailCampaignsPage() {
             isOpen={isManageContactsDialogOpen}
             onOpenChange={setIsManageContactsDialogOpen}
             list={selectedListForContacts}
-            allContacts={contacts} 
-            onContactsUpdated={() => { fetchAllContacts(); fetchContactLists(); }} 
+            allContacts={contacts}
+            onContactsUpdated={() => { fetchAllContacts(); fetchContactLists(); }}
         />
       )}
        {/* Preview Template Dialog */}
@@ -718,4 +713,3 @@ export default function EmailCampaignsPage() {
     </div>
   );
 }
-

@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { BarChart2, TrendingUp, TrendingDown, AlertCircle, MailOpen, MousePointerClick, Users, Ban, ShieldX, Send as SendIcon } from "lucide-react"; 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cell } from 'recharts';
+import { BarChart2, TrendingUp, TrendingDown, AlertCircle, MailOpen, MousePointerClick, Users, Ban, ShieldX, Send as SendIcon, Clock } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription as CardDescriptionUI } from "@/components/ui/card"; // Renamed CardDescription
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cell, PieChart, Pie, LabelList } from 'recharts'; // Added PieChart, Pie
 import { ScrollArea } from "../ui/scroll-area";
 
 interface EmailCampaignAnalyticsDialogProps {
@@ -47,7 +47,6 @@ const AnalyticsStatCard = ({ title, value, icon: Icon, trend, description, unit 
 export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }: EmailCampaignAnalyticsDialogProps) {
   if (!campaign) return null;
 
-  // Use campaign.analytics. If any field is undefined, default to 0 or an appropriate value.
   const analytics: EmailCampaignAnalytics = {
     totalRecipients: campaign.analytics?.totalRecipients || 0,
     emailsSent: campaign.analytics?.emailsSent || 0,
@@ -59,20 +58,27 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
     bounceCount: campaign.analytics?.bounceCount || 0,
     unsubscribeCount: campaign.analytics?.unsubscribeCount || 0,
     spamReports: campaign.analytics?.spamReports || 0,
-    deliveryRate: campaign.analytics?.deliveryRate || 0,
-    openRate: campaign.analytics?.openRate || 0,
-    clickThroughRate: campaign.analytics?.clickThroughRate || 0,
-    clickToOpenRate: campaign.analytics?.clickToOpenRate || 0,
-    unsubscribeRate: campaign.analytics?.unsubscribeRate || 0,
-    bounceRate: campaign.analytics?.bounceRate || 0,
+    deliveryRate: campaign.analytics?.deliveryRate || (analytics.emailsSent > 0 ? (analytics.emailsDelivered || 0) / analytics.emailsSent : 0),
+    openRate: campaign.analytics?.openRate || (analytics.emailsDelivered > 0 ? (analytics.uniqueOpens || 0) / analytics.emailsDelivered : 0),
+    clickThroughRate: campaign.analytics?.clickThroughRate || (analytics.emailsDelivered > 0 ? (analytics.uniqueClicks || 0) / analytics.emailsDelivered : 0),
+    clickToOpenRate: campaign.analytics?.clickToOpenRate || (analytics.uniqueOpens > 0 ? (analytics.uniqueClicks || 0) / analytics.uniqueOpens : 0),
+    unsubscribeRate: campaign.analytics?.unsubscribeRate || (analytics.emailsSent > 0 ? (analytics.unsubscribeCount || 0) / analytics.emailsSent : 0),
+    bounceRate: campaign.analytics?.bounceRate || (analytics.emailsSent > 0 ? (analytics.bounceCount || 0) / analytics.emailsSent : 0),
   };
-  
-  const chartData = [
-    { name: 'Aperturas Únicas', value: analytics.uniqueOpens, fill: CHART_COLORS[0] },
-    { name: 'Clics Únicos', value: analytics.uniqueClicks, fill: CHART_COLORS[1] },
-    { name: 'Rebotes', value: analytics.bounceCount, fill: CHART_COLORS[2] },
-    { name: 'Desuscripciones', value: analytics.unsubscribeCount, fill: CHART_COLORS[3] },
-  ].filter(item => typeof item.value === 'number' && item.value > 0); // Filter out items with 0 or undefined value
+
+  const basicPerformanceData = [
+    { name: 'Enviados', value: analytics.emailsSent, fill: CHART_COLORS[0] },
+    { name: 'Entregados (Próx.)', value: analytics.emailsDelivered || 0, fill: CHART_COLORS[1] },
+    { name: 'Aperturas Únicas (Próx.)', value: analytics.uniqueOpens || 0, fill: CHART_COLORS[2] },
+    { name: 'Clics Únicos (Próx.)', value: analytics.uniqueClicks || 0, fill: CHART_COLORS[3] },
+  ].filter(item => typeof item.value === 'number');
+
+  const issuesData = [
+    { name: 'Rebotes (Próx.)', value: analytics.bounceCount || 0, fill: CHART_COLORS[2] },
+    { name: 'Desuscripciones (Próx.)', value: analytics.unsubscribeCount || 0, fill: CHART_COLORS[3] },
+    { name: 'Reportes Spam (Próx.)', value: analytics.spamReports || 0, fill: CHART_COLORS[4] },
+  ].filter(item => typeof item.value === 'number' && item.value > 0);
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -89,23 +95,23 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
         <ScrollArea className="max-h-[70vh] p-1">
         <div className="space-y-6 py-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <AnalyticsStatCard title="Total Destinatarios" value={analytics.totalRecipients} icon={Users} description="Contactos en la lista al enviar" />
-            <AnalyticsStatCard title="Correos Enviados" value={analytics.emailsSent} icon={SendIcon} description="Intentos de envío" />
-            <AnalyticsStatCard title="Tasa de Apertura" value={(analytics.openRate * 100).toFixed(1)} unit="%" icon={MailOpen} description={`${analytics.uniqueOpens} aperturas únicas`} trend={ analytics.openRate > 0.1 ? "up" : undefined}/>
-            <AnalyticsStatCard title="Tasa de Clics (CTR)" value={(analytics.clickThroughRate * 100).toFixed(1)} unit="%" icon={MousePointerClick} description={`${analytics.uniqueClicks} clics únicos`} trend={ analytics.clickThroughRate > 0.02 ? "up" : undefined} />
-            <AnalyticsStatCard title="Tasa de Entrega" value={(analytics.deliveryRate * 100).toFixed(1)} unit="%" icon={Users} description={`${analytics.emailsDelivered} entregados`} />
-            <AnalyticsStatCard title="Rebotes" value={analytics.bounceCount} icon={Ban} description={`${(analytics.bounceRate * 100).toFixed(1)}% tasa de rebote`} trend={analytics.bounceCount > 5 ? "down" : undefined} />
+            <AnalyticsStatCard title="Total Destinatarios" value={analytics.totalRecipients} icon={Users} description="Contactos en la lista" />
+            <AnalyticsStatCard title="Correos Enviados" value={analytics.emailsSent} icon={SendIcon} description="Intentos de envío registrados por el sistema" />
+            <AnalyticsStatCard title="Tasa de Entrega (Próx.)" value={(analytics.deliveryRate * 100).toFixed(1)} unit="%" icon={Users} description={`${analytics.emailsDelivered || 0} entregados (estimado)`} />
+            <AnalyticsStatCard title="Tasa de Apertura (Próx.)" value={(analytics.openRate * 100).toFixed(1)} unit="%" icon={MailOpen} description={`${analytics.uniqueOpens || 0} aperturas únicas (estimado)`} trend={ analytics.openRate > 0.1 ? "up" : undefined}/>
+            <AnalyticsStatCard title="Tasa de Clics (CTR) (Próx.)" value={(analytics.clickThroughRate * 100).toFixed(1)} unit="%" icon={MousePointerClick} description={`${analytics.uniqueClicks || 0} clics únicos (estimado)`} trend={ analytics.clickThroughRate > 0.02 ? "up" : undefined} />
+            <AnalyticsStatCard title="Rebotes (Próx.)" value={analytics.bounceCount || 0} icon={Ban} description={`${(analytics.bounceRate * 100).toFixed(1)}% tasa de rebote (estimado)`} trend={(analytics.bounceCount || 0) > (analytics.emailsSent * 0.05) ? "down" : undefined} />
           </div>
 
-         {chartData.length > 0 ? (
+         {basicPerformanceData.filter(d => d.value > 0).length > 0 ? (
             <Card>
                 <CardHeader>
-                <CardTitle>Visión General del Rendimiento</CardTitle>
+                  <CardTitleUI>Visión General del Rendimiento</CardTitleUI>
                 </CardHeader>
                 <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                    <BarChart data={basicPerformanceData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} interval={0} angle={-25} textAnchor="end" height={50} />
                     <YAxis fontSize={12} tickLine={false} axisLine={false} />
                     <Tooltip
                         contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
@@ -113,9 +119,10 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
                     />
                     <Legend wrapperStyle={{fontSize: '12px'}}/>
                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                        {chartData.map((entry, index) => (
+                        {basicPerformanceData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.fill} />
                         ))}
+                        <LabelList dataKey="value" position="top" fontSize={10} />
                     </Bar>
                     </BarChart>
                 </ResponsiveContainer>
@@ -125,21 +132,44 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
             <Card className="bg-muted/30">
                  <CardContent className="pt-6 text-center text-muted-foreground">
                     <BarChart2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <p>No hay suficientes datos para mostrar el gráfico de rendimiento detallado.</p>
-                    <p className="text-xs">Esto puede ocurrir si la campaña aún no se ha enviado o no se han registrado interacciones.</p>
+                    <p>No hay suficientes datos para mostrar el gráfico de rendimiento.</p>
+                    <p className="text-xs">Los datos de entrega, aperturas y clics se actualizarán cuando se configure el seguimiento con webhooks.</p>
+                </CardContent>
+            </Card>
+          )}
+
+           {issuesData.length > 0 && (
+            <Card>
+                <CardHeader>
+                <CardTitleUI>Problemas de Entrega (Estimado)</CardTitleUI>
+                </CardHeader>
+                <CardContent className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                    <Pie data={issuesData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
+                        {issuesData.map((entry, index) => (
+                            <Cell key={`cell-issue-${index}`} fill={entry.fill} />
+                        ))}
+                    </Pie>
+                    <Tooltip
+                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                        itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    />
+                    <Legend wrapperStyle={{fontSize: '11px'}}/>
+                    </PieChart>
+                </ResponsiveContainer>
                 </CardContent>
             </Card>
           )}
           
           <Card className="bg-muted/50">
             <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2"><AlertCircle className="h-4 w-4 text-amber-500"/>Notas sobre Analíticas</CardTitle>
+                <CardTitleUI className="text-base flex items-center gap-2"><AlertCircle className="h-4 w-4 text-amber-500"/>Notas sobre Analíticas</CardTitleUI>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
-                <p>Las analíticas de apertura y clics dependen de que los clientes de correo de los destinatarios carguen imágenes y permitan el seguimiento. Esto es una limitación técnica común.</p>
-                <p>Los datos mostrados pueden tener un pequeño retraso y son aproximados.</p>
-                <p>La funcionalidad completa de seguimiento (píxeles de apertura, redirección de clics) requiere infraestructura de backend y webhooks con el proveedor SMTP, lo cual está planeado para futuras versiones.</p>
-                <p>Actualmente, solo se registra el recuento de envíos exitosos desde la función de Cloud.</p>
+                <p>Las analíticas de entrega, apertura y clics dependen de la configuración de webhooks con tu proveedor de servicios de correo (ESP) o una solución de seguimiento personalizada. Esta integración está marcada como <strong className="text-amber-600">Próximamente</strong>.</p>
+                <p>Los datos de "Correos Enviados" y "Total Destinatarios" se basan en la información procesada por la Cloud Function al momento del envío.</p>
+                <p>Las métricas de apertura y clics son estimaciones basadas en las mejores prácticas de la industria y pueden no ser 100% precisas debido a bloqueadores de imágenes y configuraciones de privacidad del usuario.</p>
             </CardContent>
           </Card>
 
