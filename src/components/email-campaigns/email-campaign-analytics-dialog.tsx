@@ -128,7 +128,7 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
          {basicPerformanceData.filter(d => d.value > 0).length > 0 ? (
             <Card>
                 <CardHeader>
-                  <CardTitleUI>Visión General del Rendimiento</CardTitleUI>
+                  <CardTitle>Visión General del Rendimiento</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -163,7 +163,7 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
            {issuesData.length > 0 && (
             <Card>
                 <CardHeader>
-                <CardTitleUI>Problemas de Entrega (Estimado)</CardTitleUI>
+                <CardTitle>Problemas de Entrega (Estimado)</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -186,7 +186,7 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
           
           <Card className="bg-muted/50">
             <CardHeader>
-                <CardTitleUI className="text-base flex items-center gap-2"><AlertCircle className="h-4 w-4 text-amber-500"/>Notas sobre Analíticas</CardTitleUI>
+                <CardTitle className="text-base flex items-center gap-2"><AlertCircle className="h-4 w-4 text-amber-500"/>Notas sobre Analíticas</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
                 <p>Las analíticas de entrega, apertura y clics dependen de la configuración de webhooks con tu proveedor de servicios de correo (ESP) o una solución de seguimiento personalizada. Esta integración está marcada como <strong className="text-amber-600">Próximamente</strong>.</p>
