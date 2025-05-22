@@ -52,6 +52,7 @@ export interface User {
   role: UserRole; // Updated to use UserRole
   groups?: string[]; // IDs of groups the user belongs to
   createdAt?: string; // ISO string
+  password?: string; // Only for initial creation, not stored in Firestore
 }
 
 export interface Comment {
@@ -669,7 +670,7 @@ export interface LicenseDetailsApiResponse {
 export interface StoredLicenseInfo {
   licenseKey: string;
   lastValidatedAt: string; // ISO string of when it was last successfully validated
-  status: 'Valid' | 'Invalid' | 'Expired' | 'NotChecked' | 'ApiError'; // Overall status after validation
+  status: 'Valid' | 'Invalid' | 'Expired' | 'NotChecked' | 'ApiError' | 'MismatchedProjectId';
   validationResponse?: LicenseDetailsApiResponse | null; // Store the last raw response from the validation endpoint
   projectId?: string; // Store the Firebase Project ID this license was validated against
 }
@@ -693,4 +694,26 @@ export interface WhatsAppApiSettings {
     accessToken?: string;
     webhookVerifyToken?: string; // Your custom verify token for the webhook
     // Potentially other provider-specific settings
+}
+
+// Email Module Types
+export interface EmailMessage {
+  id: string;
+  threadId?: string; // For grouping conversations
+  from: { name?: string; email: string };
+  to: { name?: string; email: string }[];
+  cc?: { name?: string; email: string }[];
+  bcc?: { name?: string; email: string }[];
+  subject: string;
+  bodyHtml?: string;
+  bodyText?: string;
+  attachments?: { filename: string; contentType: string; size: number; downloadUrl?: string; contentId?: string }[];
+  date: string; // ISO string
+  status: 'draft' | 'sent' | 'received' | 'archived' | 'deleted';
+  isRead?: boolean;
+  labels?: string[]; // e.g., "Inbox", "Sent", "Important", user-defined labels
+  relatedLeadId?: string;
+  relatedContactId?: string;
+  relatedTicketId?: string;
+  userId: string; // The CRM user this email is associated with (whose inbox/sent items it belongs to)
 }
