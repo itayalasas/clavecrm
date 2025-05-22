@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react"; // Added useEffect
+import { useState, useEffect } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Send, Paperclip, Archive, Loader2, Trash2, MoreVertical } from "lucide-react";
+import { Send, Paperclip, Archive, Loader2, Trash2, MoreVertical, XCircle } from "lucide-react"; // Added XCircle
 import { useToast } from "@/hooks/use-toast";
 
 const emailComposerSchema = z.object({
@@ -32,8 +32,9 @@ interface EmailComposerProps {
   initialTo?: string;
   initialSubject?: string;
   initialBody?: string;
-  onSend: (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }) => Promise<void>;
+  onSend: (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }) => Promise<boolean>; // Returns true on success
   isSending?: boolean;
+  onClose?: () => void; // New prop
 }
 
 export function EmailComposer({
@@ -42,6 +43,7 @@ export function EmailComposer({
   initialBody = "",
   onSend,
   isSending = false,
+  onClose, // New prop
 }: EmailComposerProps) {
   const { toast } = useToast();
   const [showCc, setShowCc] = useState(false);
@@ -59,20 +61,25 @@ export function EmailComposer({
   });
 
   useEffect(() => {
-    // Reset form if initial props change (e.g., navigating with new query params)
     form.reset({
       to: initialTo,
-      cc: "", // Always reset CC/BCC for simplicity when new 'to' is provided
+      cc: "",
       bcc: "",
       subject: initialSubject,
       body: initialBody,
     });
+    // Reset CC/BCC visibility when initial values change
+    setShowCc(false);
+    setShowBcc(false);
   }, [initialTo, initialSubject, initialBody, form]);
 
 
   const onSubmit: SubmitHandler<EmailComposerFormValues> = async (data) => {
-    await onSend(data);
-    // form.reset(); // Parent now controls reset via useEffect if needed
+    const success = await onSend(data);
+    if (success && onClose) { // Close only if send was successful AND onClose is provided
+        // form.reset(); // Reset form on successful send IF composer is being closed
+    }
+    // If not closing, parent might want to keep form state (e.g. for re-editing)
   };
 
   return (
@@ -158,7 +165,7 @@ export function EmailComposer({
                 <FormItem className="flex-grow flex flex-col">
                   <FormControl className="flex-grow">
                     <Textarea
-                      placeholder="Escriba / para insertar archivos y más"
+                      placeholder="Escribe tu mensaje aquí..."
                       {...field}
                       className="flex-grow resize-none border-0 shadow-none p-2 focus-visible:ring-0 text-sm"
                     />
@@ -174,7 +181,12 @@ export function EmailComposer({
                 {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                 Enviar
               </Button>
-              {/* Placeholder for advanced options */}
+              {onClose && (
+                <Button type="button" variant="outline" onClick={onClose} disabled={isSending}>
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Cancelar
+                </Button>
+              )}
               <Button type="button" variant="ghost" size="icon" disabled title="Opciones de envío (Próximamente)">
                 <MoreVertical className="h-4 w-4" />
               </Button>
@@ -184,7 +196,7 @@ export function EmailComposer({
                 <Paperclip className="h-5 w-5" />
               </Button>
                <Button type="button" variant="ghost" size="icon" disabled title="Guardar borrador (Próximamente)">
-                <Archive className="h-5 w-5" />
+                <Archive className="mr-2 h-4 w-4" />
               </Button>
               <Button type="button" variant="ghost" size="icon" disabled title="Descartar borrador">
                 <Trash2 className="h-5 w-5 text-destructive" />

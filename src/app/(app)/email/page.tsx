@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail as MailIcon, Send, Inbox, Edit3, Archive, Trash2, Info, PlusCircle } from "lucide-react";
@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
 import type { EmailMessage } from "@/lib/types";
+import { useAuth } from "@/contexts/auth-context";
 
 // Placeholder data for demonstration
 const mockEmails: EmailMessage[] = [
@@ -23,46 +24,87 @@ const mockEmails: EmailMessage[] = [
   { id: '4', subject: '¡Promoción Especial!', from: { email: 'marketing@empresa.com', name: 'Marketing Empresa' }, to: [{email: 'currentuser@example.com'}], date: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), bodyText: 'No te pierdas nuestras ofertas...', status: 'received', isRead: true, userId: 'currentUser' },
 ];
 
-// This new component will handle search params
 function EmailPageContent() {
   const navItem = NAV_ITEMS.find(item => item.href === '/email');
   const PageIcon = navItem?.icon || MailIcon;
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("inbox"); // Default to inbox
+  const { currentUser } = useAuth();
+  const router = useRouter();
+
+  const [activeTab, setActiveTab] = useState("inbox");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
+  const [showComposer, setShowComposer] = useState(false);
+  const [composerKey, setComposerKey] = useState(Date.now()); // To re-mount composer
+  const [composerInitialTo, setComposerInitialTo] = useState("");
+  const [composerInitialSubject, setComposerInitialSubject] = useState("");
+  const [composerInitialBody, setComposerInitialBody] = useState("");
+  const [composerOpenedByButton, setComposerOpenedByButton] = useState(false);
+
+  const [sentEmails, setSentEmails] = useState<EmailMessage[]>([]);
+  const [draftEmails, setDraftEmails] = useState<EmailMessage[]>([]);
+  const [isLoadingSent, setIsLoadingSent] = useState(true);
+  const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
+
+
   const searchParams = useSearchParams();
-  const initialTo = searchParams.get("to") || "";
-  const initialSubject = searchParams.get("subject") || "";
-  const initialBody = searchParams.get("body") || ""; // Placeholder if we want to prefill body
+
+  const handleOpenComposer = useCallback((initialData: { to?: string, subject?: string, body?: string } = {}, openedByBtn = false) => {
+    setComposerInitialTo(initialData.to || "");
+    setComposerInitialSubject(decodeURIComponent(initialData.subject || ""));
+    setComposerInitialBody(decodeURIComponent(initialData.body || ""));
+    setComposerKey(Date.now()); // Force re-mount to pick up new initial values
+    setShowComposer(true);
+    setComposerOpenedByButton(openedByBtn);
+  }, []);
+
+  const handleCloseComposer = useCallback(() => {
+    setShowComposer(false);
+    // Clear URL params if composer was opened by them and is now closed by button
+    if (!composerOpenedByButton && (searchParams.get("to") || searchParams.get("subject"))) {
+        router.replace('/email', { scroll: false });
+    }
+  }, [composerOpenedByButton, searchParams, router]);
 
   useEffect(() => {
-    // If 'to' or 'subject' params are present, switch to compose tab
-    if (initialTo || initialSubject) {
-      setActiveTab("compose");
+    const toParam = searchParams.get("to");
+    const subjectParam = searchParams.get("subject");
+    const bodyParam = searchParams.get("body");
+
+    if (toParam || subjectParam) {
+      handleOpenComposer({ to: toParam || "", subject: subjectParam || "", body: bodyParam || "" }, false);
+    } else {
+        if (showComposer && !composerOpenedByButton) { // If composer is shown but not by button (i.e. by URL), and URL params are gone, close it
+            // handleCloseComposer(); // This might cause issues if composer is meant to stay open
+        }
     }
-  }, [initialTo, initialSubject]);
+  }, [searchParams, handleOpenComposer, showComposer, composerOpenedByButton]);
 
 
   const handleQueueEmailForSending = async (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }) => {
+    if (!currentUser) {
+        toast({ title: "Error de autenticación", description: "Debes iniciar sesión para enviar correos.", variant: "destructive"});
+        return false;
+    }
     setIsSendingEmail(true);
-    console.log("Poniendo en cola correo para:", data);
     try {
       await addDoc(collection(db, "outgoingEmails"), {
         to: data.to,
         cc: data.cc || null,
         bcc: data.bcc || null,
         subject: data.subject,
-        bodyHtml: data.body, // Assuming body is HTML
+        bodyHtml: data.body,
         status: "pending",
         createdAt: serverTimestamp(),
-        // TODO: Add fromName and fromEmail based on current user or settings
+        userId: currentUser.id, // Associate email with the sending user
+        fromName: currentUser.name || "Usuario CRM", // Use CRM user's name or a default
+        fromEmail: currentUser.email, // Use CRM user's email
       });
       toast({
         title: "Correo en Cola para Envío",
         description: `Tu correo para ${data.to} ha sido puesto en cola y se enviará pronto.`,
       });
-      setActiveTab("sent"); // Switch to sent tab after "sending"
+      return true; // Indicate success
     } catch (error) {
       console.error("Error al poner correo en cola:", error);
       toast({
@@ -70,21 +112,76 @@ function EmailPageContent() {
         description: "No se pudo poner el correo en cola para envío.",
         variant: "destructive",
       });
+      return false; // Indicate failure
     } finally {
       setIsSendingEmail(false);
     }
   };
+  
+  const handleEmailQueued = () => {
+      handleCloseComposer();
+      setActiveTab("sent");
+  };
+
+  // Fetch Sent Emails
+  useEffect(() => {
+    if (!currentUser || activeTab !== 'sent') {
+        setIsLoadingSent(false);
+        return;
+    }
+    setIsLoadingSent(true);
+    const q = query(
+        collection(db, "outgoingEmails"), 
+        where("userId", "==", currentUser.id),
+        where("status", "==", "sent"), 
+        orderBy("createdAt", "desc")
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const fetched = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            date: (doc.data().sentAt as Timestamp)?.toDate().toISOString() || (doc.data().createdAt as Timestamp)?.toDate().toISOString(),
+            // Assuming 'to' is a string. If it's an array, adjust accordingly.
+            to: [{ email: doc.data().to as string }], 
+            from: { email: doc.data().fromEmail || currentUser.email, name: doc.data().fromName || currentUser.name },
+            bodyText: doc.data().bodyHtml?.substring(0,100) + "..." // Basic plain text version
+        } as EmailMessage));
+        setSentEmails(fetched);
+        setIsLoadingSent(false);
+    }, (error) => {
+        console.error("Error fetching sent emails:", error);
+        toast({ title: "Error al cargar enviados", variant: "destructive"});
+        setIsLoadingSent(false);
+    });
+    return () => unsubscribe();
+  }, [currentUser, activeTab, toast]);
+
+  // Fetch Draft Emails (Placeholder - actual draft saving not fully implemented)
+   useEffect(() => {
+    if (!currentUser || activeTab !== 'drafts') {
+        setIsLoadingDrafts(false);
+        return;
+    }
+    setIsLoadingDrafts(true);
+    // TODO: Implement fetching from a 'drafts' collection or 'outgoingEmails' with status 'draft'
+    // For now, using mock data or an empty list
+    // const q = query(collection(db, "outgoingEmails"), where("userId", "==", currentUser.id), where("status", "==", "draft"), orderBy("createdAt", "desc"));
+    // ... onSnapshot logic ...
+    setDraftEmails(mockEmails.filter(e => e.status === 'draft' && e.userId === 'currentUser')); // Simulate for current user
+    setIsLoadingDrafts(false);
+  }, [currentUser, activeTab]);
 
 
-  const renderEmailList = (statusType: 'received' | 'sent' | 'draft' | 'archived') => {
-    const filtered = mockEmails.filter(email => email.status === statusType);
-    // In a real app, fetch from Firestore based on statusType and userId
-    if (filtered.length === 0) {
+  const renderEmailList = (emailList: EmailMessage[], statusType: 'received' | 'sent' | 'draft' | 'archived', isLoadingList: boolean) => {
+    if (isLoadingList) {
+        return <Skeleton className="h-40 w-full" />;
+    }
+    if (emailList.length === 0) {
       return <p className="text-muted-foreground text-center py-8">No hay correos en esta carpeta.</p>;
     }
     return (
       <div className="space-y-2">
-        {filtered.map(email => (
+        {emailList.map(email => (
           <Card key={email.id} className="hover:shadow-md cursor-pointer">
             <CardContent className="p-3">
               <div className="flex justify-between items-start">
@@ -103,6 +200,27 @@ function EmailPageContent() {
     );
   };
 
+  if (showComposer) {
+    return (
+        <div className="flex flex-col h-full">
+            <EmailComposer
+                key={composerKey}
+                initialTo={composerInitialTo}
+                initialSubject={composerInitialSubject}
+                initialBody={composerInitialBody}
+                onSend={async (data) => {
+                    const success = await handleQueueEmailForSending(data);
+                    if (success) {
+                        handleEmailQueued();
+                    }
+                }}
+                isSending={isSendingEmail}
+                onClose={composerOpenedByButton ? handleCloseComposer : undefined}
+            />
+        </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 h-full">
       <Card className="shadow-lg shrink-0">
@@ -118,11 +236,10 @@ function EmailPageContent() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-grow flex flex-col">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 shrink-0">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 shrink-0">
           <TabsTrigger value="inbox"><Inbox className="mr-2 h-4 w-4" />Bandeja de Entrada</TabsTrigger>
-          <TabsTrigger value="compose"><Edit3 className="mr-2 h-4 w-4" />Redactar</TabsTrigger>
           <TabsTrigger value="sent"><Send className="mr-2 h-4 w-4" />Enviados</TabsTrigger>
-          <TabsTrigger value="drafts" disabled><Archive className="mr-2 h-4 w-4" />Borradores</TabsTrigger>
+          <TabsTrigger value="drafts"><Archive className="mr-2 h-4 w-4" />Borradores</TabsTrigger>
           <TabsTrigger value="trash" disabled><Trash2 className="mr-2 h-4 w-4" />Papelera</TabsTrigger>
         </TabsList>
 
@@ -130,37 +247,31 @@ function EmailPageContent() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Bandeja de Entrada</CardTitle>
-                <Button onClick={() => setActiveTab("compose")} size="sm">
+                <Button onClick={() => handleOpenComposer({}, true)} size="sm">
                     <PlusCircle className="mr-2 h-4 w-4"/> Redactar Nuevo Correo
                 </Button>
             </CardHeader>
-            <CardContent>{renderEmailList('received')}</CardContent>
+            <CardContent>
+                <p className="text-muted-foreground text-center py-8">Funcionalidad de bandeja de entrada (recepción) en desarrollo avanzado. Requiere integración IMAP/API con proveedor de correo.</p>
+                {/* {renderEmailList(mockEmails.filter(e => e.status === 'received'), 'received', false)} */}
+            </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="compose" className="flex-grow mt-4">
-          <EmailComposer
-            key={initialTo + initialSubject + initialBody} // Re-render if these change
-            initialTo={initialTo}
-            initialSubject={decodeURIComponent(initialSubject)} // Decode subject
-            initialBody={decodeURIComponent(initialBody)}
-            onSend={handleQueueEmailForSending}
-            isSending={isSendingEmail}
-          />
         </TabsContent>
 
         <TabsContent value="sent" className="flex-grow mt-4">
           <Card>
             <CardHeader><CardTitle>Correos Enviados</CardTitle></CardHeader>
-            <CardContent>{renderEmailList('sent')}</CardContent>
+            <CardContent>{renderEmailList(sentEmails, 'sent', isLoadingSent)}</CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="drafts" className="flex-grow mt-4">
           <Card>
             <CardHeader><CardTitle>Borradores</CardTitle></CardHeader>
-            <CardContent>{renderEmailList('draft')}</CardContent>
+            <CardContent>{renderEmailList(draftEmails, 'draft', isLoadingDrafts)}</CardContent>
           </Card>
         </TabsContent>
+
          <TabsContent value="trash" className="flex-grow mt-4">
            <Card><CardHeader><CardTitle>Papelera</CardTitle></CardHeader>
             <CardContent><p className="text-muted-foreground text-center py-8">Funcionalidad de papelera en desarrollo.</p></CardContent>
@@ -177,16 +288,19 @@ function EmailPageContent() {
         </CardHeader>
         <CardContent className="text-sm text-amber-600 space-y-2">
           <p>
-            <strong className="text-amber-800">Redacción y Envío (Frontend a Backend):</strong> <span className="font-semibold text-green-600">Implementado.</span> El botón "Enviar" ahora crea un documento en `outgoingEmails` para ser procesado por la Cloud Function `sendSingleEmail`.
+            <strong className="text-amber-800">Redacción y Puesta en Cola para Envío:</strong> <span className="font-semibold text-green-600">Implementado.</span> Los correos se guardan en `outgoingEmails` para ser procesados por la Cloud Function `sendSingleEmail`.
           </p>
           <p>
             <strong className="text-amber-800">Envío Real de Correos (Backend):</strong> <span className="font-semibold text-green-600">Implementado (Vía Cloud Function `sendSingleEmail`).</span> Requiere configuración SMTP funcional en Firestore.
           </p>
           <p>
+            <strong className="text-amber-800">Listado de Correos Enviados:</strong> <span className="font-semibold text-yellow-600">Parcialmente Implementado.</span> Lee de `outgoingEmails` con estado 'sent'.
+          </p>
+          <p>
             <strong className="text-amber-800">Bandeja de Entrada (Recepción y Sincronización):</strong> <span className="font-semibold text-red-600">Pendiente (Backend Muy Complejo).</span> Implica integración con IMAP o APIs de proveedores de correo. Actualmente muestra datos de ejemplo.
           </p>
            <p>
-            <strong className="text-amber-800">Gestión de Carpetas (Enviados, Borradores, Papelera):</strong> Actualmente muestra datos de ejemplo. Funcionalidad real (ej. listar enviados desde `outgoingEmails`) pendiente.
+            <strong className="text-amber-800">Gestión de Borradores:</strong> <span className="font-semibold text-orange-600">Planeado.</span> (La UI está, pero falta lógica de guardado/carga).
           </p>
           <p>
             <strong className="text-amber-800">Vinculación a Tickets/Leads:</strong> <span className="font-semibold text-orange-600">Planeado.</span>
@@ -197,7 +311,6 @@ function EmailPageContent() {
   );
 }
 
-// Main component to ensure useSearchParams is used within Suspense boundary
 export default function EmailPage() {
   return (
     <Suspense fallback={<Skeleton className="h-full w-full" />}>
@@ -205,4 +318,3 @@ export default function EmailPage() {
     </Suspense>
   );
 }
-
