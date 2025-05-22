@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { BarChart2, TrendingUp, TrendingDown, AlertCircle, MailOpen, MousePointerClick, Users, Ban, ShieldX, Send as SendIcon, Clock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription as CardDescriptionUI } from "@/components/ui/card"; // Renamed CardDescription
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cell, PieChart, Pie, LabelList } from 'recharts'; // Added PieChart, Pie
+import { Card, CardContent, CardHeader, CardTitle, CardDescription as CardDescriptionUI } from "@/components/ui/card";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cell, PieChart, Pie, LabelList } from 'recharts';
 import { ScrollArea } from "../ui/scroll-area";
 
 interface EmailCampaignAnalyticsDialogProps {
@@ -47,35 +47,40 @@ const AnalyticsStatCard = ({ title, value, icon: Icon, trend, description, unit 
 export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }: EmailCampaignAnalyticsDialogProps) {
   if (!campaign) return null;
 
-  // First, get the raw or default values from campaign.analytics
   const rawTotalRecipients = campaign.analytics?.totalRecipients || 0;
   const rawEmailsSent = campaign.analytics?.emailsSent || 0;
   const rawEmailsDelivered = campaign.analytics?.emailsDelivered || 0;
-  const rawEmailsOpened = campaign.analytics?.emailsOpened || 0;
-  const rawUniqueOpens = campaign.analytics?.uniqueOpens || 0;
-  const rawEmailsClicked = campaign.analytics?.emailsClicked || 0;
-  const rawUniqueClicks = campaign.analytics?.uniqueClicks || 0;
+
+  // Handle uniqueOpens and uniqueClicks which might be arrays of strings or numbers
+  const countUniqueOpens = Array.isArray(campaign.analytics?.uniqueOpens) 
+    ? campaign.analytics.uniqueOpens.length 
+    : campaign.analytics?.uniqueOpens || 0;
+  const countUniqueClicks = Array.isArray(campaign.analytics?.uniqueClicks) 
+    ? campaign.analytics.uniqueClicks.length 
+    : campaign.analytics?.uniqueClicks || 0;
+  
+  const rawEmailsOpened = campaign.analytics?.emailsOpened || countUniqueOpens; // Fallback for total opens
+  const rawEmailsClicked = campaign.analytics?.emailsClicked || countUniqueClicks; // Fallback for total clicks
+
   const rawBounceCount = campaign.analytics?.bounceCount || 0;
   const rawUnsubscribeCount = campaign.analytics?.unsubscribeCount || 0;
   const rawSpamReports = campaign.analytics?.spamReports || 0;
 
-  // Then, calculate rates using these raw values
   const calculatedDeliveryRate = rawEmailsSent > 0 ? rawEmailsDelivered / rawEmailsSent : 0;
-  const calculatedOpenRate = rawEmailsDelivered > 0 ? rawUniqueOpens / rawEmailsDelivered : 0;
-  const calculatedClickThroughRate = rawEmailsDelivered > 0 ? rawUniqueClicks / rawEmailsDelivered : 0;
-  const calculatedClickToOpenRate = rawUniqueOpens > 0 ? rawUniqueClicks / rawUniqueOpens : 0;
-  const calculatedUnsubscribeRate = rawEmailsSent > 0 ? rawUnsubscribeCount / rawEmailsSent : 0;
+  const calculatedOpenRate = rawEmailsDelivered > 0 ? countUniqueOpens / rawEmailsDelivered : 0;
+  const calculatedClickThroughRate = rawEmailsDelivered > 0 ? countUniqueClicks / rawEmailsDelivered : 0;
+  const calculatedClickToOpenRate = countUniqueOpens > 0 ? countUniqueClicks / countUniqueOpens : 0;
+  const calculatedUnsubscribeRate = rawEmailsDelivered > 0 ? rawUnsubscribeCount / rawEmailsDelivered : 0; // Often based on delivered
   const calculatedBounceRate = rawEmailsSent > 0 ? rawBounceCount / rawEmailsSent : 0;
 
-  // Finally, construct the analytics object
   const analytics: EmailCampaignAnalytics = {
     totalRecipients: rawTotalRecipients,
     emailsSent: rawEmailsSent,
     emailsDelivered: rawEmailsDelivered,
     emailsOpened: rawEmailsOpened,
-    uniqueOpens: rawUniqueOpens,
+    uniqueOpens: countUniqueOpens, // Store the count
     emailsClicked: rawEmailsClicked,
-    uniqueClicks: rawUniqueClicks,
+    uniqueClicks: countUniqueClicks, // Store the count
     bounceCount: rawBounceCount,
     unsubscribeCount: rawUnsubscribeCount,
     spamReports: rawSpamReports,
@@ -87,18 +92,17 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
     bounceRate: campaign.analytics?.bounceRate ?? calculatedBounceRate,
   };
 
-
   const basicPerformanceData = [
     { name: 'Enviados', value: analytics.emailsSent, fill: CHART_COLORS[0] },
-    { name: 'Entregados (Próx.)', value: analytics.emailsDelivered, fill: CHART_COLORS[1] },
-    { name: 'Aperturas Únicas (Próx.)', value: analytics.uniqueOpens, fill: CHART_COLORS[2] },
-    { name: 'Clics Únicos (Próx.)', value: analytics.uniqueClicks, fill: CHART_COLORS[3] },
-  ].filter(item => typeof item.value === 'number');
+    { name: 'Entregados', value: analytics.emailsDelivered, fill: CHART_COLORS[1] },
+    { name: 'Aperturas Únicas', value: analytics.uniqueOpens, fill: CHART_COLORS[2] },
+    { name: 'Clics Únicos', value: analytics.uniqueClicks, fill: CHART_COLORS[3] },
+  ].filter(item => typeof item.value === 'number' && item.value > 0);
 
   const issuesData = [
-    { name: 'Rebotes (Próx.)', value: analytics.bounceCount, fill: CHART_COLORS[2] },
-    { name: 'Desuscripciones (Próx.)', value: analytics.unsubscribeCount, fill: CHART_COLORS[3] },
-    { name: 'Reportes Spam (Próx.)', value: analytics.spamReports, fill: CHART_COLORS[4] },
+    { name: 'Rebotes', value: analytics.bounceCount, fill: CHART_COLORS[2] },
+    { name: 'Desuscripciones', value: analytics.unsubscribeCount, fill: CHART_COLORS[3] },
+    { name: 'Reportes Spam', value: analytics.spamReports, fill: CHART_COLORS[4] },
   ].filter(item => typeof item.value === 'number' && item.value > 0);
 
 
@@ -119,13 +123,13 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <AnalyticsStatCard title="Total Destinatarios" value={analytics.totalRecipients} icon={Users} description="Contactos en la lista" />
             <AnalyticsStatCard title="Correos Enviados" value={analytics.emailsSent} icon={SendIcon} description="Intentos de envío registrados" />
-            <AnalyticsStatCard title="Tasa de Entrega (Próx.)" value={(analytics.deliveryRate * 100).toFixed(1)} unit="%" icon={Users} description={`${analytics.emailsDelivered} entregados (estimado)`} />
-            <AnalyticsStatCard title="Tasa de Apertura (Próx.)" value={(analytics.openRate * 100).toFixed(1)} unit="%" icon={MailOpen} description={`${analytics.uniqueOpens} aperturas únicas (estimado)`} trend={ analytics.openRate > 0.1 ? "up" : undefined}/>
-            <AnalyticsStatCard title="Tasa de Clics (CTR) (Próx.)" value={(analytics.clickThroughRate * 100).toFixed(1)} unit="%" icon={MousePointerClick} description={`${analytics.uniqueClicks} clics únicos (estimado)`} trend={ analytics.clickThroughRate > 0.02 ? "up" : undefined} />
-            <AnalyticsStatCard title="Rebotes (Próx.)" value={analytics.bounceCount} icon={Ban} description={`${(analytics.bounceRate * 100).toFixed(1)}% tasa de rebote (estimado)`} trend={analytics.bounceCount > (analytics.emailsSent * 0.05) ? "down" : undefined} />
+            <AnalyticsStatCard title="Tasa de Entrega" value={(analytics.deliveryRate * 100).toFixed(1)} unit="%" icon={Users} description={`${analytics.emailsDelivered} entregados`} />
+            <AnalyticsStatCard title="Tasa de Apertura" value={(analytics.openRate * 100).toFixed(1)} unit="%" icon={MailOpen} description={`${analytics.uniqueOpens} aperturas únicas`} trend={ analytics.openRate > 0.1 ? "up" : undefined}/>
+            <AnalyticsStatCard title="Tasa de Clics (CTR)" value={(analytics.clickThroughRate * 100).toFixed(1)} unit="%" icon={MousePointerClick} description={`${analytics.uniqueClicks} clics únicos`} trend={ analytics.clickThroughRate > 0.02 ? "up" : undefined} />
+            <AnalyticsStatCard title="Rebotes" value={analytics.bounceCount} icon={Ban} description={`${(analytics.bounceRate * 100).toFixed(1)}% tasa de rebote`} trend={analytics.bounceCount > (analytics.emailsSent * 0.05) ? "down" : undefined} />
           </div>
 
-         {basicPerformanceData.filter(d => d.value > 0).length > 0 ? (
+         {basicPerformanceData.length > 0 ? (
             <Card>
                 <CardHeader>
                   <CardTitle>Visión General del Rendimiento</CardTitle>
@@ -155,7 +159,7 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
                  <CardContent className="pt-6 text-center text-muted-foreground">
                     <BarChart2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     <p>No hay suficientes datos para mostrar el gráfico de rendimiento.</p>
-                    <p className="text-xs">Los datos de entrega, aperturas y clics se actualizarán cuando se configure el seguimiento con webhooks.</p>
+                    <p className="text-xs">Los datos de envío se actualizan mediante la Cloud Function. Los detalles de interacción (aperturas, clics) se actualizan mediante el webhook configurado.</p>
                 </CardContent>
             </Card>
           )}
@@ -163,7 +167,7 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
            {issuesData.length > 0 && (
             <Card>
                 <CardHeader>
-                <CardTitle>Problemas de Entrega (Estimado)</CardTitle>
+                <CardTitle>Problemas de Entrega</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -189,9 +193,10 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
                 <CardTitle className="text-base flex items-center gap-2"><AlertCircle className="h-4 w-4 text-amber-500"/>Notas sobre Analíticas</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
-                <p>Las analíticas de entrega, apertura y clics dependen de la configuración de webhooks con tu proveedor de servicios de correo (ESP) o una solución de seguimiento personalizada. Esta integración está marcada como <strong className="text-amber-600">Próximamente</strong>.</p>
                 <p>Los datos de "Correos Enviados" y "Total Destinatarios" se basan en la información procesada por la Cloud Function al momento del envío.</p>
+                <p>Las métricas de entrega, apertura, clics, rebotes y reportes de spam se actualizan a través de los webhooks configurados con tu proveedor de servicios de correo (ESP), como SendGrid.</p>
                 <p>Las métricas de apertura y clics son estimaciones basadas en las mejores prácticas de la industria y pueden no ser 100% precisas debido a bloqueadores de imágenes y configuraciones de privacidad del usuario.</p>
+                <p>Las desuscripciones deben ser manejadas por tu ESP y, si es posible, reportadas vía webhook para actualizar estas analíticas.</p>
             </CardContent>
           </Card>
 
@@ -204,4 +209,3 @@ export function EmailCampaignAnalyticsDialog({ campaign, isOpen, onOpenChange }:
     </Dialog>
   );
 }
-

@@ -215,10 +215,10 @@ export interface EmailCampaignAnalytics {
   totalRecipients: number;
   emailsSent: number;
   emailsDelivered?: number;
-  emailsOpened?: number;
-  uniqueOpens?: number;
-  emailsClicked?: number;
-  uniqueClicks?: number;
+  emailsOpened?: number; // Total opens
+  uniqueOpens?: string[] | number; // Array of emails for unique opens (from webhook) or a pre-calculated count
+  emailsClicked?: number; // Total clicks
+  uniqueClicks?: string[] | number; // Array of emails for unique clicks (from webhook) or a pre-calculated count
   bounceCount?: number;
   unsubscribeCount?: number;
   spamReports?: number;
@@ -304,13 +304,13 @@ export interface ActivityLog {
   loggedByUserName?: string; // Denormalized user name
 
   // Fields for user_activity
-  relatedLeadId?: string;
-  relatedContactId?: string;
-  relatedOpportunityId?: string;
-  relatedTicketId?: string;
-  relatedOrderId?: string;
-  durationMinutes?: number; // For calls/meetings
-  outcome?: string;
+  relatedLeadId?: string | null;
+  relatedContactId?: string | null;
+  relatedOpportunityId?: string | null;
+  relatedTicketId?: string | null;
+  relatedOrderId?: string | null;
+  durationMinutes?: number | null; // For calls/meetings
+  outcome?: string | null;
 
   // Fields for system_audit
   entityType?: string; // e.g., 'Lead', 'User', 'EmailSettings', 'Document'

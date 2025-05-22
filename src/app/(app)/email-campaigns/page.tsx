@@ -181,44 +181,48 @@ export default function EmailCampaignsPage() {
       unsubscribeCampaigns = onSnapshot(q, (querySnapshot) => {
         const fetchedCampaigns = querySnapshot.docs.map(docSnap => {
           const data = docSnap.data();
-          let createdAtISO = new Date(0).toISOString(); // Fallback
-          if (data.createdAt instanceof Timestamp) {
-            createdAtISO = data.createdAt.toDate().toISOString();
-          } else if (typeof data.createdAt === 'string' && isValid(parseISO(data.createdAt))) {
-            createdAtISO = data.createdAt;
-          }
           
-          let updatedAtISO = undefined;
-          if (data.updatedAt instanceof Timestamp) {
-            updatedAtISO = data.updatedAt.toDate().toISOString();
-          } else if (typeof data.updatedAt === 'string' && isValid(parseISO(data.updatedAt))) {
-            updatedAtISO = data.updatedAt;
-          }
+          const parseTimestampToISO = (timestamp: any): string | undefined => {
+            if (timestamp instanceof Timestamp) {
+              return timestamp.toDate().toISOString();
+            }
+            if (typeof timestamp === 'string' && isValid(parseISO(timestamp))) {
+              return timestamp;
+            }
+            return undefined;
+          };
 
-          let scheduledAtISO = undefined;
-           if (data.scheduledAt instanceof Timestamp) {
-            scheduledAtISO = data.scheduledAt.toDate().toISOString();
-          } else if (typeof data.scheduledAt === 'string' && isValid(parseISO(data.scheduledAt))) {
-            scheduledAtISO = data.scheduledAt;
-          }
+          const analyticsData = data.analytics || {};
+          
+          // Ensure uniqueOpens and uniqueClicks are numbers if they are arrays from Firestore
+          const processedUniqueOpens = Array.isArray(analyticsData.uniqueOpens) 
+                                       ? analyticsData.uniqueOpens.length 
+                                       : (typeof analyticsData.uniqueOpens === 'number' ? analyticsData.uniqueOpens : 0);
+          const processedUniqueClicks = Array.isArray(analyticsData.uniqueClicks) 
+                                        ? analyticsData.uniqueClicks.length 
+                                        : (typeof analyticsData.uniqueClicks === 'number' ? analyticsData.uniqueClicks : 0);
 
-          let sentAtISO = undefined;
-          if (data.sentAt instanceof Timestamp) {
-            sentAtISO = data.sentAt.toDate().toISOString();
-          } else if (typeof data.sentAt === 'string' && isValid(parseISO(data.sentAt))) {
-            sentAtISO = data.sentAt;
-          }
 
           return {
             id: docSnap.id,
             ...data,
-            createdAt: createdAtISO,
-            updatedAt: updatedAtISO,
-            scheduledAt: scheduledAtISO,
-            sentAt: sentAtISO,
-            analytics: data.analytics || { totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0,
-              emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0,
-              deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0 },
+            createdAt: parseTimestampToISO(data.createdAt) || new Date(0).toISOString(), // Fallback for createdAt
+            updatedAt: parseTimestampToISO(data.updatedAt),
+            scheduledAt: parseTimestampToISO(data.scheduledAt),
+            sentAt: parseTimestampToISO(data.sentAt),
+            analytics: {
+              totalRecipients: analyticsData.totalRecipients || 0,
+              emailsSent: analyticsData.emailsSent || 0,
+              emailsDelivered: analyticsData.emailsDelivered || 0,
+              emailsOpened: analyticsData.emailsOpened || 0,
+              uniqueOpens: processedUniqueOpens,
+              emailsClicked: analyticsData.emailsClicked || 0,
+              uniqueClicks: processedUniqueClicks,
+              bounceCount: analyticsData.bounceCount || 0,
+              unsubscribeCount: analyticsData.unsubscribeCount || 0,
+              spamReports: analyticsData.spamReports || 0,
+              // Rates will be calculated on demand in the analytics dialog
+            },
           } as EmailCampaign;
         });
         setCampaigns(fetchedCampaigns);
@@ -341,7 +345,7 @@ export default function EmailCampaignsPage() {
     campaignDataFromDialog: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string },
     id?: string
   ) => {
-    setIsCampaignDialogOpen(false);
+    setIsCampaignDialogOpen(false); // Close dialog immediately
     toast({ title: "Guardando Campaña...", description: "Por favor espera." });
 
     try {
@@ -367,38 +371,38 @@ export default function EmailCampaignsPage() {
           // If scheduled time is within the last minute or in the future
           if (isBefore(now, new Date(scheduledDateObj.getTime() + 60000))) { // allow 1 min buffer for "now"
             if (Math.abs(scheduledDateObj.getTime() - now.getTime()) < 60 * 1000 && existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
-                determinedStatus = 'Enviando';
+                determinedStatus = 'Enviando'; // Set to "Enviando" to trigger Cloud Function
             } else if (isBefore(now, scheduledDateObj)) {
                 determinedStatus = 'Programada';
-                effectiveSentAt = null;
-            } else if (existingCampaign?.status) {
+                effectiveSentAt = null; // Clear sentAt if rescheduling to future
+            } else if (existingCampaign?.status) { // If it was already in a state, keep it (e.g. Fallida)
                  determinedStatus = existingCampaign.status;
             }
           } else if (existingCampaign?.status) { // Scheduled for past, but not "now", keep existing status if not draft
              determinedStatus = existingCampaign.status === 'Borrador' ? 'Fallida' : existingCampaign.status; // Or mark as Fallida if it was Borrador and scheduled for past
           }
         }
-      } else { 
+      } else { // No scheduled date provided
          if (existingCampaign?.status && existingCampaign.status !== 'Borrador') {
             determinedStatus = existingCampaign.status;
          } else {
             determinedStatus = 'Borrador';
          }
-         effectiveSentAt = null; 
+         effectiveSentAt = null; // If no schedule, it's a draft, clear sentAt
       }
 
       const dataToSave: any = {
         ...campaignDataFromDialog,
-        analytics: existingCampaign?.analytics || initialAnalytics,
+        analytics: existingCampaign?.analytics || initialAnalytics, // Preserve existing analytics if editing
         updatedAt: serverTimestamp(),
         status: determinedStatus,
         scheduledAt: effectiveScheduledAt,
         sentAt: effectiveSentAt,
       };
 
-      if (!id) { 
+      if (!id) { // New campaign
         dataToSave.createdAt = serverTimestamp();
-      } else { 
+      } else { // Editing campaign, preserve original createdAt
         dataToSave.createdAt = (existingCampaign?.createdAt && isValid(parseISO(existingCampaign.createdAt))) ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp();
       }
 
@@ -414,6 +418,7 @@ export default function EmailCampaignsPage() {
       }
 
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage, duration: 7000 });
+      // fetchCampaigns(); // No need to call if using onSnapshot
       return true;
     } catch (error) {
       console.error("Error al guardar campaña:", error);
@@ -433,6 +438,7 @@ export default function EmailCampaignsPage() {
     try {
       await deleteDoc(doc(db, "emailCampaigns", campaignToDelete.id));
       toast({ title: "Campaña Eliminada", description: `La campaña "${campaignToDelete.name}" fue eliminada.` });
+      // No need to call fetchCampaigns if using onSnapshot
     } catch (error) {
       console.error("Error al eliminar campaña:", error);
       toast({ title: "Error al Eliminar Campaña", variant: "destructive" });
@@ -688,7 +694,7 @@ export default function EmailCampaignsPage() {
                 "Envío por Cloud Functions (Implementado).",
                 "Programación de envíos con hora específica (Implementado).",
                 "Analíticas básicas: destinatarios, enviados (Implementado, vía Cloud Function).",
-                "Detalles de analíticas: aperturas, clics, rebotes (Próximamente, requiere webhooks con ESP).",
+                "Detalles de analíticas: aperturas, clics, rebotes (Implementado, vía Webhook SendGrid).",
                 "Pruebas A/B para asuntos y contenido (Próximamente).",
             ], Send, false, true)}
         </TabsContent>
