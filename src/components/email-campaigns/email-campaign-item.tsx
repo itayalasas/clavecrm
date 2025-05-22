@@ -89,7 +89,7 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics 
         >
           <BarChart2 className="mr-2 h-4 w-4" /> Analíticas
         </Button>
-        <Button variant="outline" size="sm" disabled>
+        <Button variant="outline" size="sm" onClick={() => onEdit(campaign.id)}>
           <TestTube2 className="mr-2 h-4 w-4" /> Pruebas A/B
         </Button>
         <Button variant="default" size="sm" onClick={() => onEdit(campaign.id)} disabled={!canEditCampaign}>

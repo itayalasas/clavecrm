@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock, Search, Filter as FilterIcon, CalendarIcon, Eraser, Beaker } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock, Search, Filter as FilterIcon, CalendarIcon, Eraser, Beaker } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,7 +151,7 @@ export default function EmailCampaignsPage() {
         console.error("Error al obtener todos los contactos:", error);
         toast({ title: "Error al Cargar Contactos", description: "No se pudieron cargar los contactos generales.", variant: "destructive" });
     } finally {
-        setIsLoadingContacts(false);
+      setIsLoadingContacts(false);
     }
   }, [toast]);
 
@@ -191,12 +191,18 @@ export default function EmailCampaignsPage() {
           const data = docSnap.data();
           
           const parseTimestampToISO = (timestamp: any): string | undefined => {
+            if (!timestamp) return undefined;
             if (timestamp instanceof Timestamp) {
               return timestamp.toDate().toISOString();
             }
-            if (typeof timestamp === 'string' && isValid(parseISO(timestamp))) {
-              return timestamp;
+            if (typeof timestamp === 'string') {
+              const parsedDate = parseISO(timestamp);
+              if (isValid(parsedDate)) {
+                  return parsedDate.toISOString();
+              }
             }
+             // Fallback or log error if format is unexpected
+            console.warn(`Invalid date format for campaign ${docSnap.id}:`, timestamp);
             return undefined;
           };
 
@@ -221,10 +227,10 @@ export default function EmailCampaignsPage() {
               totalRecipients: analyticsData.totalRecipients || 0,
               emailsSent: analyticsData.emailsSent || 0,
               emailsDelivered: analyticsData.emailsDelivered || 0,
-              emailsOpened: analyticsData.emailsOpened || 0,
-              uniqueOpens: processedUniqueOpens,
-              emailsClicked: analyticsData.emailsClicked || 0,
-              uniqueClicks: processedUniqueClicks,
+              emailsOpened: analyticsData.emailsOpened || 0, // Use this for total opens
+              uniqueOpens: processedUniqueOpens, // Store the count
+              emailsClicked: analyticsData.emailsClicked || 0, // Use this for total clicks
+              uniqueClicks: processedUniqueClicks, // Store the count
               bounceCount: analyticsData.bounceCount || 0,
               unsubscribeCount: analyticsData.unsubscribeCount || 0,
               spamReports: analyticsData.spamReports || 0,
@@ -369,31 +375,32 @@ export default function EmailCampaignsPage() {
       let effectiveSentAt: Timestamp | null = (existingCampaign?.sentAt && isValid(parseISO(existingCampaign.sentAt))) ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
 
       if (campaignDataFromForm.scheduledAt) {
-        const scheduledDateObj = parseISO(campaignDataFromForm.scheduledAt);
+        const scheduledDateObj = parseISO(campaignDataFromForm.scheduledAt); // This is already UTC
         if (isValid(scheduledDateObj)) {
           effectiveScheduledAt = Timestamp.fromDate(scheduledDateObj);
           const now = new Date();
           
-          if (isBefore(now, new Date(scheduledDateObj.getTime() + 60000))) { 
-            if (Math.abs(scheduledDateObj.getTime() - now.getTime()) < 60 * 1000 && existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
-                determinedStatus = 'Enviando'; 
-            } else if (isBefore(now, scheduledDateObj)) {
-                determinedStatus = 'Programada';
-                effectiveSentAt = null; 
-            } else if (existingCampaign?.status) { 
-                 determinedStatus = existingCampaign.status;
+          // Check if scheduled time is in the past or within the next minute
+          if (isBefore(scheduledDateObj, new Date(now.getTime() + 60000))) { 
+            if (existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
+                determinedStatus = 'Enviando';
+            } else if (existingCampaign?.status) {
+                determinedStatus = existingCampaign.status;
             }
-          } else if (existingCampaign?.status) { 
-             determinedStatus = existingCampaign.status === 'Borrador' ? 'Fallida' : existingCampaign.status; 
+          } else if (isBefore(now, scheduledDateObj)) { 
+            determinedStatus = 'Programada';
+            effectiveSentAt = null; 
+          } else if (existingCampaign?.status) {
+             determinedStatus = existingCampaign.status === 'Borrador' ? 'Fallida' : existingCampaign.status;
           }
         }
-      } else { 
+      } else {
          if (existingCampaign?.status && existingCampaign.status !== 'Borrador') {
             determinedStatus = existingCampaign.status;
          } else {
             determinedStatus = 'Borrador';
          }
-         effectiveSentAt = null; 
+         effectiveSentAt = null;
       }
 
       const dataToSave: any = {
@@ -406,9 +413,9 @@ export default function EmailCampaignsPage() {
         abTest: campaignDataFromForm.abTest?.isEnabled ? campaignDataFromForm.abTest : null,
       };
 
-      if (!id) { 
+      if (!id) {
         dataToSave.createdAt = serverTimestamp();
-      } else { 
+      } else {
         dataToSave.createdAt = (existingCampaign?.createdAt && isValid(parseISO(existingCampaign.createdAt))) ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp();
       }
 
@@ -699,7 +706,7 @@ export default function EmailCampaignsPage() {
                 "Programación de envíos con hora específica (Implementado).",
                 "Analíticas básicas: destinatarios, enviados (Implementado, vía Cloud Function).",
                 "Detalles de analíticas: aperturas, clics, rebotes (Implementado, vía Webhook SendGrid).",
-                "Pruebas A/B para asuntos y contenido (UI Config. en Desarrollo).",
+                "Pruebas A/B para asuntos y contenido (Configuración UI Implementada. Lógica de ejecución y análisis avanzado pendiente).",
             ], Send, false, true)}
         </TabsContent>
 
@@ -754,7 +761,7 @@ export default function EmailCampaignsPage() {
           )}
            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
              {renderPlaceHolderContent("Importar/Exportar", ["Importación y exportación de contactos (CSV) (Próximamente)."], Import, false)}
-             {renderPlaceHolderContent("Segmentación y Gestión", ["Gestión individual de contactos (Crear, Editar, Eliminar de lista - Implementado).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], Sliders, true)}
+             {renderPlaceHolderContent("Segmentación y Gestión", ["Gestión individual de contactos (Crear, Editar, Eliminar de lista - Implementado).", "Segmentación basada en etiquetas, actividad o campos personalizados (Próximamente)."], SlidersHorizontal, true)}
              {renderPlaceHolderContent("Formularios Suscripción", ["Formularios de suscripción/desuscripción (Próximamente)."], FileSignature, false)}
            </div>
         </TabsContent>
