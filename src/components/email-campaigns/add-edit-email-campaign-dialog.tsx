@@ -21,10 +21,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2, Clock } from "lucide-react";
-import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds, isBefore, isEqual, startOfMinute } from "date-fns";
+import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds, isBefore, isEqual, startOfMinute, startOfDay } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
-// import * as dateFnsTz from 'date-fns-tz'; // Removed date-fns-tz
 import { Timestamp } from "firebase/firestore";
 
 
@@ -62,7 +61,6 @@ export function AddEditEmailCampaignDialog({
   emailTemplates,
 }: AddEditEmailCampaignDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC'; // Not needed without date-fns-tz
 
   const form = useForm<EmailCampaignFormValues>({
     resolver: zodResolver(formSchema),
@@ -82,11 +80,8 @@ export function AddEditEmailCampaignDialog({
   useEffect(() => {
     if (isOpen) {
       if (campaignToEdit && campaignToEdit.scheduledAt) {
-        const scheduledAtUTCDate = parseISO(campaignToEdit.scheduledAt); // This is UTC
-        if (isValid(scheduledAtUTCDate)) {
-          // Convert UTC from Firestore to a local Date object for the picker
-          // The Date constructor and date-fns format will use the browser's local timezone
-          const localDateForPicker = new Date(campaignToEdit.scheduledAt);
+        const scheduledAtDate = parseISO(campaignToEdit.scheduledAt);
+        if (isValid(scheduledAtDate)) {
           form.reset({
             name: campaignToEdit.name,
             subject: campaignToEdit.subject,
@@ -94,9 +89,9 @@ export function AddEditEmailCampaignDialog({
             fromEmail: campaignToEdit.fromEmail,
             contactListId: campaignToEdit.contactListId,
             emailTemplateId: campaignToEdit.emailTemplateId,
-            scheduledDate: localDateForPicker,
-            scheduledHour: format(localDateForPicker, "HH"),
-            scheduledMinute: format(localDateForPicker, "mm"),
+            scheduledDate: scheduledAtDate, // Use the date object directly
+            scheduledHour: format(scheduledAtDate, "HH"),
+            scheduledMinute: format(scheduledAtDate, "mm"),
           });
         } else {
            form.reset({
@@ -140,8 +135,6 @@ export function AddEditEmailCampaignDialog({
         localScheduledDateTime = setSeconds(localScheduledDateTime, 0);
         localScheduledDateTime = setMilliseconds(localScheduledDateTime, 0);
         
-        // .toISOString() always returns a Z-suffixed (UTC) ISO string
-        // based on the Date object's internal time value, which was set using local components.
         scheduledAtISO = localScheduledDateTime.toISOString();
     }
 
@@ -243,7 +236,7 @@ export function AddEditEmailCampaignDialog({
                                     form.setValue("scheduledMinute", "00");
                                 }
                             }}
-                            disabled={(date) => isBefore(date, startOfMinute(new Date())) && !isEqual(startOfMinute(date), startOfMinute(new Date()))}
+                            disabled={(date) => isBefore(date, startOfDay(new Date()))} // Only disable days before today
                             initialFocus
                         />
                         </PopoverContent>
