@@ -2,10 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useForm, SubmitHandler } from "react-hook-form";
+import { useForm, SubmitHandler, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { EmailCampaign, ContactList, EmailTemplate } from "@/lib/types";
+import type { EmailCampaign, ContactList, EmailTemplate, ABTestConfig } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,23 +20,45 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2, Clock } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle as CardTitleShadcn } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { CalendarIcon, Loader2, Send, Construction, BarChart2, TestTube2, Clock, Beaker } from "lucide-react";
 import { format, parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds, isBefore, isEqual, startOfMinute, startOfDay } from "date-fns";
 import { es } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 
+const abTestFormSchema = z.object({
+  isEnabled: z.boolean().default(false),
+  variantBSubject: z.string().optional(),
+  variantBEmailTemplateId: z.string().optional(),
+  // Placeholders for future, not validated strictly yet
+  splitPercentage: z.number().min(0).max(100).optional(),
+  winnerCriteria: z.string().optional(), // Should be enum like ABTestWinnerCriteria later
+  testDurationHours: z.number().min(1).optional(),
+}).optional();
+
 
 const formSchema = z.object({
   name: z.string().min(1, "El nombre de la campaña es obligatorio."),
-  subject: z.string().min(1, "El asunto es obligatorio."),
+  subject: z.string().min(1, "El asunto es obligatorio."), // Subject for Variant A
   fromName: z.string().min(1, "El nombre del remitente es obligatorio."),
   fromEmail: z.string().email("El correo del remitente es inválido."),
   contactListId: z.string().min(1, "Debes seleccionar una lista de contactos."),
-  emailTemplateId: z.string().min(1, "Debes seleccionar una plantilla de correo."),
+  emailTemplateId: z.string().min(1, "Debes seleccionar una plantilla de correo."), // Template for Variant A
   scheduledDate: z.date().optional(),
   scheduledHour: z.string().optional().refine(val => !val || (parseInt(val) >= 0 && parseInt(val) <= 23), { message: "Hora inválida (0-23)"}),
   scheduledMinute: z.string().optional().refine(val => !val || (parseInt(val) >= 0 && parseInt(val) <= 59), { message: "Minuto inválido (0-59)"}),
+  abTest: abTestFormSchema,
+}).refine(data => {
+  if (data.abTest?.isEnabled) {
+    return !!data.abTest.variantBSubject && !!data.abTest.variantBEmailTemplateId;
+  }
+  return true;
+}, {
+  message: "El asunto y la plantilla para la Variante B son obligatorios si la Prueba A/B está habilitada.",
+  path: ["abTest.variantBSubject"], // Or another relevant path
 });
 
 type EmailCampaignFormValues = z.infer<typeof formSchema>;
@@ -44,7 +66,7 @@ type EmailCampaignFormValues = z.infer<typeof formSchema>;
 interface AddEditEmailCampaignDialogProps {
   trigger: React.ReactNode;
   campaignToEdit?: EmailCampaign | null;
-  onSave: (data: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string }, id?: string) => Promise<boolean>;
+  onSave: (data: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string; abTest?: ABTestConfig | null; }, id?: string) => Promise<boolean>;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   contactLists: ContactList[];
@@ -74,48 +96,60 @@ export function AddEditEmailCampaignDialog({
       scheduledDate: undefined,
       scheduledHour: "09",
       scheduledMinute: "00",
+      abTest: {
+        isEnabled: false,
+        variantBSubject: "",
+        variantBEmailTemplateId: "",
+        splitPercentage: 50,
+        winnerCriteria: "open_rate",
+        testDurationHours: 24,
+      }
     },
   });
 
+  const { watch } = form;
+  const abTestEnabled = watch("abTest.isEnabled");
+
   useEffect(() => {
     if (isOpen) {
-      if (campaignToEdit && campaignToEdit.scheduledAt) {
-        const scheduledAtDate = parseISO(campaignToEdit.scheduledAt);
-        if (isValid(scheduledAtDate)) {
-          form.reset({
-            name: campaignToEdit.name,
-            subject: campaignToEdit.subject,
-            fromName: campaignToEdit.fromName,
-            fromEmail: campaignToEdit.fromEmail,
-            contactListId: campaignToEdit.contactListId,
-            emailTemplateId: campaignToEdit.emailTemplateId,
-            scheduledDate: scheduledAtDate, // Use the date object directly
-            scheduledHour: format(scheduledAtDate, "HH"),
-            scheduledMinute: format(scheduledAtDate, "mm"),
-          });
-        } else {
-           form.reset({
-            ...campaignToEdit,
-            scheduledDate: undefined,
-            scheduledHour: "09",
-            scheduledMinute: "00",
-          });
+      let defaultValues: Partial<EmailCampaignFormValues> = {
+        name: "", subject: "", fromName: "", fromEmail: "",
+        contactListId: "", emailTemplateId: "", scheduledDate: undefined,
+        scheduledHour: "09", scheduledMinute: "00",
+        abTest: {
+            isEnabled: false, variantBSubject: "", variantBEmailTemplateId: "",
+            splitPercentage: 50, winnerCriteria: "open_rate", testDurationHours: 24,
         }
-      } else if (campaignToEdit) {
-         form.reset({
-            ...campaignToEdit,
-            scheduledDate: undefined,
-            scheduledHour: "09",
-            scheduledMinute: "00",
-          });
+      };
+
+      if (campaignToEdit) {
+        defaultValues.name = campaignToEdit.name;
+        defaultValues.subject = campaignToEdit.subject;
+        defaultValues.fromName = campaignToEdit.fromName;
+        defaultValues.fromEmail = campaignToEdit.fromEmail;
+        defaultValues.contactListId = campaignToEdit.contactListId;
+        defaultValues.emailTemplateId = campaignToEdit.emailTemplateId;
+        
+        if (campaignToEdit.scheduledAt && isValid(parseISO(campaignToEdit.scheduledAt))) {
+            const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const localScheduledDateTime = new Date(campaignToEdit.scheduledAt); // Assuming stored as UTC ISO string
+            defaultValues.scheduledDate = localScheduledDateTime;
+            defaultValues.scheduledHour = format(localScheduledDateTime, "HH");
+            defaultValues.scheduledMinute = format(localScheduledDateTime, "mm");
+        }
+        
+        if (campaignToEdit.abTest) {
+            defaultValues.abTest = {
+                isEnabled: campaignToEdit.abTest.isEnabled,
+                variantBSubject: campaignToEdit.abTest.variantBSubject || "",
+                variantBEmailTemplateId: campaignToEdit.abTest.variantBEmailTemplateId || "",
+                splitPercentage: campaignToEdit.abTest.splitPercentage || 50,
+                winnerCriteria: campaignToEdit.abTest.winnerCriteria || "open_rate",
+                testDurationHours: campaignToEdit.abTest.testDurationHours || 24,
+            };
+        }
       }
-      else {
-        form.reset({
-          name: "", subject: "", fromName: "", fromEmail: "",
-          contactListId: "", emailTemplateId: "", scheduledDate: undefined,
-          scheduledHour: "09", scheduledMinute: "00",
-        });
-      }
+      form.reset(defaultValues as EmailCampaignFormValues);
       setIsSubmitting(false);
     }
   }, [campaignToEdit, isOpen, form]);
@@ -135,9 +169,10 @@ export function AddEditEmailCampaignDialog({
         localScheduledDateTime = setSeconds(localScheduledDateTime, 0);
         localScheduledDateTime = setMilliseconds(localScheduledDateTime, 0);
         
+        // Convert local time to UTC ISO string for storage
         scheduledAtISO = localScheduledDateTime.toISOString();
     }
-
+    
     const dataToSave = {
         name: data.name,
         subject: data.subject,
@@ -146,8 +181,17 @@ export function AddEditEmailCampaignDialog({
         contactListId: data.contactListId,
         emailTemplateId: data.emailTemplateId,
         scheduledAt: scheduledAtISO,
+        abTest: data.abTest?.isEnabled ? {
+            isEnabled: true,
+            variantBSubject: data.abTest.variantBSubject,
+            variantBEmailTemplateId: data.abTest.variantBEmailTemplateId,
+            splitPercentage: data.abTest.splitPercentage || 50,
+            winnerCriteria: data.abTest.winnerCriteria || 'open_rate',
+            testDurationHours: data.abTest.testDurationHours || 24,
+        } : null,
     };
-    const success = await onSave(dataToSave, campaignToEdit?.id);
+    // Type assertion for onSave
+    const success = await onSave(dataToSave as Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string; abTest?: ABTestConfig | null; }, campaignToEdit?.id);
     if (success) {
       onOpenChange(false);
     }
@@ -159,14 +203,14 @@ export function AddEditEmailCampaignDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       {trigger}
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-5 w-5 text-primary" />
             {campaignToEdit ? "Editar Campaña de Email" : "Nueva Campaña de Email"}
           </DialogTitle>
           <DialogDescription>
-            {campaignToEdit ? "Actualiza los detalles de esta campaña." : "Configura una nueva campaña para enviar a tus contactos. Define el contenido, la lista de destinatarios y la programación."}
+            {campaignToEdit ? "Actualiza los detalles de esta campaña." : "Configura una nueva campaña para enviar a tus contactos."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -174,9 +218,30 @@ export function AddEditEmailCampaignDialog({
             <FormField control={form.control} name="name" render={({ field }) => (
               <FormItem><FormLabel>Nombre de la Campaña</FormLabel><FormControl><Input placeholder="Ej. Promoción Verano 2024" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
-            <FormField control={form.control} name="subject" render={({ field }) => (
-              <FormItem><FormLabel>Asunto del Correo</FormLabel><FormControl><Input placeholder="Ej. ¡Descuentos Exclusivos de Verano!" {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
+            
+            <Card className="border-dashed">
+              <CardHeader className="p-3">
+                <CardTitleShadcn className="text-base">Contenido Principal (Variante A)</CardTitleShadcn>
+              </CardHeader>
+              <CardContent className="p-3 space-y-4">
+                <FormField control={form.control} name="subject" render={({ field }) => (
+                  <FormItem><FormLabel>Asunto del Correo (Variante A)</FormLabel><FormControl><Input placeholder="Ej. ¡Descuentos Exclusivos de Verano!" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="emailTemplateId" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Plantilla de Correo (Variante A)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecciona una plantilla" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                {emailTemplates.map(template => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+              </CardContent>
+            </Card>
+
             <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="fromName" render={({ field }) => (
                     <FormItem><FormLabel>Nombre Remitente</FormLabel><FormControl><Input placeholder="Ej. Tu Empresa" {...field} /></FormControl><FormMessage /></FormItem>
@@ -188,22 +253,10 @@ export function AddEditEmailCampaignDialog({
              <FormField control={form.control} name="contactListId" render={({ field }) => (
                 <FormItem>
                     <FormLabel>Lista de Contactos</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Selecciona una lista" /></SelectTrigger></FormControl>
                         <SelectContent>
                             {contactLists.map(list => <SelectItem key={list.id} value={list.id}>{list.name} ({list.contactCount || 0} contactos)</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )} />
-             <FormField control={form.control} name="emailTemplateId" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Plantilla de Correo</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecciona una plantilla" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                            {emailTemplates.map(template => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
                     <FormMessage />
@@ -236,12 +289,12 @@ export function AddEditEmailCampaignDialog({
                                     form.setValue("scheduledMinute", "00");
                                 }
                             }}
-                            disabled={(date) => isBefore(date, startOfDay(new Date()))} // Only disable days before today
+                            disabled={(date) => isBefore(date, startOfDay(new Date()))} 
                             initialFocus
                         />
                         </PopoverContent>
                     </Popover>
-                    <FormDescriptionUI>Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual o muy próxima. La hora se interpreta en tu zona horaria local.</FormDescriptionUI>
+                    <FormDescriptionUI className="text-xs">La hora se interpreta en tu zona horaria local y se guarda en UTC. Si no se selecciona, la campaña quedará como borrador. Para envío inmediato, programa para la hora actual.</FormDescriptionUI>
                     <FormMessage />
                 </FormItem>
             )} />
@@ -274,6 +327,78 @@ export function AddEditEmailCampaignDialog({
                 </div>
             )}
 
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="ab-test-settings">
+                <AccordionTrigger>
+                  <div className="flex items-center gap-2">
+                    <Beaker className="h-5 w-5 text-purple-500" />
+                    Configuración de Prueba A/B (Opcional)
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-2">
+                  <Card className="border-purple-300">
+                    <CardHeader className="p-3">
+                       <FormField
+                          control={form.control}
+                          name="abTest.isEnabled"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg p-0">
+                              <div className="space-y-0.5">
+                                <FormLabel>Habilitar Prueba A/B</FormLabel>
+                                <FormDescriptionUI className="text-xs">Permite enviar dos versiones de tu correo a diferentes segmentos de tu lista.</FormDescriptionUI>
+                              </div>
+                              <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                            </FormItem>
+                          )}
+                        />
+                    </CardHeader>
+                    {abTestEnabled && (
+                      <CardContent className="p-3 space-y-4">
+                        <FormField control={form.control} name="abTest.variantBSubject" render={({ field }) => (
+                          <FormItem><FormLabel>Asunto (Variante B)</FormLabel><FormControl><Input placeholder="Ej. ¡Mira nuestras Novedades de Verano!" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="abTest.variantBEmailTemplateId" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Plantilla de Correo (Variante B)</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecciona plantilla para Variante B" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        {emailTemplates.map(template => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                            <FormField control={form.control} name="abTest.splitPercentage" render={({ field }) => (
+                              <FormItem><FormLabel>División (%)</FormLabel><FormControl><Input type="number" placeholder="50" {...field} value={field.value ?? 50} onChange={e => field.onChange(parseInt(e.target.value))} /></FormControl>
+                              <FormDescriptionUI className="text-xs">Ej: 50 para 50/50.</FormDescriptionUI><FormMessage /></FormItem>
+                            )} />
+                             <FormField control={form.control} name="abTest.winnerCriteria" render={({ field }) => (
+                                <FormItem><FormLabel>Criterio Ganador</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || "open_rate"} disabled>
+                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="open_rate">Tasa de Apertura</SelectItem>
+                                        <SelectItem value="click_rate">Tasa de Clics</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormDescriptionUI className="text-xs">Lógica de selección auto (Próx.).</FormDescriptionUI><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="abTest.testDurationHours" render={({ field }) => (
+                              <FormItem><FormLabel>Duración (horas)</FormLabel><FormControl><Input type="number" placeholder="24" {...field} value={field.value ?? 24} onChange={e => field.onChange(parseInt(e.target.value))} /></FormControl>
+                              <FormDescriptionUI className="text-xs">Tiempo de prueba (Próx.).</FormDescriptionUI><FormMessage /></FormItem>
+                            )} />
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-2">La lógica completa para dividir la lista, enviar variantes y determinar el ganador se implementará en el backend (Cloud Functions).</p>
+                      </CardContent>
+                    )}
+                  </Card>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
+
             <div className="p-4 border rounded-md bg-muted/50 text-sm text-muted-foreground">
               <Clock className="inline h-4 w-4 mr-2 text-blue-500" />
               <strong>Programación y Envío:</strong>
@@ -281,8 +406,8 @@ export function AddEditEmailCampaignDialog({
                 <li>Las campañas programadas son procesadas por una Cloud Function.</li>
                 <li>El estado cambiará a &quot;Enviando&quot; cuando la Cloud Function comience el proceso.</li>
                 <li>Las analíticas básicas (enviados/destinatarios) se actualizan tras el envío por la Cloud Function.</li>
-                 <li><BarChart2 className="inline h-3 w-3 mr-1 text-purple-500" />Analíticas Detalladas (aperturas, clics): <span className="font-semibold text-amber-600">Próximamente</span> (requiere webhooks).</li>
-                <li><TestTube2 className="inline h-3 w-3 mr-1 text-teal-500" />Pruebas A/B: <span className="font-semibold text-amber-600">Próximamente</span>.</li>
+                 <li><BarChart2 className="inline h-3 w-3 mr-1 text-purple-500" />Analíticas Detalladas (aperturas, clics): <span className="font-semibold text-green-600">Implementado (vía Webhook)</span>.</li>
+                <li><TestTube2 className="inline h-3 w-3 mr-1 text-teal-500" />Pruebas A/B: <span className="font-semibold text-amber-600">UI Config. en Desarrollo</span>.</li>
               </ul>
             </div>
 
@@ -306,4 +431,3 @@ export function AddEditEmailCampaignDialog({
     </Dialog>
   );
 }
-

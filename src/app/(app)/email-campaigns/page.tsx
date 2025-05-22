@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock, Search, Filter as FilterIcon, CalendarIcon, Eraser } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock, Search, Filter as FilterIcon, CalendarIcon, Eraser, Beaker } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,14 @@ type EmailCampaignFormValues = {
   scheduledDate?: Date;
   scheduledHour?: string;
   scheduledMinute?: string;
+  abTest?: {
+    isEnabled: boolean;
+    variantBSubject?: string;
+    variantBEmailTemplateId?: string;
+    splitPercentage?: number;
+    winnerCriteria?: string;
+    testDurationHours?: number;
+  }
 };
 
 const ITEMS_PER_PAGE = 12; // 4 filas de 3 campañas
@@ -194,7 +202,6 @@ export default function EmailCampaignsPage() {
 
           const analyticsData = data.analytics || {};
           
-          // Ensure uniqueOpens and uniqueClicks are numbers if they are arrays from Firestore
           const processedUniqueOpens = Array.isArray(analyticsData.uniqueOpens) 
                                        ? analyticsData.uniqueOpens.length 
                                        : (typeof analyticsData.uniqueOpens === 'number' ? analyticsData.uniqueOpens : 0);
@@ -206,7 +213,7 @@ export default function EmailCampaignsPage() {
           return {
             id: docSnap.id,
             ...data,
-            createdAt: parseTimestampToISO(data.createdAt) || new Date(0).toISOString(), // Fallback for createdAt
+            createdAt: parseTimestampToISO(data.createdAt) || new Date(0).toISOString(), 
             updatedAt: parseTimestampToISO(data.updatedAt),
             scheduledAt: parseTimestampToISO(data.scheduledAt),
             sentAt: parseTimestampToISO(data.sentAt),
@@ -221,8 +228,8 @@ export default function EmailCampaignsPage() {
               bounceCount: analyticsData.bounceCount || 0,
               unsubscribeCount: analyticsData.unsubscribeCount || 0,
               spamReports: analyticsData.spamReports || 0,
-              // Rates will be calculated on demand in the analytics dialog
             },
+            abTest: data.abTest || null,
           } as EmailCampaign;
         });
         setCampaigns(fetchedCampaigns);
@@ -304,7 +311,7 @@ export default function EmailCampaignsPage() {
       await setDoc(doc(db, "emailTemplates", docRefId), {
         ...templateData,
         [id ? 'updatedAt' : 'createdAt']: serverTimestamp(), 
-        ...(id && {updatedAt: serverTimestamp()}) // Ensure updatedAt is always set on update
+        ...(id && {updatedAt: serverTimestamp()}) 
       }, { merge: !!id });
       toast({ title: id ? "Plantilla Actualizada" : "Plantilla Creada", description: `Plantilla "${templateData.name}" guardada.` });
       fetchTemplates();
@@ -342,10 +349,10 @@ export default function EmailCampaignsPage() {
   };
 
   const handleSaveCampaign = async (
-    campaignDataFromDialog: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string },
+    campaignDataFromForm: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string },
     id?: string
   ) => {
-    setIsCampaignDialogOpen(false); // Close dialog immediately
+    setIsCampaignDialogOpen(false); 
     toast({ title: "Guardando Campaña...", description: "Por favor espera." });
 
     try {
@@ -355,70 +362,68 @@ export default function EmailCampaignsPage() {
       const initialAnalytics: EmailCampaignAnalytics = {
         totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0,
         emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0,
-        deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0,
       };
 
       let determinedStatus: EmailCampaignStatus = 'Borrador';
       let effectiveScheduledAt: Timestamp | null = null;
       let effectiveSentAt: Timestamp | null = (existingCampaign?.sentAt && isValid(parseISO(existingCampaign.sentAt))) ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
 
-      if (campaignDataFromDialog.scheduledAt) {
-        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt); // It's already UTC ISO string
+      if (campaignDataFromForm.scheduledAt) {
+        const scheduledDateObj = parseISO(campaignDataFromForm.scheduledAt);
         if (isValid(scheduledDateObj)) {
           effectiveScheduledAt = Timestamp.fromDate(scheduledDateObj);
           const now = new Date();
           
-          // If scheduled time is within the last minute or in the future
-          if (isBefore(now, new Date(scheduledDateObj.getTime() + 60000))) { // allow 1 min buffer for "now"
+          if (isBefore(now, new Date(scheduledDateObj.getTime() + 60000))) { 
             if (Math.abs(scheduledDateObj.getTime() - now.getTime()) < 60 * 1000 && existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
-                determinedStatus = 'Enviando'; // Set to "Enviando" to trigger Cloud Function
+                determinedStatus = 'Enviando'; 
             } else if (isBefore(now, scheduledDateObj)) {
                 determinedStatus = 'Programada';
-                effectiveSentAt = null; // Clear sentAt if rescheduling to future
-            } else if (existingCampaign?.status) { // If it was already in a state, keep it (e.g. Fallida)
+                effectiveSentAt = null; 
+            } else if (existingCampaign?.status) { 
                  determinedStatus = existingCampaign.status;
             }
-          } else if (existingCampaign?.status) { // Scheduled for past, but not "now", keep existing status if not draft
-             determinedStatus = existingCampaign.status === 'Borrador' ? 'Fallida' : existingCampaign.status; // Or mark as Fallida if it was Borrador and scheduled for past
+          } else if (existingCampaign?.status) { 
+             determinedStatus = existingCampaign.status === 'Borrador' ? 'Fallida' : existingCampaign.status; 
           }
         }
-      } else { // No scheduled date provided
+      } else { 
          if (existingCampaign?.status && existingCampaign.status !== 'Borrador') {
             determinedStatus = existingCampaign.status;
          } else {
             determinedStatus = 'Borrador';
          }
-         effectiveSentAt = null; // If no schedule, it's a draft, clear sentAt
+         effectiveSentAt = null; 
       }
 
       const dataToSave: any = {
-        ...campaignDataFromDialog,
-        analytics: existingCampaign?.analytics || initialAnalytics, // Preserve existing analytics if editing
+        ...campaignDataFromForm,
+        analytics: existingCampaign?.analytics || initialAnalytics, 
         updatedAt: serverTimestamp(),
         status: determinedStatus,
         scheduledAt: effectiveScheduledAt,
         sentAt: effectiveSentAt,
+        abTest: campaignDataFromForm.abTest?.isEnabled ? campaignDataFromForm.abTest : null,
       };
 
-      if (!id) { // New campaign
+      if (!id) { 
         dataToSave.createdAt = serverTimestamp();
-      } else { // Editing campaign, preserve original createdAt
+      } else { 
         dataToSave.createdAt = (existingCampaign?.createdAt && isValid(parseISO(existingCampaign.createdAt))) ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp();
       }
 
       await setDoc(doc(db, "emailCampaigns", docRefId), dataToSave, { merge: true });
 
-      let toastMessage = `Campaña "${campaignDataFromDialog.name}" guardada con estado: ${dataToSave.status}.`;
+      let toastMessage = `Campaña "${campaignDataFromForm.name}" guardada con estado: ${dataToSave.status}.`;
       if (dataToSave.status === 'Enviando') {
         toastMessage += " La campaña se está procesando para su envío por la Cloud Function.";
       } else if (dataToSave.status === 'Programada' && effectiveScheduledAt) {
-        toastMessage += ` Programada para: ${format(effectiveScheduledAt.toDate(), "Pp", {locale: es})}.`;
+        toastMessage += ` Programada para: ${format(effectiveScheduledAt.toDate(), "PPp", {locale: es})}.`;
       } else if (dataToSave.status === 'Borrador') {
          toastMessage += " La campaña está en borrador.";
       }
 
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage, duration: 7000 });
-      // fetchCampaigns(); // No need to call if using onSnapshot
       return true;
     } catch (error) {
       console.error("Error al guardar campaña:", error);
@@ -438,7 +443,6 @@ export default function EmailCampaignsPage() {
     try {
       await deleteDoc(doc(db, "emailCampaigns", campaignToDelete.id));
       toast({ title: "Campaña Eliminada", description: `La campaña "${campaignToDelete.name}" fue eliminada.` });
-      // No need to call fetchCampaigns if using onSnapshot
     } catch (error) {
       console.error("Error al eliminar campaña:", error);
       toast({ title: "Error al Eliminar Campaña", variant: "destructive" });
@@ -493,9 +497,9 @@ export default function EmailCampaignsPage() {
         }
 
         let dateSentMatch = true;
-        if (sentAfter || sentBefore) { // Only filter by sent date if a filter is applied
+        if (sentAfter || sentBefore) { 
           if (!campaign.sentAt || !isValid(parseISO(campaign.sentAt))) {
-            dateSentMatch = false; // If no sentAt, it doesn't match date range
+            dateSentMatch = false; 
           } else {
             const campaignSentAt = parseISO(campaign.sentAt);
             if (sentAfter && isBefore(campaignSentAt, startOfDay(sentAfter))) {
@@ -511,7 +515,7 @@ export default function EmailCampaignsPage() {
   }, [campaigns, searchTerm, createdAfter, createdBefore, sentAfter, sentBefore]);
 
   useEffect(() => {
-    setCurrentPage(1); // Reset to first page when filters change the total number of items
+    setCurrentPage(1); 
   }, [filteredAndSortedCampaigns.length]);
 
 
@@ -695,7 +699,7 @@ export default function EmailCampaignsPage() {
                 "Programación de envíos con hora específica (Implementado).",
                 "Analíticas básicas: destinatarios, enviados (Implementado, vía Cloud Function).",
                 "Detalles de analíticas: aperturas, clics, rebotes (Implementado, vía Webhook SendGrid).",
-                "Pruebas A/B para asuntos y contenido (Próximamente).",
+                "Pruebas A/B para asuntos y contenido (UI Config. en Desarrollo).",
             ], Send, false, true)}
         </TabsContent>
 

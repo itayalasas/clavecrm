@@ -5,7 +5,7 @@ import type { EmailCampaign } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Edit3, Trash2, BarChart2, CalendarClock, TestTube2, Users } from "lucide-react";
+import { Send, Edit3, Trash2, BarChart2, CalendarClock, TestTube2, Users, Beaker } from "lucide-react";
 import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -33,6 +33,7 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics 
   const analyticsAvailable = campaign.analytics && (typeof campaign.analytics.emailsSent === 'number' || typeof campaign.analytics.totalRecipients === 'number');
   const canViewAnalytics = campaign.status === 'Enviada' || campaign.status === 'Fallida' || (campaign.status === 'Enviando' && analyticsAvailable);
   const canEditCampaign = campaign.status === 'Borrador' || campaign.status === 'Programada' || campaign.status === 'Fallida';
+  const isABTest = campaign.abTest?.isEnabled;
 
 
   return (
@@ -42,11 +43,17 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics 
           <CardTitle className="text-lg flex items-center gap-2">
             <Send className="h-5 w-5 text-primary" />
             <span className="truncate" title={campaign.name}>{campaign.name}</span>
+             {isABTest && <Badge variant="outline" className="text-xs border-purple-500 text-purple-600"><Beaker className="h-3 w-3 mr-1"/>A/B</Badge>}
           </CardTitle>
         </div>
         <CardDescription className="text-xs pt-1 line-clamp-2" title={campaign.subject}>
-          Asunto: {campaign.subject}
+          Asunto: {campaign.subject} {isABTest && "(Variante A)"}
         </CardDescription>
+         {isABTest && campaign.abTest?.variantBSubject && (
+            <CardDescription className="text-xs pt-0.5 line-clamp-2" title={campaign.abTest.variantBSubject}>
+              Asunto B: {campaign.abTest.variantBSubject}
+            </CardDescription>
+        )}
       </CardHeader>
       <CardContent className="pb-3 flex-grow space-y-2 text-sm">
         <div className="flex items-center justify-between">

@@ -216,9 +216,9 @@ export interface EmailCampaignAnalytics {
   emailsSent: number;
   emailsDelivered?: number;
   emailsOpened?: number; // Total opens
-  uniqueOpens?: string[] | number; // Array of emails for unique opens (from webhook) or a pre-calculated count
+  uniqueOpens?: number | string[];
   emailsClicked?: number; // Total clicks
-  uniqueClicks?: string[] | number; // Array of emails for unique clicks (from webhook) or a pre-calculated count
+  uniqueClicks?: number | string[];
   bounceCount?: number;
   unsubscribeCount?: number;
   spamReports?: number;
@@ -230,20 +230,41 @@ export interface EmailCampaignAnalytics {
   bounceRate?: number;
 }
 
+export type ABTestWinnerCriteria = 'open_rate' | 'click_rate';
+
+export interface ABTestVariant {
+  subject: string;
+  emailTemplateId: string;
+  // Analytics for this variant would be stored separately or as part of a nested object in the main campaign analytics
+}
+
+export interface ABTestConfig {
+  isEnabled: boolean;
+  variantBSubject?: string;
+  variantBEmailTemplateId?: string;
+  splitPercentage?: number; // e.g., 50 for 50/50 split
+  winnerCriteria?: ABTestWinnerCriteria;
+  testDurationHours?: number; // How long to run the test before deciding winner
+  winningVariant?: 'A' | 'B'; // Once determined
+  status?: 'running' | 'completed';
+}
+
+
 export interface EmailCampaign {
   id: string;
   name: string;
-  subject: string;
+  subject: string; // This will be subject for Variant A if A/B test is enabled
   fromName: string;
   fromEmail: string;
   contactListId: string;
-  emailTemplateId: string;
+  emailTemplateId: string; // This will be template for Variant A if A/B test is enabled
   status: EmailCampaignStatus;
   scheduledAt?: string; // ISO string
   sentAt?: string | null; // ISO string
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
   analytics: EmailCampaignAnalytics;
+  abTest?: ABTestConfig | null; // A/B Test configuration
 }
 
 // Types for new email template features
