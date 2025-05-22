@@ -1,12 +1,15 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
-import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock } from "lucide-react";
+import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock, Search, Filter as FilterIcon, CalendarIcon, Eraser } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,9 +25,10 @@ import { PreviewEmailTemplateDialog } from "@/components/email-campaigns/preview
 import { EmailCampaignItem } from "@/components/email-campaigns/email-campaign-item";
 import { EmailCampaignAnalyticsDialog } from "@/components/email-campaigns/email-campaign-analytics-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { parseISO, isValid, isBefore, isEqual, startOfDay, format } from "date-fns";
+import { parseISO, isValid, isBefore, isEqual, startOfDay, endOfDay, format } from "date-fns";
 import { es } from 'date-fns/locale';
 import { useAuth } from "@/contexts/auth-context";
+import { cn } from "@/lib/utils";
 
 
 // Helper type from AddEditEmailCampaignDialog for campaignDataFromDialog
@@ -40,6 +44,7 @@ type EmailCampaignFormValues = {
   scheduledMinute?: string;
 };
 
+const ITEMS_PER_PAGE = 12; // 4 filas de 3 campañas
 
 export default function EmailCampaignsPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/email-campaigns');
@@ -77,6 +82,13 @@ export default function EmailCampaignsPage() {
   const [isAnalyticsDialogOpen, setIsAnalyticsDialogOpen] = useState(false);
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<EmailCampaign | null>(null);
 
+  // State for filters and pagination
+  const [searchTerm, setSearchTerm] = useState("");
+  const [createdAfter, setCreatedAfter] = useState<Date | undefined>(undefined);
+  const [createdBefore, setCreatedBefore] = useState<Date | undefined>(undefined);
+  const [sentAfter, setSentAfter] = useState<Date | undefined>(undefined);
+  const [sentBefore, setSentBefore] = useState<Date | undefined>(undefined);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { toast } = useToast();
   const { currentUser } = useAuth();
@@ -169,7 +181,7 @@ export default function EmailCampaignsPage() {
       unsubscribeCampaigns = onSnapshot(q, (querySnapshot) => {
         const fetchedCampaigns = querySnapshot.docs.map(docSnap => {
           const data = docSnap.data();
-          let createdAtISO = new Date().toISOString();
+          let createdAtISO = new Date(0).toISOString(); // Fallback
           if (data.createdAt instanceof Timestamp) {
             createdAtISO = data.createdAt.toDate().toISOString();
           } else if (typeof data.createdAt === 'string' && isValid(parseISO(data.createdAt))) {
@@ -197,7 +209,6 @@ export default function EmailCampaignsPage() {
             sentAtISO = data.sentAt;
           }
 
-
           return {
             id: docSnap.id,
             ...data,
@@ -205,7 +216,9 @@ export default function EmailCampaignsPage() {
             updatedAt: updatedAtISO,
             scheduledAt: scheduledAtISO,
             sentAt: sentAtISO,
-            analytics: data.analytics || { totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0, emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0, deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0 },
+            analytics: data.analytics || { totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0,
+              emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0,
+              deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0 },
           } as EmailCampaign;
         });
         setCampaigns(fetchedCampaigns);
@@ -287,7 +300,7 @@ export default function EmailCampaignsPage() {
       await setDoc(doc(db, "emailTemplates", docRefId), {
         ...templateData,
         [id ? 'updatedAt' : 'createdAt']: serverTimestamp(), 
-        updatedAt: serverTimestamp() 
+        ...(id && {updatedAt: serverTimestamp()}) // Ensure updatedAt is always set on update
       }, { merge: !!id });
       toast({ title: id ? "Plantilla Actualizada" : "Plantilla Creada", description: `Plantilla "${templateData.name}" guardada.` });
       fetchTemplates();
@@ -345,23 +358,24 @@ export default function EmailCampaignsPage() {
       let effectiveScheduledAt: Timestamp | null = null;
       let effectiveSentAt: Timestamp | null = (existingCampaign?.sentAt && isValid(parseISO(existingCampaign.sentAt))) ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
 
-
       if (campaignDataFromDialog.scheduledAt) {
-        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt); 
+        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt); // It's already UTC ISO string
         if (isValid(scheduledDateObj)) {
           effectiveScheduledAt = Timestamp.fromDate(scheduledDateObj);
           const now = new Date();
           
-          if ((isBefore(scheduledDateObj, now) || isEqual(startOfDay(scheduledDateObj), startOfDay(now))) && // If scheduled for past or today
-              Math.abs(scheduledDateObj.getTime() - now.getTime()) < 3 * 60 * 1000 && // within 3 minutes (to catch "now" or very recent past)
-              existingCampaign?.status !== 'Enviada' &&
-              existingCampaign?.status !== 'Enviando') {
-            determinedStatus = 'Enviando';
-          } else if (isBefore(now, scheduledDateObj)) { // Scheduled for future
-            determinedStatus = 'Programada';
-            effectiveSentAt = null; 
-          } else if (existingCampaign?.status) {
-             determinedStatus = existingCampaign.status; 
+          // If scheduled time is within the last minute or in the future
+          if (isBefore(now, new Date(scheduledDateObj.getTime() + 60000))) { // allow 1 min buffer for "now"
+            if (Math.abs(scheduledDateObj.getTime() - now.getTime()) < 60 * 1000 && existingCampaign?.status !== 'Enviada' && existingCampaign?.status !== 'Enviando') {
+                determinedStatus = 'Enviando';
+            } else if (isBefore(now, scheduledDateObj)) {
+                determinedStatus = 'Programada';
+                effectiveSentAt = null;
+            } else if (existingCampaign?.status) {
+                 determinedStatus = existingCampaign.status;
+            }
+          } else if (existingCampaign?.status) { // Scheduled for past, but not "now", keep existing status if not draft
+             determinedStatus = existingCampaign.status === 'Borrador' ? 'Fallida' : existingCampaign.status; // Or mark as Fallida if it was Borrador and scheduled for past
           }
         }
       } else { 
@@ -400,7 +414,6 @@ export default function EmailCampaignsPage() {
       }
 
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage, duration: 7000 });
-      // No need to call fetchCampaigns() here, onSnapshot will handle it.
       return true;
     } catch (error) {
       console.error("Error al guardar campaña:", error);
@@ -420,7 +433,6 @@ export default function EmailCampaignsPage() {
     try {
       await deleteDoc(doc(db, "emailCampaigns", campaignToDelete.id));
       toast({ title: "Campaña Eliminada", description: `La campaña "${campaignToDelete.name}" fue eliminada.` });
-      // No need to call fetchCampaigns() here, onSnapshot will handle it.
     } catch (error) {
       console.error("Error al eliminar campaña:", error);
       toast({ title: "Error al Eliminar Campaña", variant: "destructive" });
@@ -453,6 +465,67 @@ export default function EmailCampaignsPage() {
     </Card>
   );
 
+  const filteredAndSortedCampaigns = useMemo(() => {
+    return campaigns
+      .filter(campaign => {
+        const searchTermLower = searchTerm.toLowerCase();
+        const nameMatch = campaign.name.toLowerCase().includes(searchTermLower);
+        const subjectMatch = campaign.subject.toLowerCase().includes(searchTermLower);
+        
+        let dateCreatedMatch = true;
+        if (createdAfter) {
+          const campaignCreatedAt = parseISO(campaign.createdAt);
+          if (!isValid(campaignCreatedAt) || isBefore(campaignCreatedAt, startOfDay(createdAfter))) {
+            dateCreatedMatch = false;
+          }
+        }
+        if (createdBefore && dateCreatedMatch) {
+          const campaignCreatedAt = parseISO(campaign.createdAt);
+          if (!isValid(campaignCreatedAt) || isAfter(campaignCreatedAt, endOfDay(createdBefore))) {
+            dateCreatedMatch = false;
+          }
+        }
+
+        let dateSentMatch = true;
+        if (sentAfter || sentBefore) { // Only filter by sent date if a filter is applied
+          if (!campaign.sentAt || !isValid(parseISO(campaign.sentAt))) {
+            dateSentMatch = false; // If no sentAt, it doesn't match date range
+          } else {
+            const campaignSentAt = parseISO(campaign.sentAt);
+            if (sentAfter && isBefore(campaignSentAt, startOfDay(sentAfter))) {
+              dateSentMatch = false;
+            }
+            if (sentBefore && dateSentMatch && isAfter(campaignSentAt, endOfDay(sentBefore))) {
+              dateSentMatch = false;
+            }
+          }
+        }
+        return (nameMatch || subjectMatch) && dateCreatedMatch && dateSentMatch;
+      });
+  }, [campaigns, searchTerm, createdAfter, createdBefore, sentAfter, sentBefore]);
+
+  useEffect(() => {
+    setCurrentPage(1); // Reset to first page when filters change the total number of items
+  }, [filteredAndSortedCampaigns.length]);
+
+
+  const totalPages = Math.ceil(filteredAndSortedCampaigns.length / ITEMS_PER_PAGE);
+  const paginatedCampaigns = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredAndSortedCampaigns.slice(startIndex, endIndex);
+  }, [filteredAndSortedCampaigns, currentPage]);
+
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setCreatedAfter(undefined);
+    setCreatedBefore(undefined);
+    setSentAfter(undefined);
+    setSentBefore(undefined);
+    setCurrentPage(1);
+  };
+
+
   return (
     <div className="flex flex-col gap-6">
       <Card className="shadow-lg">
@@ -482,61 +555,136 @@ export default function EmailCampaignsPage() {
 
         {/* CAMPAIGNS TAB */}
         <TabsContent value="campaigns">
-          <div className="flex justify-between items-center my-4">
-            <h3 className="text-xl font-semibold">Gestión de Campañas</h3>
-             <AddEditEmailCampaignDialog
-              trigger={
-                <Button onClick={() => { setEditingCampaign(null); setIsCampaignDialogOpen(true); }}>
-                  <PlusCircle className="mr-2 h-4 w-4" /> Nueva Campaña
-                </Button>
-              }
-              isOpen={isCampaignDialogOpen}
-              onOpenChange={setIsCampaignDialogOpen}
-              onSave={handleSaveCampaign}
-              campaignToEdit={editingCampaign}
-              contactLists={contactLists}
-              emailTemplates={templates}
-            />
-          </div>
-          {isLoadingCampaigns ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
-            </div>
-          ) : campaigns.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {campaigns.map(campaign => (
-                <EmailCampaignItem
-                  key={campaign.id}
-                  campaign={campaign}
-                  onEdit={() => { setEditingCampaign(campaign); setIsCampaignDialogOpen(true); }}
-                  onDelete={() => confirmDeleteCampaign(campaign)}
-                  onViewAnalytics={handleViewAnalytics}
+          <Card className="mt-4">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
+                <h3 className="text-xl font-semibold">Gestión de Campañas</h3>
+                <AddEditEmailCampaignDialog
+                  trigger={
+                    <Button onClick={() => { setEditingCampaign(null); setIsCampaignDialogOpen(true); }} disabled={isLoadingContactLists || isLoadingTemplates}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Nueva Campaña
+                    </Button>
+                  }
+                  isOpen={isCampaignDialogOpen}
+                  onOpenChange={setIsCampaignDialogOpen}
+                  onSave={handleSaveCampaign}
+                  campaignToEdit={editingCampaign}
+                  contactLists={contactLists}
+                  emailTemplates={templates}
                 />
-              ))}
-            </div>
-          ) : (
-             <Card className="mt-6 col-span-full">
-              <CardContent className="pt-6 text-center text-muted-foreground">
-                <Send className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <p className="text-lg font-medium">No hay campañas todavía.</p>
-                <p>Crea tu primera campaña para comunicarte con tus contactos.</p>
-                 <AddEditEmailCampaignDialog
-                    trigger={
-                        <Button className="mt-4" onClick={() => { setEditingCampaign(null); setIsCampaignDialogOpen(true); }}>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Crear Campaña
-                        </Button>
-                    }
-                    isOpen={isCampaignDialogOpen}
-                    onOpenChange={setIsCampaignDialogOpen}
-                    onSave={handleSaveCampaign}
-                    campaignToEdit={editingCampaign}
-                    contactLists={contactLists}
-                    emailTemplates={templates}
-                />
-              </CardContent>
-            </Card>
-          )}
-           {renderPlaceHolderContent("Funciones Avanzadas de Campaña", [
+              </div>
+              {/* Filters */}
+              <div className="space-y-4 p-4 border rounded-md bg-muted/50 mb-6">
+                <div className="flex items-center gap-2">
+                    <FilterIcon className="h-5 w-5 text-muted-foreground" />
+                    <h4 className="font-semibold">Filtros de Campaña</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Buscar por nombre o asunto..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !createdAfter && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />{createdAfter ? format(createdAfter, "PPP", {locale: es}) : <span>Creada Desde</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={createdAfter} onSelect={setCreatedAfter} initialFocus /></PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !createdBefore && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />{createdBefore ? format(createdBefore, "PPP", {locale: es}) : <span>Creada Hasta</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={createdBefore} onSelect={setCreatedBefore} initialFocus /></PopoverContent>
+                  </Popover>
+                   <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !sentAfter && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />{sentAfter ? format(sentAfter, "PPP", {locale: es}) : <span>Enviada Desde</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={sentAfter} onSelect={setSentAfter} initialFocus /></PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !sentBefore && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />{sentBefore ? format(sentBefore, "PPP", {locale: es}) : <span>Enviada Hasta</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={sentBefore} onSelect={setSentBefore} initialFocus /></PopoverContent>
+                  </Popover>
+                  <Button onClick={handleClearFilters} variant="ghost" className="text-muted-foreground hover:text-primary lg:col-start-3">
+                    <Eraser className="mr-2 h-4 w-4" /> Limpiar Filtros
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingCampaigns ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...Array(ITEMS_PER_PAGE)].map((_, i) => <Skeleton key={i} className="h-56 w-full" />)}
+                </div>
+              ) : paginatedCampaigns.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {paginatedCampaigns.map(campaign => (
+                    <EmailCampaignItem
+                      key={campaign.id}
+                      campaign={campaign}
+                      onEdit={() => { setEditingCampaign(campaign); setIsCampaignDialogOpen(true); }}
+                      onDelete={() => confirmDeleteCampaign(campaign)}
+                      onViewAnalytics={handleViewAnalytics}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <Card className="col-span-full">
+                  <CardContent className="pt-6 text-center text-muted-foreground">
+                    <Send className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <p className="text-lg font-medium">
+                      {searchTerm || createdAfter || createdBefore || sentAfter || sentBefore ? "No se encontraron campañas con los filtros aplicados." : "No hay campañas todavía."}
+                    </p>
+                    <p>
+                      {searchTerm || createdAfter || createdBefore || sentAfter || sentBefore ? "Intenta ajustar tus filtros o " : ""}
+                      Crea tu primera campaña para comunicarte con tus contactos.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center space-x-2 mt-6 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          {renderPlaceHolderContent("Funciones Avanzadas de Campaña", [
                 "Envío por Cloud Functions (Implementado).",
                 "Programación de envíos con hora específica (Implementado).",
                 "Analíticas básicas: destinatarios, enviados (Implementado, vía Cloud Function).",
@@ -747,6 +895,4 @@ export default function EmailCampaignsPage() {
     </div>
   );
 }
-
-
     
