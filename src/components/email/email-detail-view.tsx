@@ -3,7 +3,7 @@
 
 import type { EmailMessage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"; // Added CardDescription and CardFooter
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Paperclip, ArrowLeft, Reply, ReplyAll, Forward, Trash2, Clock, Send, Inbox } from "lucide-react";
@@ -32,7 +32,7 @@ export function EmailDetailView({ email, onClose, onReply, onReplyAll, onForward
       case 'sent': return <Send className="h-4 w-4 text-green-500" />;
       case 'pending': return <Clock className="h-4 w-4 text-amber-500" />;
       case 'received': return <Inbox className="h-4 w-4 text-blue-500" />;
-      case 'draft': return <Archive className="h-4 w-4 text-gray-500" />;
+      case 'draft': return <Archive className="h-4 w-4 text-gray-500" />; // Assuming Archive is imported if draft is used
       default: return null;
     }
   };
@@ -58,15 +58,15 @@ export function EmailDetailView({ email, onClose, onReply, onReplyAll, onForward
           <div>
             <p className="text-sm font-medium">{email.from.name || email.from.email}</p>
             <p className="text-xs text-muted-foreground">
-              {isValid(parseISO(email.date)) ? format(parseISO(email.date), "PPPp", { locale: es }) : "Fecha inválida"}
+              {isValid(parseISO(email.date)) ? format(parseISO(email.date), "PPpp", { locale: es }) : "Fecha inválida"}
             </p>
           </div>
         </div>
-        <div className="text-xs text-muted-foreground mt-2 space-y-0.5">
+        <CardDescription className="text-xs text-muted-foreground mt-2 space-y-0.5"> {/* Used CardDescription */}
           <p><strong className="text-foreground/80">Para:</strong> {renderRecipients(email.to)}</p>
           {email.cc && email.cc.length > 0 && <p><strong className="text-foreground/80">CC:</strong> {renderRecipients(email.cc)}</p>}
           {email.bcc && email.bcc.length > 0 && <p><strong className="text-foreground/80">CCO:</strong> {renderRecipients(email.bcc)}</p>}
-        </div>
+        </CardDescription>
       </CardHeader>
 
       <ScrollArea className="flex-grow">
@@ -84,7 +84,7 @@ export function EmailDetailView({ email, onClose, onReply, onReplyAll, onForward
                 {email.attachments.map((att, index) => (
                   <li key={index} className="text-sm">
                     <a href={att.downloadUrl || '#'} download={att.filename} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
-                      <Paperclip className="h-4 w-4" /> {att.filename} ({Math.round(att.size / 1024)} KB)
+                      <Paperclip className="h-4 w-4" /> {att.filename} ({att.size ? `${Math.round(att.size / 1024)} KB` : 'Tamaño desconocido'})
                     </a>
                   </li>
                 ))}
@@ -99,7 +99,7 @@ export function EmailDetailView({ email, onClose, onReply, onReplyAll, onForward
           <Button variant="outline" size="sm" onClick={() => onReply(email)}>
             <Reply className="mr-2 h-4 w-4" /> Responder
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onReplyAll(email)} disabled={email.to.length + (email.cc?.length || 0) <= 1}>
+          <Button variant="outline" size="sm" onClick={() => onReplyAll(email)} disabled={(email.to?.length || 0) + (email.cc?.length || 0) <= 1}>
             <ReplyAll className="mr-2 h-4 w-4" /> Responder a Todos
           </Button>
           <Button variant="outline" size="sm" onClick={() => onForward(email)}>
