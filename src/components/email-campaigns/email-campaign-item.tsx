@@ -73,7 +73,7 @@ export function EmailCampaignItem({ campaign, onEdit, onDelete, onViewAnalytics 
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex flex-wrap justify-end gap-2 pt-3 border-t">
+      <CardFooter className="flex flex-wrap justify-end items-center gap-2 pt-3 border-t">
         <Button
             variant="outline"
             size="sm"
