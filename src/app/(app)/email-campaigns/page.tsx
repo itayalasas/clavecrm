@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
-import { NAV_ITEMS } from "@/lib/constants"; // EMAIL_CAMPAIGN_STATUSES removed as it's not directly used
+import { NAV_ITEMS } from "@/lib/constants";
 import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal as Sliders, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, setDoc, where, updateDoc, writeBatch, arrayRemove } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, setDoc, where, updateDoc, writeBatch, arrayRemove, onSnapshot } from "firebase/firestore";
 import { AddEditContactListDialog } from "@/components/email-campaigns/add-edit-contact-list-dialog";
 import { ContactListItem } from "@/components/email-campaigns/contact-list-item";
 import { ManageContactsDialog } from "@/components/email-campaigns/manage-contacts-dialog";
@@ -22,8 +22,9 @@ import { PreviewEmailTemplateDialog } from "@/components/email-campaigns/preview
 import { EmailCampaignItem } from "@/components/email-campaigns/email-campaign-item";
 import { EmailCampaignAnalyticsDialog } from "@/components/email-campaigns/email-campaign-analytics-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { parseISO, isValid, isPast, isEqual, isFuture, format } from "date-fns";
+import { parseISO, isValid, isBefore, isEqual, startOfDay, format } from "date-fns";
 import { es } from 'date-fns/locale';
+import { useAuth } from "@/contexts/auth-context";
 
 
 // Helper type from AddEditEmailCampaignDialog for campaignDataFromDialog
@@ -41,7 +42,7 @@ type EmailCampaignFormValues = {
 
 
 export default function EmailCampaignsPage() {
-  const navItem = NAV_ITEMS.find(item => item.href === '/email-campaigns');
+  const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/email-campaigns');
   const PageIcon = navItem?.icon || Send;
 
   const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
@@ -78,6 +79,7 @@ export default function EmailCampaignsPage() {
 
 
   const { toast } = useToast();
+  const { currentUser } = useAuth();
 
   const fetchContactLists = useCallback(async () => {
     setIsLoadingContactLists(true);
@@ -121,7 +123,7 @@ export default function EmailCampaignsPage() {
                 id: docSnap.id,
                 ...data,
                 createdAt: createdAtISO,
-                subscribed: data.subscribed === undefined ? true : data.subscribed, // Default to true if undefined
+                subscribed: data.subscribed === undefined ? true : data.subscribed, 
             } as Contact;
         });
         setContacts(fetchedContacts);
@@ -153,45 +155,78 @@ export default function EmailCampaignsPage() {
     }
   }, [toast]);
 
-  const fetchCampaigns = useCallback(async () => {
-    setIsLoadingCampaigns(true);
-    try {
-      const q = query(collection(db, "emailCampaigns"), orderBy("createdAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      const fetchedCampaigns = querySnapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        const createdAtRaw = data.createdAt;
-        let createdAtISO = new Date().toISOString();
-        if (createdAtRaw instanceof Timestamp) {
-          createdAtISO = createdAtRaw.toDate().toISOString();
-        } else if (typeof createdAtRaw === 'string' && isValid(parseISO(createdAtRaw))) {
-          createdAtISO = createdAtRaw;
-        }
-
-        return {
-        id: docSnap.id,
-        ...data,
-        createdAt: createdAtISO,
-        updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-        scheduledAt: (data.scheduledAt as Timestamp)?.toDate().toISOString() || undefined,
-        sentAt: (data.sentAt as Timestamp)?.toDate().toISOString() || undefined,
-        analytics: data.analytics || { totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0, emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0, deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0 },
-      } as EmailCampaign});
-      setCampaigns(fetchedCampaigns);
-    } catch (error) {
-      console.error("Error al obtener campañas:", error);
-      toast({ title: "Error al Cargar Campañas", variant: "destructive" });
-    } finally {
-      setIsLoadingCampaigns(false);
-    }
-  }, [toast]);
 
   useEffect(() => {
     fetchContactLists();
     fetchAllContacts();
     fetchTemplates();
-    fetchCampaigns();
-  }, [fetchContactLists, fetchAllContacts, fetchTemplates, fetchCampaigns]);
+
+    let unsubscribeCampaigns: (() => void) | undefined;
+
+    if (currentUser) {
+      setIsLoadingCampaigns(true);
+      const q = query(collection(db, "emailCampaigns"), orderBy("createdAt", "desc"));
+      unsubscribeCampaigns = onSnapshot(q, (querySnapshot) => {
+        const fetchedCampaigns = querySnapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          let createdAtISO = new Date().toISOString();
+          if (data.createdAt instanceof Timestamp) {
+            createdAtISO = data.createdAt.toDate().toISOString();
+          } else if (typeof data.createdAt === 'string' && isValid(parseISO(data.createdAt))) {
+            createdAtISO = data.createdAt;
+          }
+          
+          let updatedAtISO = undefined;
+          if (data.updatedAt instanceof Timestamp) {
+            updatedAtISO = data.updatedAt.toDate().toISOString();
+          } else if (typeof data.updatedAt === 'string' && isValid(parseISO(data.updatedAt))) {
+            updatedAtISO = data.updatedAt;
+          }
+
+          let scheduledAtISO = undefined;
+           if (data.scheduledAt instanceof Timestamp) {
+            scheduledAtISO = data.scheduledAt.toDate().toISOString();
+          } else if (typeof data.scheduledAt === 'string' && isValid(parseISO(data.scheduledAt))) {
+            scheduledAtISO = data.scheduledAt;
+          }
+
+          let sentAtISO = undefined;
+          if (data.sentAt instanceof Timestamp) {
+            sentAtISO = data.sentAt.toDate().toISOString();
+          } else if (typeof data.sentAt === 'string' && isValid(parseISO(data.sentAt))) {
+            sentAtISO = data.sentAt;
+          }
+
+
+          return {
+            id: docSnap.id,
+            ...data,
+            createdAt: createdAtISO,
+            updatedAt: updatedAtISO,
+            scheduledAt: scheduledAtISO,
+            sentAt: sentAtISO,
+            analytics: data.analytics || { totalRecipients: 0, emailsSent: 0, emailsDelivered: 0, emailsOpened: 0, uniqueOpens: 0, emailsClicked: 0, uniqueClicks: 0, bounceCount: 0, unsubscribeCount: 0, spamReports: 0, deliveryRate: 0, openRate: 0, clickThroughRate: 0, clickToOpenRate: 0, unsubscribeRate: 0, bounceRate: 0 },
+          } as EmailCampaign;
+        });
+        setCampaigns(fetchedCampaigns);
+        setIsLoadingCampaigns(false);
+      }, (error) => {
+        console.error("Error al obtener campañas en tiempo real:", error);
+        toast({ title: "Error al Cargar Campañas", variant: "destructive" });
+        setIsLoadingCampaigns(false);
+      });
+    } else {
+      setIsLoadingCampaigns(false);
+      setCampaigns([]);
+    }
+
+    return () => {
+      if (unsubscribeCampaigns) {
+        unsubscribeCampaigns();
+      }
+    };
+  }, [currentUser, toast, fetchContactLists, fetchAllContacts, fetchTemplates]);
+
 
   const handleSaveContactList = async (listData: Omit<ContactList, 'id' | 'createdAt' | 'contactCount'>) => {
     try {
@@ -218,7 +253,6 @@ export default function EmailCampaignsPage() {
   const handleDeleteContactList = async () => {
     if (!listToDelete) return;
     try {
-      // Before deleting the list, update all contacts that are part of this list
       const contactsQuery = query(collection(db, "contacts"), where("listIds", "array-contains", listToDelete.id));
       const contactsSnapshot = await getDocs(contactsQuery);
       const batch = writeBatch(db);
@@ -229,11 +263,10 @@ export default function EmailCampaignsPage() {
       });
       await batch.commit();
 
-      // Now delete the list
       await deleteDoc(doc(db, "contactLists", listToDelete.id));
       toast({ title: "Lista Eliminada", description: `La lista "${listToDelete.name}" ha sido eliminada.` });
       fetchContactLists();
-      fetchAllContacts(); // Refresh all contacts as their listIds might have changed
+      fetchAllContacts(); 
     } catch (error) {
       console.error("Error al eliminar lista de contactos:", error);
       toast({ title: "Error al Eliminar Lista", variant: "destructive" });
@@ -253,8 +286,8 @@ export default function EmailCampaignsPage() {
       const docRefId = id || doc(collection(db, "emailTemplates")).id;
       await setDoc(doc(db, "emailTemplates", docRefId), {
         ...templateData,
-        [id ? 'updatedAt' : 'createdAt']: serverTimestamp(), // Set createdAt only if new
-        updatedAt: serverTimestamp() // always update this
+        [id ? 'updatedAt' : 'createdAt']: serverTimestamp(), 
+        updatedAt: serverTimestamp() 
       }, { merge: !!id });
       toast({ title: id ? "Plantilla Actualizada" : "Plantilla Creada", description: `Plantilla "${templateData.name}" guardada.` });
       fetchTemplates();
@@ -295,7 +328,7 @@ export default function EmailCampaignsPage() {
     campaignDataFromDialog: Omit<EmailCampaignFormValues, 'scheduledDate' | 'scheduledHour' | 'scheduledMinute'> & { scheduledAt?: string },
     id?: string
   ) => {
-    setIsCampaignDialogOpen(false); // Close dialog immediately
+    setIsCampaignDialogOpen(false);
     toast({ title: "Guardando Campaña...", description: "Por favor espera." });
 
     try {
@@ -310,33 +343,34 @@ export default function EmailCampaignsPage() {
 
       let determinedStatus: EmailCampaignStatus = 'Borrador';
       let effectiveScheduledAt: Timestamp | null = null;
-      let effectiveSentAt: Timestamp | null = existingCampaign?.sentAt ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
+      let effectiveSentAt: Timestamp | null = (existingCampaign?.sentAt && isValid(parseISO(existingCampaign.sentAt))) ? Timestamp.fromDate(parseISO(existingCampaign.sentAt)) : null;
 
 
       if (campaignDataFromDialog.scheduledAt) {
-        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt); // This is already UTC
+        const scheduledDateObj = parseISO(campaignDataFromDialog.scheduledAt); 
         if (isValid(scheduledDateObj)) {
           effectiveScheduledAt = Timestamp.fromDate(scheduledDateObj);
           const now = new Date();
-          // Trigger 'Enviando' if scheduled time is past or very near, and not already sent/sending
-          if ((isPast(scheduledDateObj) || Math.abs(scheduledDateObj.getTime() - now.getTime()) < 60000) && // within 1 minute
+          
+          if ((isBefore(scheduledDateObj, now) || isEqual(startOfDay(scheduledDateObj), startOfDay(now))) && // If scheduled for past or today
+              Math.abs(scheduledDateObj.getTime() - now.getTime()) < 3 * 60 * 1000 && // within 3 minutes (to catch "now" or very recent past)
               existingCampaign?.status !== 'Enviada' &&
               existingCampaign?.status !== 'Enviando') {
             determinedStatus = 'Enviando';
-          } else if (isFuture(scheduledDateObj)) {
+          } else if (isBefore(now, scheduledDateObj)) { // Scheduled for future
             determinedStatus = 'Programada';
-            effectiveSentAt = null; // Clear sentAt if re-scheduling for future
+            effectiveSentAt = null; 
           } else if (existingCampaign?.status) {
-             determinedStatus = existingCampaign.status; // Keep current status if it's already sent/sending and scheduled for past
+             determinedStatus = existingCampaign.status; 
           }
         }
-      } else { // No scheduled date, implies draft unless it was already in a non-draft state
+      } else { 
          if (existingCampaign?.status && existingCampaign.status !== 'Borrador') {
             determinedStatus = existingCampaign.status;
          } else {
             determinedStatus = 'Borrador';
          }
-         effectiveSentAt = null; // A draft or re-drafted campaign shouldn't have a sentAt
+         effectiveSentAt = null; 
       }
 
       const dataToSave: any = {
@@ -348,10 +382,10 @@ export default function EmailCampaignsPage() {
         sentAt: effectiveSentAt,
       };
 
-      if (!id) { // New campaign
+      if (!id) { 
         dataToSave.createdAt = serverTimestamp();
-      } else { // Existing campaign, preserve original creation date
-        dataToSave.createdAt = existingCampaign?.createdAt ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp();
+      } else { 
+        dataToSave.createdAt = (existingCampaign?.createdAt && isValid(parseISO(existingCampaign.createdAt))) ? Timestamp.fromDate(parseISO(existingCampaign.createdAt)) : serverTimestamp();
       }
 
       await setDoc(doc(db, "emailCampaigns", docRefId), dataToSave, { merge: true });
@@ -366,7 +400,7 @@ export default function EmailCampaignsPage() {
       }
 
       toast({ title: id ? "Campaña Actualizada" : "Campaña Creada", description: toastMessage, duration: 7000 });
-      fetchCampaigns();
+      // No need to call fetchCampaigns() here, onSnapshot will handle it.
       return true;
     } catch (error) {
       console.error("Error al guardar campaña:", error);
@@ -386,7 +420,7 @@ export default function EmailCampaignsPage() {
     try {
       await deleteDoc(doc(db, "emailCampaigns", campaignToDelete.id));
       toast({ title: "Campaña Eliminada", description: `La campaña "${campaignToDelete.name}" fue eliminada.` });
-      fetchCampaigns();
+      // No need to call fetchCampaigns() here, onSnapshot will handle it.
     } catch (error) {
       console.error("Error al eliminar campaña:", error);
       toast({ title: "Error al Eliminar Campaña", variant: "destructive" });
@@ -713,3 +747,6 @@ export default function EmailCampaignsPage() {
     </div>
   );
 }
+
+
+    
