@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Added useEffect
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Send, Paperclip, Archive, Loader2, Trash2, MoreVertical } from "lucide-react"; // Added Archive here
+import { Send, Paperclip, Archive, Loader2, Trash2, MoreVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const emailComposerSchema = z.object({
@@ -33,7 +33,7 @@ interface EmailComposerProps {
   initialSubject?: string;
   initialBody?: string;
   onSend: (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }) => Promise<void>;
-  isSending?: boolean; // To be controlled by parent if real sending implemented
+  isSending?: boolean;
 }
 
 export function EmailComposer({
@@ -41,7 +41,7 @@ export function EmailComposer({
   initialSubject = "",
   initialBody = "",
   onSend,
-  isSending = false, // Default to false
+  isSending = false,
 }: EmailComposerProps) {
   const { toast } = useToast();
   const [showCc, setShowCc] = useState(false);
@@ -58,9 +58,21 @@ export function EmailComposer({
     },
   });
 
+  useEffect(() => {
+    // Reset form if initial props change (e.g., navigating with new query params)
+    form.reset({
+      to: initialTo,
+      cc: "", // Always reset CC/BCC for simplicity when new 'to' is provided
+      bcc: "",
+      subject: initialSubject,
+      body: initialBody,
+    });
+  }, [initialTo, initialSubject, initialBody, form]);
+
+
   const onSubmit: SubmitHandler<EmailComposerFormValues> = async (data) => {
     await onSend(data);
-    // form.reset(); // Optionally reset form after send, parent might handle this
+    // form.reset(); // Parent now controls reset via useEffect if needed
   };
 
   return (

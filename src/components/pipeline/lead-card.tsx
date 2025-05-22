@@ -17,6 +17,7 @@ import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { getUserInitials } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation"; // Import useRouter
 
 interface LeadCardProps {
   lead: Lead;
@@ -26,9 +27,10 @@ interface LeadCardProps {
 export function LeadCard({ lead, onEdit }: LeadCardProps) {
   const avatarFallback = getUserInitials(lead.name);
   const { toast } = useToast();
+  const router = useRouter(); // Initialize router
 
   const handleCall = async () => {
-    console.log(`LeadCard: Attempting to call ${lead.name} at ${lead.phone}`); // Minor log added
+    console.log(`LeadCard: Intentando llamar a ${lead.name} al ${lead.phone}`);
     if (lead.phone) {
       toast({
         title: "Iniciando llamada...",
@@ -49,9 +51,15 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
             description: `Llamada a ${lead.name} en curso. SID: ${result.callSid || 'N/A'}`,
             variant: "default"
           });
-          // Aquí podrías, por ejemplo, registrar una actividad de llamada iniciada en el CRM.
         } else {
-          throw new Error(result.error || "Error desconocido al iniciar la llamada desde el servidor.");
+          // Log the actual error from the server if available
+          const errorDetail = result.error || "Error desconocido al iniciar la llamada desde el servidor.";
+          console.error("Error desde /api/initiate-call:", errorDetail);
+          toast({
+            title: "Error al Iniciar Llamada",
+            description: errorDetail,
+            variant: "destructive",
+          });
         }
       } catch (error: any) {
         console.error("Error al iniciar llamada (desde LeadCard):", error);
@@ -70,13 +78,26 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
     }
   };
 
+  const handleSendEmail = () => {
+    if (lead.email) {
+      const subject = encodeURIComponent(`Seguimiento: ${lead.name}`);
+      router.push(`/email?to=${lead.email}&subject=${subject}&leadName=${encodeURIComponent(lead.name)}`);
+    } else {
+      toast({
+        title: "Email Faltante",
+        description: `El lead ${lead.name} no tiene un correo electrónico registrado.`,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Card className="mb-4 shadow-md hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={`https://avatar.vercel.sh/${lead.email || lead.name}.png`} alt={lead.name} data-ai-hint="company logo"/>
+              <AvatarImage src={`https://avatar.vercel.sh/${lead.email || lead.name}.png?size=40`} alt={lead.name} data-ai-hint="company logo"/>
               <AvatarFallback>{avatarFallback}</AvatarFallback>
             </Avatar>
             <div>
@@ -96,7 +117,7 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
                 Editar Lead
               </DropdownMenuItem>
               {lead.email && (
-                <DropdownMenuItem onClick={() => window.location.href = `mailto:${lead.email}`}>
+                <DropdownMenuItem onClick={handleSendEmail}>
                   <Mail className="mr-2 h-4 w-4" />
                   Enviar Correo
                 </DropdownMenuItem>
@@ -191,7 +212,7 @@ export function LeadCard({ lead, onEdit }: LeadCardProps) {
           </div>
         ) : <div />}
         <span className="text-xs text-muted-foreground">
-          Agregado: {new Date(lead.createdAt).toLocaleDateString('es-ES')}
+          Agregado: {lead.createdAt && isValid(parseISO(lead.createdAt)) ? format(parseISO(lead.createdAt), "P", { locale: es }) : "Fecha desconocida"}
         </span>
       </CardFooter>
     </Card>
