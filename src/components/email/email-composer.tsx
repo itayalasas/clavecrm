@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Send, Paperclip, CalendarClock, Loader2, Trash2, MoreVertical } from "lucide-react";
+import { Send, Paperclip, Archive, Loader2, Trash2, MoreVertical } from "lucide-react"; // Added Archive here
 import { useToast } from "@/hooks/use-toast";
 
 const emailComposerSchema = z.object({
