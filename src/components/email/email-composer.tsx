@@ -1,6 +1,7 @@
 
 "use client";
 
+import * as React from "react"; // Added this line
 import { useState, useEffect, type ChangeEvent } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Send, Paperclip, Archive, Loader2, Trash2, MoreVertical, XCircle, UserPlus, X as XIcon } from "lucide-react";
+import { Send, Paperclip, Archive as ArchiveIcon, Loader2, Trash2, MoreVertical, XCircle, UserPlus, X as XIcon } from "lucide-react"; // Renamed Archive to ArchiveIcon
 import { useToast } from "@/hooks/use-toast";
 import type { Lead, Contact } from "@/lib/types";
 import { ScrollArea } from "../ui/scroll-area";
@@ -104,15 +105,15 @@ export function EmailComposer({
 
   const onSubmit: SubmitHandler<EmailComposerFormValues> = async (data) => {
     const success = await onQueueEmail(data, selectedFiles);
-    if (success) {
-        // Parent component (EmailPageContent) handles closing
+    if (success && onClose) {
+        onClose();
     }
   };
 
   const handleDraftSave: SubmitHandler<EmailComposerFormValues> = async (data) => {
     const success = await onSaveDraft(data, selectedFiles);
-    if (success) {
-        // Parent component (EmailPageContent) handles closing
+    if (success && onClose) {
+        onClose();
     }
   };
   
@@ -129,7 +130,7 @@ export function EmailComposer({
         .filter(l => l.email && (l.name.toLowerCase().includes(lowerSearch) || l.email.toLowerCase().includes(lowerSearch)))
         .map(l => ({ id: l.id, name: l.name, email: l.email!, type: 'Lead' }));
     const foundContacts = contacts
-        .filter(c => ( (c.firstName || "") + " " + (c.lastName || "") ).toLowerCase().includes(lowerSearch) || c.email.toLowerCase().includes(lowerSearch) )
+        .filter(c => c.email && ( ((c.firstName || "") + " " + (c.lastName || "")).toLowerCase().includes(lowerSearch) || c.email.toLowerCase().includes(lowerSearch) ))
         .map(c => ({ id: c.id, name: `${c.firstName || ""} ${c.lastName || ""}`.trim(), email: c.email, type: 'Contacto' }));
     return [...foundLeads, ...foundContacts].slice(0, 5); // Limit to 5 suggestions
   }, [attachmentSearchTerm, leads, contacts]);
@@ -163,31 +164,28 @@ export function EmailComposer({
               </div>
             </div>
             
-            {/* Placeholder for Contact/Lead search for "To" field */}
-            <div className="pl-20"> {/* Aligns with the "To" input */}
+            <div className="pl-20 relative"> {/* Aligns with the "To" input */}
               <Input 
                 type="search"
-                placeholder="Buscar Contacto o Lead para añadir a 'Para'..."
+                placeholder="Buscar Contacto o Lead para añadir..."
                 value={attachmentSearchTerm}
                 onChange={(e) => setAttachmentSearchTerm(e.target.value)}
                 className="text-xs h-8"
               />
-              {filteredRecipients.length > 0 && (
-                <ScrollArea className="h-auto max-h-32 border rounded-md mt-1">
-                  <div className="p-1">
-                    {filteredRecipients.map(r => (
+              {attachmentSearchTerm && filteredRecipients.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                  {filteredRecipients.map(r => (
                       <Button 
                         key={`${r.type}-${r.id}`} 
                         variant="ghost" 
                         size="sm" 
-                        className="w-full justify-start text-xs h-auto py-1"
+                        className="w-full justify-start text-xs h-auto py-1.5 px-2"
                         onClick={() => addRecipient(r.email)}
                       >
-                        {r.name} ({r.email}) - <span className="ml-1 text-muted-foreground text-[10px]">{r.type}</span>
+                        <UserPlus className="mr-2 h-3 w-3" /> {r.name} ({r.email}) - <span className="ml-1 text-muted-foreground text-[10px]">{r.type}</span>
                       </Button>
                     ))}
-                  </div>
-                </ScrollArea>
+                </div>
               )}
             </div>
 
@@ -281,13 +279,13 @@ export function EmailComposer({
                 Enviar
               </Button>
               <Button type="button" variant="outline" onClick={form.handleSubmit(handleDraftSave)} disabled={isSending || isSavingDraft}>
-                {isSavingDraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
+                {isSavingDraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArchiveIcon className="mr-2 h-4 w-4" />}
                 Guardar Borrador
               </Button>
               {onClose && (
                 <Button type="button" variant="ghost" onClick={onClose} disabled={isSending || isSavingDraft}>
                     <XCircle className="mr-2 h-4 w-4" />
-                    Cerrar
+                    Cancelar
                 </Button>
               )}
             </div>
