@@ -233,12 +233,6 @@ export interface EmailCampaignAnalytics {
 
 export type ABTestWinnerCriteria = 'open_rate' | 'click_rate';
 
-export interface ABTestVariant {
-  subject: string;
-  emailTemplateId: string;
-  // Analytics for this variant would be stored separately or as part of a nested object in the main campaign analytics
-}
-
 export interface ABTestConfig {
   isEnabled: boolean;
   variantBSubject?: string;
@@ -708,12 +702,32 @@ export interface EmailMessage {
   bodyHtml?: string;
   bodyText?: string;
   attachments?: { filename: string; contentType: string; size: number; downloadUrl?: string; contentId?: string }[];
-  date: string; // ISO string
-  status: 'draft' | 'sent' | 'received' | 'archived' | 'deleted';
+  date: string; // ISO string for the original date of the email
+  receivedAt?: string; // ISO string for when the email was received by the CRM system (for inbox)
+  status: 'draft' | 'pending' | 'sent' | 'received' | 'archived' | 'deleted';
   isRead?: boolean;
   labels?: string[]; // e.g., "Inbox", "Sent", "Important", user-defined labels
   relatedLeadId?: string;
   relatedContactId?: string;
   relatedTicketId?: string;
-  userId: string; // The CRM user this email is associated with (whose inbox/sent items it belongs to)
+  userId: string; // The CRM user this email is associated with (whose inbox/sent items it belongs to OR who sent it)
 }
+
+// For emails being queued for sending, before they become full EmailMessage after sending
+export interface OutgoingEmail {
+  id?: string; // Optional for creation, will be set by Firestore
+  to: string;
+  cc?: string | null; // Stored as string, parsed by function
+  bcc?: string | null; // Stored as string, parsed by function
+  subject: string;
+  bodyHtml: string;
+  status: 'pending' | 'sent' | 'failed';
+  createdAt: any; // Firestore FieldValue.serverTimestamp() on creation
+  sentAt?: any; // Firestore FieldValue.serverTimestamp() on sent
+  errorMessage?: string;
+  fromName?: string;
+  fromEmail?: string;
+  userId: string; // ID of the CRM user initiating the send
+}
+
+    
