@@ -724,9 +724,17 @@ export interface OutgoingEmail {
   status: 'pending' | 'sent' | 'failed' | 'draft'; // Added 'draft'
   createdAt: any; // Firestore FieldValue.serverTimestamp() on creation
   sentAt?: any; // Firestore FieldValue.serverTimestamp() on sent
+  updatedAt?: any; // For drafts
   errorMessage?: string;
   fromName?: string;
   fromEmail?: string;
   userId: string; // ID of the CRM user initiating the send
   attachments?: { name: string; url: string; size?: number; type?: string }[]; // Added for drafts/pending
+}
+
+// General type for Firestore Timestamp conversion
+export interface FirestoreTimestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate: () => Date;
 }

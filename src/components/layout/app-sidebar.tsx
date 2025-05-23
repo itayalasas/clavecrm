@@ -1,3 +1,4 @@
+
 // src/components/layout/app-sidebar.tsx
 "use client";
 
@@ -16,6 +17,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { APP_NAME, NAV_ITEMS, type NavItem, APP_ICON } from "@/lib/constants";
@@ -31,7 +33,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { state: sidebarState } = useSidebar();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, unreadInboxCount, isLoadingUnreadCount } = useAuth();
   const { toast } = useToast();
   const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({});
 
@@ -52,13 +54,11 @@ export function AppSidebar() {
     setOpenSubmenus(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
-  // Determine if a parent item should be active
   const isParentActive = (item: NavItem) => {
     if (item.parentActiveIf) return item.parentActiveIf(pathname);
     return item.subItems?.some(subItem => subItem.href && pathname.startsWith(subItem.href)) || false;
   };
   
-  // Pre-calculate open states for submenus based on active child items
   React.useEffect(() => {
     const newOpenSubmenus: Record<string, boolean> = {};
     NAV_ITEMS.forEach(item => {
@@ -68,7 +68,7 @@ export function AppSidebar() {
     });
     setOpenSubmenus(prev => ({...prev, ...newOpenSubmenus}));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]); // Only re-run when pathname changes
+  }, [pathname]); 
 
   return (
     <Sidebar
@@ -87,7 +87,11 @@ export function AppSidebar() {
       <Separator />
       <SidebarContent className="flex-grow p-2">
         <SidebarMenu>
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.map((item) => {
+            const isEmailNavItem = item.href === '/email';
+            const showUnreadBadge = isEmailNavItem && !isLoadingUnreadCount && unreadInboxCount && unreadInboxCount > 0;
+
+            return (
             <SidebarMenuItem key={item.label}>
               {item.subItems ? (
                 <>
@@ -100,9 +104,9 @@ export function AppSidebar() {
                     )}
                     tooltip={item.label}
                   >
-                    <div className="flex items-center gap-2 min-w-0"> {/* Added min-w-0 */}
+                    <div className="flex items-center gap-2 min-w-0">
                       <item.icon className="h-5 w-5 flex-shrink-0" />
-                      {sidebarState === "expanded" && <span className="truncate">{item.label}</span>} {/* Added truncate */}
+                      {sidebarState === "expanded" && <span className="truncate">{item.label}</span>}
                     </div>
                     {sidebarState === "expanded" && (
                       <ChevronDown className={cn("h-4 w-4 transition-transform flex-shrink-0", openSubmenus[item.label] ? "rotate-180" : "")} />
@@ -119,7 +123,7 @@ export function AppSidebar() {
                             >
                                 <a>
                                     <subItem.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span className="truncate">{subItem.label}</span> {/* Added truncate */}
+                                    <span className="truncate">{subItem.label}</span>
                                 </a>
                             </SidebarMenuSubButton>
                            </Link>
@@ -140,13 +144,16 @@ export function AppSidebar() {
                   >
                     <a>
                       <item.icon className="h-5 w-5 flex-shrink-0" />
-                      {sidebarState === "expanded" && <span className="truncate">{item.label}</span>} {/* Added truncate */}
+                      {sidebarState === "expanded" && <span className="truncate">{item.label}</span>}
+                      {showUnreadBadge && sidebarState === "expanded" && (
+                        <SidebarMenuBadge className="bg-red-500 text-white">{unreadInboxCount}</SidebarMenuBadge>
+                      )}
                     </a>
                   </SidebarMenuButton>
                 </Link>
               )}
             </SidebarMenuItem>
-          ))}
+          )})}
         </SidebarMenu>
       </SidebarContent>
       <Separator />
@@ -156,9 +163,9 @@ export function AppSidebar() {
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10 flex-shrink-0">
                 <AvatarImage src={currentUser.avatarUrl || `https://avatar.vercel.sh/${currentUser.email}.png`} alt={currentUser.name || "Usuario"} data-ai-hint="user avatar" />
-                <AvatarFallback>{getUserInitials(currentUser.name)}</AvatarFallback>
+                <AvatarFallback className="text-sm font-medium text-foreground">{getUserInitials(currentUser.name)}</AvatarFallback>
               </Avatar>
-              <div className="min-w-0"> {/* Added min-w-0 for truncation */}
+              <div className="min-w-0"> 
                 <p className="text-sm font-medium truncate">{currentUser.name || "Usuario"}</p>
                 <p className="text-xs text-muted-foreground truncate">{currentUser.email}</p>
               </div>
@@ -170,7 +177,7 @@ export function AppSidebar() {
             <div className="flex flex-col items-center gap-2">
                <Avatar className="h-10 w-10">
                   <AvatarImage src={currentUser.avatarUrl || `https://avatar.vercel.sh/${currentUser.email}.png`} alt={currentUser.name || "Usuario"} data-ai-hint="user avatar" />
-                  <AvatarFallback>{getUserInitials(currentUser.name)}</AvatarFallback>
+                  <AvatarFallback className="text-sm font-medium text-foreground">{getUserInitials(currentUser.name)}</AvatarFallback>
                 </Avatar>
               <Button variant="ghost" size="icon" title="Configuración" onClick={() => router.push('/settings')}>
                 <Settings className="h-5 w-5" />
