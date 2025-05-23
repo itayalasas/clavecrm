@@ -313,7 +313,7 @@ export interface ActivityLog {
   id: string;
   category: ActivityLogCategory; // Distinguishes between user-driven activities and system audit events
   type: ActivityLogUserActivityType | ActivityLogSystemAuditActionType; // Union of possible types
-  subject?: string; // For user activities: 'Llamada de seguimiento'. For system audits: 'Lead Creado' or 'Configuración de Email Actualizada'
+  subject?: string | null; // For user activities: 'Llamada de seguimiento'. For system audits: 'Lead Creado' or 'Configuración de Email Actualizada'
   details: string; // Detailed description of the activity or audit event
   timestamp: string; // ISO string - when the event occurred
   loggedByUserId: string; // User who performed the action or for whom the system performed it
@@ -701,7 +701,7 @@ export interface EmailMessage {
   subject: string;
   bodyHtml?: string;
   bodyText?: string;
-  attachments?: { filename: string; contentType: string; size: number; downloadUrl?: string; contentId?: string }[];
+  attachments?: { name: string; url: string; size?: number; type?: string }[];
   date: string; // ISO string for the original date of the email
   receivedAt?: string; // ISO string for when the email was received by the CRM system (for inbox)
   status: 'draft' | 'pending' | 'sent' | 'received' | 'archived' | 'deleted';
@@ -721,13 +721,12 @@ export interface OutgoingEmail {
   bcc?: string | null; // Stored as string, parsed by function
   subject: string;
   bodyHtml: string;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'sent' | 'failed' | 'draft'; // Added 'draft'
   createdAt: any; // Firestore FieldValue.serverTimestamp() on creation
   sentAt?: any; // Firestore FieldValue.serverTimestamp() on sent
   errorMessage?: string;
   fromName?: string;
   fromEmail?: string;
   userId: string; // ID of the CRM user initiating the send
+  attachments?: { name: string; url: string; size?: number; type?: string }[]; // Added for drafts/pending
 }
-
-    

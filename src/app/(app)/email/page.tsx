@@ -11,9 +11,10 @@ import { EmailComposer } from "@/components/email/email-composer";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
-import type { EmailMessage, OutgoingEmail } from "@/lib/types"; // Added OutgoingEmail
+import { db, storage } from '@/lib/firebase'; // Added storage for attachments
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage"; // For attachments
+import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, setDoc, getDocs } from 'firebase/firestore';
+import type { EmailMessage, OutgoingEmail, Lead, Contact } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
 import { isValid, parseISO } from "date-fns";
 import { EmailDetailView } from "@/components/email/email-detail-view";
@@ -21,7 +22,6 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 
 const ITEMS_PER_PAGE = 10;
 
-// Helper to parse various date formats from Firestore to ISO string
 const parseFirestoreDateToISO = (fieldValue: any): string | undefined => {
     if (!fieldValue) return undefined;
     if (fieldValue instanceof Timestamp) {
@@ -42,29 +42,34 @@ function EmailPageContent() {
   const navItem = NAV_ITEMS.find(item => item.href === '/email');
   const PageIcon = navItem?.icon || MailIcon;
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, getAllUsers } = useAuth(); // Added getAllUsers
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<"inbox" | "pending" | "sent" | "drafts" | "trash">("inbox");
-  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false);
-
+  
   const [showComposer, setShowComposer] = useState(false);
   const [composerKey, setComposerKey] = useState(Date.now());
   const [composerInitialTo, setComposerInitialTo] = useState("");
   const [composerInitialSubject, setComposerInitialSubject] = useState("");
   const [composerInitialBody, setComposerInitialBody] = useState("");
-  const [composerOpenedByButton, setComposerOpenedByButton] = useState(false);
+  const [composerInitialAttachments, setComposerInitialAttachments] = useState<{ name: string; url: string; size?: number; type?: string }[]>([]);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
   const [sentEmails, setSentEmails] = useState<EmailMessage[]>([]);
-  const [draftEmails, setDraftEmails] = useState<EmailMessage[]>([]); // Placeholder for now
+  const [draftEmails, setDraftEmails] = useState<EmailMessage[]>([]);
   const [pendingEmails, setPendingEmails] = useState<EmailMessage[]>([]);
   const [inboxEmails, setInboxEmails] = useState<EmailMessage[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]); // For contact/lead selection
+  const [contacts, setContacts] = useState<Contact[]>([]); // For contact/lead selection
+
 
   const [isLoadingSent, setIsLoadingSent] = useState(true);
-  const [isLoadingDrafts, setIsLoadingDrafts] = useState(true); // Placeholder
+  const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
   const [isLoadingPending, setIsLoadingPending] = useState(true);
   const [isLoadingInbox, setIsLoadingInbox] = useState(true);
+  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false); // For send/queue
+  const [isSavingDraft, setIsSavingDraft] = useState(false); // For save draft
 
   const [selectedEmail, setSelectedEmail] = useState<EmailMessage | null>(null);
   const [currentPageInbox, setCurrentPageInbox] = useState(1);
@@ -72,35 +77,76 @@ function EmailPageContent() {
   const [currentPagePending, setCurrentPagePending] = useState(1);
   const [currentPageDrafts, setCurrentPageDrafts] = useState(1);
 
-  const handleOpenComposer = useCallback((initialData: { to?: string, subject?: string, body?: string } = {}, openedByBtn = false) => {
+
+  const handleOpenComposer = useCallback((initialData: { to?: string, subject?: string, body?: string, attachments?: any[], draftId?: string | null } = {}) => {
     setSelectedEmail(null);
     setComposerInitialTo(initialData.to || "");
     setComposerInitialSubject(decodeURIComponent(initialData.subject || ""));
     setComposerInitialBody(decodeURIComponent(initialData.body || ""));
-    setComposerKey(Date.now());
+    setComposerInitialAttachments(initialData.attachments || []);
+    setEditingDraftId(initialData.draftId || null);
+    setComposerKey(Date.now()); // Force re-render of composer
     setShowComposer(true);
-    setComposerOpenedByButton(openedByBtn);
-  }, []);
+    
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    current.delete('to');
+    current.delete('subject');
+    current.delete('body');
+    current.delete('emailId');
+    router.replace(`/email?${current.toString()}`, { scroll: false });
+  }, [searchParams, router]);
 
   const handleCloseComposer = useCallback(() => {
     setShowComposer(false);
-    if (!composerOpenedByButton && (searchParams.get("to") || searchParams.get("subject"))) {
+    setEditingDraftId(null);
+    // Optionally clear query params if composer was opened by them and now closed manually
+    const fromUrlParams = searchParams.get("to") || searchParams.get("subject") || searchParams.get("body");
+    if (fromUrlParams) {
         const current = new URLSearchParams(Array.from(searchParams.entries()));
         current.delete('to');
         current.delete('subject');
         current.delete('body');
         router.replace(`/email?${current.toString()}`, { scroll: false });
     }
-  }, [composerOpenedByButton, searchParams, router]);
+  }, [searchParams, router]);
 
   const handleViewEmail = (email: EmailMessage) => {
-    setSelectedEmail(email);
-    setShowComposer(false); // Close composer if open
+    if (email.status === 'draft' && currentUser && email.userId === currentUser.id) {
+        handleOpenComposer({
+            to: email.to.map(t => t.email).join(','),
+            subject: email.subject,
+            body: email.bodyHtml || email.bodyText,
+            attachments: email.attachments,
+            draftId: email.id,
+        });
+    } else {
+        setSelectedEmail(email);
+        setShowComposer(false); // Close composer if open
+    }
   };
 
   const handleCloseEmailView = () => {
     setSelectedEmail(null);
   };
+
+  // Fetch Leads and Contacts for composer
+  useEffect(() => {
+    const fetchLeadsAndContacts = async () => {
+        try {
+            const [leadsSnapshot, contactsSnapshot] = await Promise.all([
+                getDocs(collection(db, "leads")),
+                getDocs(collection(db, "contacts"))
+            ]);
+            setLeads(leadsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Lead)));
+            setContacts(contactsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as Contact)));
+        } catch (error) {
+            console.error("Error fetching leads/contacts for email composer:", error);
+            toast({title: "Error al cargar datos de destinatarios", variant: "destructive"});
+        }
+    };
+    fetchLeadsAndContacts();
+  }, [toast]);
+
 
   useEffect(() => {
     const toParam = searchParams.get("to");
@@ -108,8 +154,7 @@ function EmailPageContent() {
     const bodyParam = searchParams.get("body");
     const emailIdParam = searchParams.get("emailId");
 
-    if (emailIdParam) {
-      // This logic needs to be more robust for fetching a specific email if not already loaded
+    if (emailIdParam && !showComposer) {
       const findEmail = (id: string, list: EmailMessage[]) => list.find(e => e.id === id);
       let emailToView = findEmail(emailIdParam, sentEmails) ||
                         findEmail(emailIdParam, pendingEmails) ||
@@ -118,24 +163,44 @@ function EmailPageContent() {
 
       if (emailToView) {
         handleViewEmail(emailToView);
-      } else {
-        // Maybe fetch the specific email here if not found in current lists
-        console.warn(`Email with ID ${emailIdParam} not found in loaded lists.`);
-        // toast({ title: "Correo no encontrado", description: `No se pudo cargar el correo con ID: ${emailIdParam}`, variant: "destructive"});
       }
-    } else if (toParam || subjectParam || bodyParam) {
-      handleOpenComposer({ to: toParam || "", subject: subjectParam || "", body: bodyParam || "" }, false);
+    } else if ((toParam || subjectParam || bodyParam) && !editingDraftId && !selectedEmail) {
+      handleOpenComposer({ to: toParam || "", subject: subjectParam || "", body: bodyParam || "" });
     }
-  }, [searchParams, handleOpenComposer, sentEmails, pendingEmails, inboxEmails, draftEmails, toast]);
+  }, [searchParams, handleOpenComposer, sentEmails, pendingEmails, inboxEmails, draftEmails, showComposer, editingDraftId, selectedEmail]);
+
+  const uploadAttachments = async (files: File[], userId: string, emailId: string): Promise<{ name: string; url: string; size: number; type: string }[]> => {
+    const attachmentPromises = files.map(file => {
+        const filePath = `email-attachments/${userId}/${emailId}/${Date.now()}-${file.name}`;
+        const fileRef = storageRef(storage, filePath);
+        const uploadTask = uploadBytesResumable(fileRef, file);
+
+        return new Promise<{ name: string; url: string; size: number; type: string }>((resolve, reject) => {
+            uploadTask.on(
+                "state_changed",
+                null, // We can add progress updates here if needed
+                (error) => reject(error),
+                async () => {
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    resolve({ name: file.name, url: downloadURL, size: file.size, type: file.type });
+                }
+            );
+        });
+    });
+    return Promise.all(attachmentPromises);
+  };
 
 
-  const handleQueueEmailForSending = async (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }) => {
+  const handleQueueEmailForSending = async (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }, attachments: File[]) => {
     if (!currentUser) {
         toast({ title: "Error de autenticación", description: "Debes iniciar sesión para enviar correos.", variant: "destructive"});
         return false;
     }
     setIsSubmittingEmail(true);
     try {
+      const emailDocId = editingDraftId || doc(collection(db, "outgoingEmails")).id;
+      const uploadedAttachments = attachments.length > 0 ? await uploadAttachments(attachments, currentUser.id, emailDocId) : [];
+
       const emailDoc: Omit<OutgoingEmail, 'id' | 'createdAt' | 'sentAt' | 'errorMessage'> = {
         to: data.to,
         cc: data.cc || null,
@@ -144,17 +209,23 @@ function EmailPageContent() {
         bodyHtml: data.body,
         status: "pending",
         userId: currentUser.id,
-        fromName: currentUser.name || "Usuario CRM", // Or use a configured default sender name
-        fromEmail: currentUser.email, // Or use a configured default sender email
+        fromName: currentUser.name || "Usuario CRM",
+        fromEmail: currentUser.email,
+        attachments: uploadedAttachments,
       };
-      await addDoc(collection(db, "outgoingEmails"), {
-        ...emailDoc,
-        createdAt: serverTimestamp(),
-      });
+
+      if (editingDraftId) {
+        await updateDoc(doc(db, "outgoingEmails", editingDraftId), { ...emailDoc, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, "outgoingEmails"), { ...emailDoc, createdAt: serverTimestamp() });
+      }
+      
       toast({
         title: "Correo en Cola para Envío",
         description: `Tu correo para ${data.to} ha sido puesto en cola y se enviará pronto.`,
       });
+      handleCloseComposer();
+      setActiveTab("pending");
       return true;
     } catch (error) {
       console.error("Error al poner correo en cola:", error);
@@ -169,25 +240,83 @@ function EmailPageContent() {
     }
   };
 
-  const handleEmailQueued = () => {
-      handleCloseComposer();
-      setActiveTab("pending");
+  const handleSaveDraft = async (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }, attachments: File[]) => {
+    if (!currentUser) {
+        toast({ title: "Error de autenticación", variant: "destructive"});
+        return false;
+    }
+    setIsSavingDraft(true);
+    try {
+        const draftId = editingDraftId || doc(collection(db, "outgoingEmails")).id;
+        const uploadedAttachments = attachments.length > 0 ? await uploadAttachments(attachments, currentUser.id, draftId) : [];
+
+        const draftDoc: Omit<OutgoingEmail, 'id' | 'sentAt' | 'errorMessage'> = {
+            to: data.to,
+            cc: data.cc || null,
+            bcc: data.bcc || null,
+            subject: data.subject,
+            bodyHtml: data.body,
+            status: "draft",
+            userId: currentUser.id,
+            fromName: currentUser.name || "Usuario CRM",
+            fromEmail: currentUser.email,
+            attachments: uploadedAttachments,
+            createdAt: editingDraftId ? serverTimestamp() : serverTimestamp(), // Update timestamp or set new
+        };
+
+        if (editingDraftId) {
+            await updateDoc(doc(db, "outgoingEmails", editingDraftId), { ...draftDoc, updatedAt: serverTimestamp() });
+        } else {
+            await setDoc(doc(db, "outgoingEmails", draftId), { ...draftDoc, createdAt: serverTimestamp() });
+        }
+
+        toast({ title: "Borrador Guardado", description: "Tu correo ha sido guardado como borrador." });
+        handleCloseComposer();
+        setActiveTab("drafts");
+        return true;
+    } catch (error) {
+        console.error("Error al guardar borrador:", error);
+        toast({ title: "Error al Guardar Borrador", variant: "destructive" });
+        return false;
+    } finally {
+        setIsSavingDraft(false);
+    }
   };
   
-  // Helper to map Firestore doc data to EmailMessage for UI display
+  const handleDeleteEmail = async (emailId: string, currentStatus: EmailMessage['status']) => {
+    if (!currentUser) return;
+    if (!window.confirm("¿Estás seguro de que quieres mover este correo a la papelera?")) return;
+
+    try {
+        await updateDoc(doc(db, "outgoingEmails", emailId), {
+            status: "deleted",
+            updatedAt: serverTimestamp()
+        });
+        toast({ title: "Correo Movido a Papelera" });
+        // Optimistically remove from current list or refetch
+        if (selectedEmail?.id === emailId) setSelectedEmail(null);
+        // Add logic to refetch the current tab's list or filter out the deleted email
+    } catch (error) {
+        console.error("Error moviendo correo a papelera:", error);
+        toast({ title: "Error al Eliminar Correo", variant: "destructive" });
+    }
+  };
+
+
   const mapFirestoreDocToEmailMessage = useCallback((docSnap: any, currentUserId: string | null): EmailMessage => {
     const data = docSnap.data();
     
     let mailDate = parseFirestoreDateToISO(data.sentAt) || parseFirestoreDateToISO(data.receivedAt) || parseFirestoreDateToISO(data.createdAt) || new Date(0).toISOString();
 
-    // Parse 'from' and 'to' which might be simple strings from IMAP or objects
     let fromField = { email: 'desconocido@sistema.com', name: 'Sistema' };
     if (typeof data.from === 'string') {
         fromField = { email: data.from };
     } else if (data.from && typeof data.from.email === 'string') {
         fromField = data.from;
     } else if (data.fromEmail) { // For outgoing emails
-        fromField = { email: data.fromEmail, name: data.fromName };
+        fromField = { email: data.fromEmail, name: data.fromName || (currentUser?.name || "Usuario CRM") };
+    } else if (currentUser) {
+        fromField = { email: currentUser.email, name: currentUser.name || "Usuario CRM" };
     }
 
 
@@ -209,13 +338,14 @@ function EmailPageContent() {
         receivedAt: parseFirestoreDateToISO(data.receivedAt),
         bodyHtml: typeof data.html === 'string' ? data.html : (typeof data.bodyHtml === 'string' ? data.bodyHtml : ""),
         bodyText: typeof data.text === 'string' ? data.text : (typeof data.bodyHtml === 'string' ? data.bodyHtml.replace(/<[^>]+>/g, '').substring(0, 150) + "..." : ""),
-        status: data.status as EmailMessage['status'] || 'received', // Default to received for incoming
+        status: data.status as EmailMessage['status'] || 'received', 
         userId: typeof data.userId === 'string' ? data.userId : (currentUserId || "unknown_user"),
         attachments: Array.isArray(data.attachments) ? data.attachments : [],
         isRead: typeof data.isRead === 'boolean' ? data.isRead : (data.status === 'sent' || data.status === 'pending'), 
         labels: Array.isArray(data.labels) ? data.labels : [],
     };
-  }, []);
+  }, [currentUser]);
+
 
   // Fetch Inbox Emails from 'incomingEmails'
   useEffect(() => {
@@ -227,14 +357,10 @@ function EmailPageContent() {
     setIsLoadingInbox(true);
     const q = query(
         collection(db, "incomingEmails"),
-        // TODO: Add filtering for userId if incomingEmails are associated with specific CRM users
         orderBy("receivedAt", "desc") 
     );
-    console.log("Setting up inbox listener...");
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        console.log("Raw fetched data from Firestore (inbox emails):", snapshot.docs.map(d => d.data()));
         const fetched = snapshot.docs.map(doc => mapFirestoreDocToEmailMessage(doc, currentUser.id));
-        console.log("Mapped inbox emails for UI:", fetched);
         setInboxEmails(fetched);
         setIsLoadingInbox(false);
     }, (error) => {
@@ -243,10 +369,7 @@ function EmailPageContent() {
         setIsLoadingInbox(false);
         setInboxEmails([]);
     });
-    return () => {
-        console.log("Cleaning up inbox listener");
-        unsubscribe();
-    };
+    return () => unsubscribe();
   }, [currentUser, activeTab, toast, mapFirestoreDocToEmailMessage]);
 
 
@@ -265,30 +388,26 @@ function EmailPageContent() {
     const setupListener = (
       status: EmailMessage['status'], 
       setData: React.Dispatch<React.SetStateAction<EmailMessage[]>>,
-      setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-      collectionName: string = "outgoingEmails" // Default to outgoingEmails
+      setLoading: React.Dispatch<React.SetStateAction<boolean>>
     ) => {
-        if (activeTab !== status && (collectionName === "outgoingEmails" && activeTab !== 'pending' && activeTab !== 'sent' && activeTab !== 'drafts') ) {
+        if (activeTab !== status) {
              setLoading(false);
              setData([]);
-             return () => {}; // Return an empty unsubscribe function
+             return () => {}; 
         }
         setLoading(true);
         const q = query(
-            collection(db, collectionName),
+            collection(db, "outgoingEmails"),
             where("userId", "==", currentUser.id),
             where("status", "==", status),
             orderBy("createdAt", "desc")
         );
-        console.log(`Setting up listener for ${status} emails from ${collectionName}...`);
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            console.log(`Raw fetched data from Firestore (${status} emails from ${collectionName}):`, snapshot.docs.map(d => d.data()));
             const fetched = snapshot.docs.map(doc => mapFirestoreDocToEmailMessage(doc, currentUser.id));
-            console.log(`Mapped ${status} emails for UI (from ${collectionName}):`, fetched);
             setData(fetched);
             setLoading(false);
         }, (error) => {
-            console.error(`Error fetching ${status} emails from ${collectionName}:`, error);
+            console.error(`Error fetching ${status} emails:`, error);
             toast({ title: `Error al cargar ${status}`, variant: "destructive", description: error.message });
             setLoading(false);
             setData([]);
@@ -298,18 +417,13 @@ function EmailPageContent() {
     
     let unsubSent = () => {};
     let unsubPending = () => {};
-    let unsubDrafts = () => {}; // Placeholder for drafts
+    let unsubDrafts = () => {};
 
     if (activeTab === 'sent') unsubSent = setupListener('sent', setSentEmails, setIsLoadingSent);
     else if (activeTab === 'pending') unsubPending = setupListener('pending', setPendingEmails, setIsLoadingPending);
-    else if (activeTab === 'drafts') {
-        // TODO: Implement draft fetching logic when save draft is implemented
-        setIsLoadingDrafts(false);
-        setDraftEmails([]); // Using mock for now
-    }
-
+    else if (activeTab === 'drafts') unsubDrafts = setupListener('draft', setDraftEmails, setIsLoadingDrafts);
+    
     return () => {
-        console.log("Cleaning up outgoing/draft email listeners for tab:", activeTab);
         unsubSent();
         unsubPending();
         unsubDrafts();
@@ -341,13 +455,13 @@ function EmailPageContent() {
           <div key={email.id} className="hover:shadow-md cursor-pointer border rounded-md" onClick={() => handleViewEmail(email)}>
             <CardContent className="p-3">
               <div className="flex justify-between items-start">
-                <div className="min-w-0"> {/* Added min-w-0 for truncation */}
+                <div className="min-w-0">
                   <p className={`font-medium truncate ${!email.isRead && statusType === 'inbox' ? 'text-primary' : ''}`}>{email.subject}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {statusType === 'inbox' ? `De: ${email.from?.name || email.from?.email}` : `Para: ${email.to?.map(t => t.name || t.email).join(', ')}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-2"> {/* Added shrink-0 and ml-2 */}
+                <div className="flex items-center gap-2 shrink-0 ml-2">
                     {statusType === 'pending' && <Clock className="h-3 w-3 text-amber-500 animate-pulse" title="En cola para envío"/>}
                     <p className="text-xs text-muted-foreground whitespace-nowrap">{isValid(parseISO(email.date)) ? new Date(email.date).toLocaleDateString() : "Fecha Inv."}</p>
                 </div>
@@ -388,15 +502,14 @@ function EmailPageContent() {
                 initialTo={composerInitialTo}
                 initialSubject={composerInitialSubject}
                 initialBody={composerInitialBody}
-                onSend={async (data) => {
-                    const success = await handleQueueEmailForSending(data);
-                    if (success) {
-                        handleEmailQueued();
-                    }
-                    return success;
-                }}
+                initialAttachments={composerInitialAttachments}
+                onQueueEmail={handleQueueEmailForSending}
+                onSaveDraft={handleSaveDraft}
                 isSending={isSubmittingEmail}
+                isSavingDraft={isSavingDraft}
                 onClose={handleCloseComposer}
+                leads={leads}
+                contacts={contacts}
             />
         </div>
     );
@@ -412,7 +525,7 @@ function EmailPageContent() {
             to: emailToReply.from.email,
             subject: `Re: ${emailToReply.subject}`,
             body: `\n\n\n----- Mensaje Original -----\nDe: ${emailToReply.from.name || emailToReply.from.email}\nEnviado: ${new Date(emailToReply.date).toLocaleString()}\nPara: ${emailToReply.to.map(t => t.email).join(', ')}\nAsunto: ${emailToReply.subject}\n\n${emailToReply.bodyText || (emailToReply.bodyHtml ? 'Ver HTML' : '')}`
-          }, true);
+          });
         }}
         onReplyAll={(emailToReply) => {
           const allRecipients = [emailToReply.from, ...emailToReply.to, ...(emailToReply.cc || [])]
@@ -424,14 +537,15 @@ function EmailPageContent() {
             to: uniqueRecipients.join(','),
             subject: `Re: ${emailToReply.subject}`,
             body: `\n\n\n----- Mensaje Original -----\nDe: ${emailToReply.from.name || emailToReply.from.email}\nEnviado: ${new Date(emailToReply.date).toLocaleString()}\nPara: ${emailToReply.to.map(t => t.email).join(', ')}\nAsunto: ${emailToReply.subject}\n\n${emailToReply.bodyText || (emailToReply.bodyHtml ? 'Ver HTML' : '')}`
-          }, true);
+          });
         }}
         onForward={(emailToForward) => {
            handleOpenComposer({
             subject: `Fwd: ${emailToForward.subject}`,
             body: `\n\n\n----- Mensaje Reenviado -----\nDe: ${emailToForward.from.name || emailToForward.from.email}\nEnviado: ${new Date(emailToForward.date).toLocaleString()}\nPara: ${emailToForward.to.map(t => t.email).join(', ')}\nAsunto: ${emailToForward.subject}\n\n${emailToForward.bodyHtml || emailToForward.bodyText}`
-          }, true);
+          });
         }}
+        onDelete={() => handleDeleteEmail(selectedEmail.id, selectedEmail.status)}
       />
     );
   }
@@ -451,19 +565,19 @@ function EmailPageContent() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={(value) => { setActiveTab(value as any); setSelectedEmail(null);}} className="flex-grow flex flex-col">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 shrink-0">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-4 shrink-0">
           <TabsTrigger value="inbox"><Inbox className="mr-2 h-4 w-4" />Bandeja de Entrada</TabsTrigger>
           <TabsTrigger value="pending"><Clock className="mr-2 h-4 w-4" />Enviando</TabsTrigger>
           <TabsTrigger value="sent"><Send className="mr-2 h-4 w-4" />Enviados</TabsTrigger>
           <TabsTrigger value="drafts"><Archive className="mr-2 h-4 w-4" />Borradores</TabsTrigger>
-          <TabsTrigger value="trash" disabled><Trash2 className="mr-2 h-4 w-4" />Papelera</TabsTrigger>
+          {/* <TabsTrigger value="trash" disabled><Trash2 className="mr-2 h-4 w-4" />Papelera</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="inbox" className="flex-grow mt-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Bandeja de Entrada</CardTitle>
-                <Button onClick={() => handleOpenComposer({}, true)} size="sm">
+                <Button onClick={() => handleOpenComposer()} size="sm">
                     <PlusCircle className="mr-2 h-4 w-4"/> Redactar Nuevo Correo
                 </Button>
             </CardHeader>
@@ -496,7 +610,7 @@ function EmailPageContent() {
          <TabsContent value="trash" className="flex-grow mt-4">
           <Card>
             <CardHeader><CardTitle>Papelera</CardTitle></CardHeader>
-            <CardContent><p className="text-muted-foreground text-center py-8">La papelera está vacía.</p></CardContent>
+            <CardContent><p className="text-muted-foreground text-center py-8">La papelera está vacía. (Funcionalidad Pendiente)</p></CardContent>
           </Card>
         </TabsContent>
       </Tabs>
@@ -510,29 +624,29 @@ function EmailPageContent() {
         </CardHeader>
         <CardContent className="text-sm text-amber-600 space-y-2">
           <p>
-            <strong className="text-amber-800">Composición y Puesta en Cola para Envío (Backend `sendSingleEmail`):</strong> <span className="font-semibold text-green-600">Implementado.</span>
-          </p>
-          <p>
-            <strong className="text-amber-800">Visualización de Correos en Cola ("Enviando"):</strong> <span className="font-semibold text-green-600">Implementado.</span>
+            <strong className="text-amber-800">Redacción y Puesta en Cola para Envío (Backend `sendSingleEmail`):</strong> <span className="font-semibold text-green-600">Implementado.</span>
           </p>
            <p>
-            <strong className="text-amber-800">Listado de Correos Enviados (desde `outgoingEmails`):</strong> <span className="font-semibold text-green-600">Implementado.</span>
+            <strong className="text-amber-800">Visualización de Correos Pendientes y Enviados (desde `outgoingEmails`):</strong> <span className="font-semibold text-green-600">Implementado.</span>
           </p>
            <p>
-            <strong className="text-amber-800">Visualización Detallada de Correos y Paginación:</strong> <span className="font-semibold text-green-600">Implementado.</span>
+            <strong className="text-amber-800">Guardar/Cargar Borradores (sin adjuntos):</strong> <span className="font-semibold text-green-600">Implementado.</span>
+          </p>
+           <p>
+            <strong className="text-amber-800">Visualización Detallada y Paginación:</strong> <span className="font-semibold text-green-600">Implementado.</span>
           </p>
           <p>
             <strong className="text-amber-800">Acciones (Responder/Reenviar - Abre compositor):</strong> <span className="font-semibold text-green-600">Implementado.</span>
           </p>
+           <p>
+            <strong className="text-amber-800">Adjuntos en Correos (Envío, Recepción y Visualización):</strong> <span className="font-semibold text-yellow-600">Parcial (UI implementada, subida real en proceso).</span>
+          </p>
           <p>
-            <strong className="text-amber-800">Bandeja de Entrada (Recepción y Sincronización con `incomingEmails`):</strong> <span className="font-semibold text-green-600">Implementado (Lectura de `incomingEmails`).</span>
-            <span className="block text-xs text-amber-700/80">Nota: La función `fetchIncomingEmailsImap` es responsable de poblar `incomingEmails`. La asociación de correos a usuarios específicos del CRM si la cuenta IMAP es compartida, y el marcado como leído/no leído, requieren lógica adicional.</span>
+            <strong className="text-amber-800">Bandeja de Entrada (Recepción y Sincronización con `incomingEmails`):</strong> <span className="font-semibold text-green-600">Implementado (Lectura de `incomingEmails` vía Cloud Function).</span>
+            <span className="block text-xs text-amber-700/80">Nota: Mejoras pendientes: asociación de correos a usuarios específicos, marcar como leído/no leído, manejo avanzado de adjuntos.</span>
           </p>
            <p>
-            <strong className="text-amber-800">Gestión de Borradores (Guardado y Carga):</strong> <span className="font-semibold text-orange-600">Planeado.</span>
-          </p>
-          <p>
-            <strong className="text-amber-800">Adjuntos en Correos (Envío, Recepción y Visualización):</strong> <span className="font-semibold text-orange-600">Planeado.</span>
+            <strong className="text-amber-800">Papelera (Eliminación Lógica):</strong> <span className="font-semibold text-yellow-600">Parcial (Placeholder UI y lógica básica de marcar como 'deleted').</span>
           </p>
         </CardContent>
       </Card>
@@ -547,5 +661,3 @@ export default function EmailPage() {
     </Suspense>
   );
 }
-
-    
