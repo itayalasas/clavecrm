@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,13 +10,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { UserEmailAccountSettings, SMTPSecurity, User } from "@/lib/types"; // Added User
+import type { UserEmailAccountSettings, SMTPSecurity, User } from "@/lib/types";
 import { Mail, Loader2, Eye, EyeOff, AlertTriangle, UserCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore"; // Removed serverTimestamp as it's not used here
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/auth-context"; 
+import { useAuth } from "@/contexts/auth-context";
 
 const emailAccountSettingsSchema = z.object({
   imapHost: z.string().min(1, "Host IMAP es obligatorio."),
@@ -32,7 +33,7 @@ type EmailAccountSettingsFormValues = z.infer<typeof emailAccountSettingsSchema>
 
 export default function MyEmailAccountPage() {
   const { toast } = useToast();
-  const { currentUser } = useAuth(); 
+  const { currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -59,7 +60,6 @@ export default function MyEmailAccountPage() {
       }
       setIsLoading(true);
       try {
-        // Corrected document path: collection/documentId/subCollection/documentId
         const settingsDocRef = doc(db, "userSettings", currentUser.id, "emailAccountConfiguration", "config");
         const docSnap = await getDoc(settingsDocRef);
         if (docSnap.exists()) {
@@ -77,10 +77,10 @@ export default function MyEmailAccountPage() {
         setIsLoading(false);
       }
     };
-    if (currentUser) { // Ensure currentUser is available before fetching
+    if (currentUser) {
         fetchSettings();
     } else {
-        setIsLoading(false); // Not logged in, nothing to load
+        setIsLoading(false);
     }
   }, [currentUser, form, toast]);
 
@@ -91,9 +91,15 @@ export default function MyEmailAccountPage() {
     }
     setIsSaving(true);
     try {
-      // Corrected document path
+      // Path to the specific config document within the subcollection
       const settingsDocRef = doc(db, "userSettings", currentUser.id, "emailAccountConfiguration", "config");
       await setDoc(settingsDocRef, data, { merge: true });
+
+      // Ensure the parent userSettings/{userId} document exists with at least one field
+      // This makes the document discoverable by collection queries on "userSettings"
+      const parentUserSettingDocRef = doc(db, "userSettings", currentUser.id);
+      await setDoc(parentUserSettingDocRef, { lastEmailConfiguredAt: serverTimestamp() }, { merge: true });
+
       toast({
         title: "Configuración Guardada",
         description: "Tu configuración de cuenta de correo personal ha sido guardada.",
@@ -109,14 +115,14 @@ export default function MyEmailAccountPage() {
     }
   };
 
-  if (isLoading && !currentUser) { // Initial check if auth is still loading
+  if (isLoading && !currentUser) {
     return (
       <div className="flex justify-center items-center min-h-[300px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
-  if (!currentUser) { // If auth loaded and no user
+  if (!currentUser) {
      return (
         <Card className="m-auto mt-10 max-w-md">
             <CardHeader>
@@ -142,7 +148,7 @@ export default function MyEmailAccountPage() {
           </CardDescription>
         </CardHeader>
       </Card>
-    
+
       <Card>
         <CardHeader>
             <CardTitle>Detalles de Conexión</CardTitle>
