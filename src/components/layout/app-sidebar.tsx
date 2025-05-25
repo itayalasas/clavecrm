@@ -1,9 +1,9 @@
-
 // src/components/layout/app-sidebar.tsx
 "use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image"; // Import Image from next/image
 import { usePathname, useRouter } from "next/navigation";
 import {
   Sidebar,
@@ -20,11 +20,11 @@ import {
   SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { APP_NAME, NAV_ITEMS, type NavItem, APP_ICON } from "@/lib/constants";
+import { NAV_ITEMS, type NavItem, APP_NAME } from "@/lib/constants"; // Removed APP_ICON
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Settings, ChevronDown, Briefcase } from "lucide-react";
+import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { getUserInitials } from "@/lib/utils";
@@ -37,7 +37,8 @@ export function AppSidebar() {
   const { toast } = useToast();
   const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({});
 
-  const IconComponent = APP_ICON; 
+  // Using the actual logo image
+  const logoSrc = "/clave-crm-logo.png"; 
 
   const handleLogout = async () => {
     try {
@@ -78,9 +79,9 @@ export function AppSidebar() {
     >
       <SidebarHeader className="p-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <IconComponent className="h-8 w-8 text-primary flex-shrink-0" />
+          <Image src={logoSrc} alt={`${APP_NAME} Logo`} width={32} height={32} className="h-8 w-8 flex-shrink-0" data-ai-hint="logo key"/>
           {sidebarState === "expanded" && (
-            <h1 className="text-xl font-semibold truncate">{APP_NAME}</h1>
+            <h1 className="text-xl font-semibold truncate" style={{ color: 'hsl(var(--primary))' }}>{APP_NAME}</h1>
           )}
         </Link>
       </SidebarHeader>
