@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -13,10 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { UserEmailAccountSettings, SMTPSecurity, User } from "@/lib/types"; // Added User
 import { Mail, Loader2, Eye, EyeOff, AlertTriangle, UserCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore"; // Removed serverTimestamp as it's not used here
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/auth-context"; // Assuming useAuth provides currentUser
+import { useAuth } from "@/contexts/auth-context"; 
 
 const emailAccountSettingsSchema = z.object({
   imapHost: z.string().min(1, "Host IMAP es obligatorio."),
@@ -33,7 +32,7 @@ type EmailAccountSettingsFormValues = z.infer<typeof emailAccountSettingsSchema>
 
 export default function MyEmailAccountPage() {
   const { toast } = useToast();
-  const { currentUser } = useAuth(); // Get current user
+  const { currentUser } = useAuth(); 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -60,12 +59,12 @@ export default function MyEmailAccountPage() {
       }
       setIsLoading(true);
       try {
-        const settingsDocRef = doc(db, "userSettings", currentUser.id, "emailAccountConfiguration");
+        // Corrected document path: collection/documentId/subCollection/documentId
+        const settingsDocRef = doc(db, "userSettings", currentUser.id, "emailAccountConfiguration", "config");
         const docSnap = await getDoc(settingsDocRef);
         if (docSnap.exists()) {
           form.reset(docSnap.data() as EmailAccountSettingsFormValues);
         } else if (currentUser.email) {
-            // Pre-fill username if no settings exist
             form.setValue("username", currentUser.email);
         }
       } catch (error) {
@@ -78,7 +77,11 @@ export default function MyEmailAccountPage() {
         setIsLoading(false);
       }
     };
-    fetchSettings();
+    if (currentUser) { // Ensure currentUser is available before fetching
+        fetchSettings();
+    } else {
+        setIsLoading(false); // Not logged in, nothing to load
+    }
   }, [currentUser, form, toast]);
 
   const onSubmitHandler: SubmitHandler<EmailAccountSettingsFormValues> = async (data) => {
@@ -88,9 +91,8 @@ export default function MyEmailAccountPage() {
     }
     setIsSaving(true);
     try {
-      const settingsDocRef = doc(db, "userSettings", currentUser.id, "emailAccountConfiguration");
-      // IMPORTANT: In a real app, password should be encrypted before saving
-      // or handled by a secure backend service. This is a placeholder for UI.
+      // Corrected document path
+      const settingsDocRef = doc(db, "userSettings", currentUser.id, "emailAccountConfiguration", "config");
       await setDoc(settingsDocRef, data, { merge: true });
       toast({
         title: "Configuración Guardada",
@@ -107,14 +109,14 @@ export default function MyEmailAccountPage() {
     }
   };
 
-  if (isLoading && !currentUser) {
+  if (isLoading && !currentUser) { // Initial check if auth is still loading
     return (
       <div className="flex justify-center items-center min-h-[300px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
-  if (!currentUser) {
+  if (!currentUser) { // If auth loaded and no user
      return (
         <Card className="m-auto mt-10 max-w-md">
             <CardHeader>
