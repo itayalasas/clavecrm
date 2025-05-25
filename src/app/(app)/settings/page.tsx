@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NAV_ITEMS } from "@/lib/constants";
-import type { EmailSettings, SMTPSecurity } from "@/lib/types";
-import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle, Smartphone } from "lucide-react"; // Added Smartphone
+import type { EmailSettings, SMTPSecurity, WhatsAppApiSettings } from "@/lib/types";
+import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle, Smartphone, UserCircle as UserCircleIcon } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, type Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -33,10 +33,9 @@ const emailSettingsSchema = z.object({
 
 type EmailSettingsFormValues = z.infer<typeof emailSettingsSchema>;
 
-// Placeholder for WhatsApp settings - actual fields depend on provider/API
 const whatsAppApiSettingsSchema = z.object({
   phoneNumberId: z.string().optional(),
-  wabaId: z.string().optional(), // WhatsApp Business Account ID
+  wabaId: z.string().optional(),
   accessToken: z.string().optional(),
   webhookVerifyToken: z.string().optional(),
 });
@@ -138,7 +137,7 @@ export default function SettingsPage() {
         title: "Configuración de Correo Guardada",
         description: "La configuración de correo electrónico ha sido actualizada.",
       });
-      await logSystemEvent("Actualización Config. Email", "EmailSettings", "emailConfiguration", "Se actualizaron los ajustes de correo electrónico.");
+      await logSystemEvent("Actualización Config. Email Sistema", "EmailSettings", "emailConfiguration", "Se actualizaron los ajustes de correo del sistema.");
     } catch (error) {
       console.error("Error al guardar configuración de correo:", error);
       toast({
@@ -155,7 +154,6 @@ export default function SettingsPage() {
     setIsSavingWhatsApp(true);
     try {
       const settingsDocRef = doc(db, "settings", "whatsAppApiConfiguration");
-      // Filter out empty strings, save them as null or don't save them if not provided
       const dataToSave = Object.fromEntries(
         Object.entries(data).map(([key, value]) => [key, value === "" ? null : value])
       );
@@ -197,10 +195,10 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Mail className="h-5 w-5 text-primary" />
-              Configuración de Correo Electrónico
+              Configuración de Correo Electrónico del Sistema
             </CardTitle>
             <CardDescription>
-              Configura los ajustes de tu servidor de correo para el envío de campañas, notificaciones y correos transaccionales.
+              Configura los ajustes de tu servidor SMTP principal para el envío de campañas de email masivas y notificaciones transaccionales del sistema.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -323,7 +321,7 @@ export default function SettingsPage() {
                         <FormItem>
                           <FormLabel>Límite de Envío (emails/hora)</FormLabel>
                           <FormControl><Input type="number" placeholder="100" {...field} /></FormControl>
-                          <FormDescriptionUI>Opcional. Límite de correos que se pueden enviar por hora.</FormDescriptionUI>
+                          <FormDescriptionUI>Opcional. Límite de correos que se pueden enviar por hora desde el sistema.</FormDescriptionUI>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -331,14 +329,13 @@ export default function SettingsPage() {
                   <div className="p-3 border border-amber-500 bg-amber-50 rounded-md text-amber-700 text-sm flex items-start gap-2">
                     <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
                     <div>
-                      <span className="font-semibold">Nota de Seguridad Importante:</span> Las credenciales SMTP (usuario/contraseña) se almacenarán en Firestore. Asegúrate de que tus reglas de seguridad de Firestore protejan adecuadamente el documento `settings/emailConfiguration` para restringir el acceso no autorizado a estas credenciales.
-                      Idealmente, en producción avanzada, estas credenciales se manejarían a través de secretos en el entorno de Cloud Functions, no directamente en Firestore si el acceso al documento no puede ser estrictamente limitado.
+                      <span className="font-semibold">Nota de Seguridad Importante:</span> Las credenciales SMTP (usuario/contraseña) se almacenarán en Firestore. Asegúrate de que tus reglas de seguridad de Firestore protejan adecuadamente el documento `settings/emailConfiguration`.
                     </div>
                   </div>
                   <CardFooter className="p-0 pt-4">
                     <Button type="submit" disabled={isSavingEmail}>
                       {isSavingEmail && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Guardar Configuración de Correo
+                      Guardar Configuración de Correo del Sistema
                     </Button>
                   </CardFooter>
                 </form>
@@ -350,7 +347,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <Smartphone className="h-5 w-5 text-primary" /> {/* Changed icon */}
+              <Smartphone className="h-5 w-5 text-primary" />
               Integración WhatsApp Business API
             </CardTitle>
             <CardDescription>
@@ -433,6 +430,33 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+      
+      <Card className="mt-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <UserCircleIcon className="h-5 w-5 text-primary" /> {/* Used UserCircleIcon to avoid conflict */}
+            Mi Cuenta de Correo Personal (Para Envíos Individuales)
+          </CardTitle>
+          <CardDescription>
+            Conecta tu propia cuenta de correo (ej. Gmail, Outlook) para enviar y recibir correos individuales directamente desde el módulo de "Correo Electrónico" del CRM.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Esta configuración te permitirá usar tu dirección de correo personal en lugar del correo del sistema para tus comunicaciones uno a uno.
+            La recepción de correos en una bandeja de entrada personal integrada es una funcionalidad avanzada.
+          </p>
+          <Button asChild>
+            <Link href="/settings/my-email-account">
+              Configurar Mi Cuenta de Correo
+            </Link>
+          </Button>
+           <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            Importante: La gestión segura de credenciales para cuentas personales es compleja y debe implementarse con cuidado en el backend.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card className="mt-2">
         <CardHeader>
@@ -445,7 +469,6 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-            {/* ... (contenido existente de Seguridad y Auditoría) ... */}
             <div>
               <h4 className="font-semibold">Autenticación Multifactor (MFA)</h4>
               <p className="text-sm text-muted-foreground">
@@ -502,7 +525,6 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
-
 
        <Card className="mt-2">
           <CardHeader>
