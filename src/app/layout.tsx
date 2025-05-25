@@ -19,12 +19,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'ClaveCRM',
   description: 'CRM ultraligero para pequeñas empresas, ahora con tu marca ClaveCRM.',
+  icons: {
+    icon: '/clave-crm-logo.png', // Ruta al logo en la carpeta public
+    // apple: '/clave-crm-logo.png', // Opcional: para Apple touch icon
+    // shortcut: '/clave-crm-logo.png' // Opcional: para shortcut icon
+  }
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode; 
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
