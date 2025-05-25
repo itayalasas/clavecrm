@@ -434,7 +434,7 @@ export default function SettingsPage() {
       <Card className="mt-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
-            <UserCircleIcon className="h-5 w-5 text-primary" /> {/* Used UserCircleIcon to avoid conflict */}
+            <UserCircleIcon className="h-5 w-5 text-primary" />
             Mi Cuenta de Correo Personal (Para Envíos Individuales)
           </CardTitle>
           <CardDescription>
@@ -444,7 +444,6 @@ export default function SettingsPage() {
         <CardContent>
           <p className="text-sm text-muted-foreground mb-3">
             Esta configuración te permitirá usar tu dirección de correo personal en lugar del correo del sistema para tus comunicaciones uno a uno.
-            La recepción de correos en una bandeja de entrada personal integrada es una funcionalidad avanzada.
           </p>
           <Button asChild>
             <Link href="/settings/my-email-account">

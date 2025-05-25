@@ -1,6 +1,6 @@
 
-import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType, KnowledgeBaseArticle, EmailMessage } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter, KeyRound, Mail as MailIcon } from 'lucide-react';
+import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType, KnowledgeBaseArticle, EmailMessage, UserEmailAccountSettings } from './types';
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter, KeyRound, Mail as MailIcon, UserCircle as UserCircleIconLucide } from 'lucide-react'; // Renamed UserCircle
 
 export const APP_NAME = "CRM Rápido";
 export const APP_ICON = Briefcase;
@@ -68,6 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
     subItems: [
       { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
       { href: '/settings', label: 'Configuración General', icon: Settings },
+      { href: '/settings/my-email-account', label: 'Mi Cuenta de Correo', icon: UserCircleIconLucide },
       { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle },
       { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck },
       { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon },
@@ -78,9 +79,9 @@ export const NAV_ITEMS: NavItem[] = [
     ],
     parentActiveIf: (pathname) => [
         '/user-management',
-        '/settings',
+        '/settings', // This will match /settings and /settings/*
         '/audit-log',
-    ].some(p => pathname.startsWith(p)) || pathname.startsWith('/settings/'), // Simpler check for all /settings/*
+    ].some(p => pathname.startsWith(p)),
   },
 ];
 
