@@ -10,27 +10,25 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, getDocs, serverTimestamp, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc, setDoc } from 'firebase/firestore';
 import type { EmailMessage, OutgoingEmail, Lead, Contact, FirestoreTimestamp, User, FolderType } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
-import { isValid, parseISO, format, formatDistanceToNowStrict } from "date-fns";
+import { isValid, parseISO, format, formatDistanceToNowStrict, startOfDay, endOfDay } from "date-fns";
 import { es } from 'date-fns/locale';
 import { EmailComposer } from "@/components/email/email-composer";
 import { EmailDetailView } from "@/components/email/email-detail-view";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { NAV_ITEMS } from "@/lib/constants";
-import { Mail as MailIcon, Send, Inbox, Archive as ArchiveIcon, Trash2, Info, PlusCircle, Loader2, Clock, Edit, Paperclip, UserPlus, XCircle, SeparatorVertical, Search, MessageSquare, AlertTriangle } from "lucide-react";
+import { Mail as MailIcon, Send, Inbox, Archive as ArchiveIcon, Trash2, Info, PlusCircle, Loader2, Clock, Edit, Paperclip, UserPlus, XCircle, SeparatorVertical, Search, MessageSquare, Edit2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getUserInitials } from "@/lib/utils";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-
 const ITEMS_PER_PAGE = 10;
 
-// Helper function to parse Firestore date/timestamp fields
 const parseFirestoreDateToISO = (fieldValue: any, fieldNameForLog?: string, docIdForLog?: string): string | undefined => {
     if (!fieldValue) return undefined;
 
@@ -43,7 +41,6 @@ const parseFirestoreDateToISO = (fieldValue: any, fieldNameForLog?: string, docI
       }
     }
     if (typeof fieldValue === 'object' && typeof fieldValue.seconds === 'number' && typeof fieldValue.nanoseconds === 'number') {
-      // This handles Firestore Timestamp-like objects that might not be direct instances
       try {
         const dateFromObject = new Date(fieldValue.seconds * 1000 + fieldValue.nanoseconds / 1000000);
         if (isValid(dateFromObject)) return dateFromObject.toISOString();
@@ -60,7 +57,6 @@ const parseFirestoreDateToISO = (fieldValue: any, fieldNameForLog?: string, docI
       const parsedDate = parseISO(fieldValue);
       if (isValid(parsedDate)) return parsedDate.toISOString();
       
-      // Fallback for non-ISO strings, but with a strong warning
       try {
           const attemptParse = new Date(fieldValue);
           if (isValid(attemptParse)) {
@@ -80,7 +76,7 @@ const parseFirestoreDateToISO = (fieldValue: any, fieldNameForLog?: string, docI
 
 
 const mapFirestoreDocToEmailMessage = (
-  docSnap: any, 
+  docSnap: any,
   currentUserIdParam: string | null,
   defaultStatus: EmailMessage['status'],
   sourceCollection: 'incomingEmails' | 'outgoingEmails'
@@ -91,12 +87,9 @@ const mapFirestoreDocToEmailMessage = (
     return null;
   }
 
-  console.log(`Mapeando documento con ID: ${docSnap.id}, Colección: ${sourceCollection}`);
-  
   let fromField: { name?: string; email: string } = { email: 'desconocido@sistema.com', name: 'Remitente Desconocido' };
   let toRecipients: { name?: string; email: string }[] = [{ email: 'destinatario-desconocido@sistema.com', name: 'Destinatario Desconocido' }];
 
-  // From field
   if (data.from_parsed && Array.isArray(data.from_parsed) && data.from_parsed.length > 0 && data.from_parsed[0].address) {
     fromField = { email: data.from_parsed[0].address, name: data.from_parsed[0].name || undefined };
   } else if (typeof data.from === 'string') {
@@ -105,13 +98,13 @@ const mapFirestoreDocToEmailMessage = (
     else if (data.from.includes('@')) fromField = { email: data.from.trim() };
     else fromField = { name: data.from.trim() || 'Remitente Desconocido', email: 'desconocido@sistema.com' };
   } else if (sourceCollection === 'outgoingEmails' && typeof data.fromEmail === 'string') {
-    fromField = { email: data.fromEmail, name: data.fromName || undefined };
+     fromField = { email: data.fromEmail, name: data.fromName || undefined };
   }
 
-  // To field
+
   if (data.to_parsed && Array.isArray(data.to_parsed) && data.to_parsed.length > 0) {
     toRecipients = data.to_parsed
-      .map((t: any) => ({ email: t.address || 'desconocido@sistema.com', name: t.name || undefined }))
+      .map((t: any) => (typeof t === 'string' ? { email: t } : (t && typeof t.email === 'string' ? { email: t.email, name: t.name || undefined } : { email: 'desconocido@sistema.com', name: 'Destinatario Desconocido'})))
       .filter((t: any) => t.email && t.email !== 'desconocido@sistema.com');
   } else if (typeof data.to === 'string') {
     toRecipients = data.to.split(',')
@@ -123,7 +116,7 @@ const mapFirestoreDocToEmailMessage = (
       })
       .filter(Boolean) as { name?: string; email: string }[];
   }
-  if (toRecipients.length === 0) {
+   if (toRecipients.length === 0) {
     toRecipients = [{ email: 'destinatario-desconocido@sistema.com', name: 'Destinatario Desconocido' }];
   }
   
@@ -141,25 +134,24 @@ const mapFirestoreDocToEmailMessage = (
   const ccRecipients = parseAddressString(data.cc);
   const bccRecipients = parseAddressString(data.bcc);
 
-
   let mailDate: string = new Date(0).toISOString();
   let receivedAtDate: string | undefined;
 
   if (sourceCollection === 'incomingEmails') {
-    mailDate = parseFirestoreDateToISO(data.date, 'date (incoming)', docSnap.id) || new Date(0).toISOString();
-    receivedAtDate = parseFirestoreDateToISO(data.receivedAt, 'receivedAt (incoming)', docSnap.id);
+    mailDate = parseFirestoreDateToISO(data.date, `date (incoming) for doc ${docSnap.id}`, docSnap.id) || new Date(0).toISOString();
+    receivedAtDate = parseFirestoreDateToISO(data.receivedAt, `receivedAt (incoming) for doc ${docSnap.id}`, docSnap.id);
   } else { 
-    const sentAtParsed = parseFirestoreDateToISO(data.sentAt, 'sentAt (outgoing)', docSnap.id);
-    const createdAtParsed = parseFirestoreDateToISO(data.createdAt, 'createdAt (outgoing)', docSnap.id);
-    const updatedAtParsed = parseFirestoreDateToISO(data.updatedAt, 'updatedAt (outgoing)', docSnap.id);
+    const sentAtParsed = parseFirestoreDateToISO(data.sentAt, `sentAt (outgoing) for doc ${docSnap.id}`, docSnap.id);
+    const createdAtParsed = parseFirestoreDateToISO(data.createdAt, `createdAt (outgoing) for doc ${docSnap.id}`, docSnap.id);
+    const updatedAtParsed = parseFirestoreDateToISO(data.updatedAt, `updatedAt (outgoing) for doc ${docSnap.id}`, docSnap.id);
     mailDate = sentAtParsed || updatedAtParsed || createdAtParsed || new Date(0).toISOString();
   }
   
   let emailIsRead = false;
-  if (typeof data.isRead === 'boolean') {
-    emailIsRead = data.isRead;
+  if (sourceCollection === 'incomingEmails') {
+    emailIsRead = typeof data.isRead === 'boolean' ? data.isRead : false;
   } else {
-    emailIsRead = sourceCollection === 'incomingEmails' ? false : true;
+    emailIsRead = true; // Sent, drafts, pending emails are considered "read" by the sender
   }
 
   return {
@@ -172,7 +164,7 @@ const mapFirestoreDocToEmailMessage = (
     date: mailDate,
     receivedAt: sourceCollection === 'incomingEmails' ? (receivedAtDate || mailDate) : undefined,
     bodyHtml: typeof data.html === 'string' ? data.html : (typeof data.bodyHtml === 'string' ? data.bodyHtml : ""),
-    bodyText: typeof data.text === 'string' ? data.text : (typeof data.bodyHtml === 'string' && data.bodyHtml.length > 0 ? data.bodyHtml.substring(0, 150) + "..." : "(Sin contenido de texto)"),
+    bodyText: typeof data.text === 'string' ? data.text : (typeof data.bodyHtml === 'string' && data.bodyHtml.length > 0 && data.bodyHtml.length > 150 ? data.bodyHtml.substring(0, 150) + "..." : (typeof data.bodyHtml === 'string' ? data.bodyHtml : "(Sin contenido de texto)")),
     status: data.status as EmailMessage['status'] || defaultStatus,
     isRead: emailIsRead,
     attachments: Array.isArray(data.attachments) ? data.attachments.map((att:any) => ({ name: att.name || "adjunto", url: att.url || "#", size: att.size, type: att.type })) : [],
@@ -181,11 +173,211 @@ const mapFirestoreDocToEmailMessage = (
     relatedLeadId: data.relatedLeadId || undefined,
     relatedContactId: data.relatedContactId || undefined,
     relatedTicketId: data.relatedTicketId || undefined,
-    crmUserId: data.crmUserId || data.userId || (currentUserIdParam || "unknown_user"),
-    userId: data.userId || (currentUserIdParam || "unknown_user"),
+    userId: data.userId || (currentUserIdParam || "unknown_user"), // For outgoing
+    crmUserId: sourceCollection === 'incomingEmails' ? (data.crmUserId || data.userId || undefined) : undefined, // For incoming
   };
 };
 
+interface EmailFolderViewProps {
+  currentUser: User | null;
+  currentEmailFolderTab: FolderType;
+  toast: ReturnType<typeof useToast>['toast'];
+  mapFirestoreDocToEmailMessage: typeof mapFirestoreDocToEmailMessage;
+  onViewEmail: (email: EmailMessage) => void;
+  selectedEmailId: string | null;
+}
+
+function EmailFolderView({
+  currentUser,
+  currentEmailFolderTab,
+  toast,
+  mapFirestoreDocToEmailMessage,
+  onViewEmail,
+  selectedEmailId,
+}: EmailFolderViewProps) {
+  const [emails, setEmails] = useState<EmailMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setEmails([]);
+    setCurrentPage(1);
+
+    if (!currentUser) {
+      setIsLoading(false);
+      return;
+    }
+
+    let q: any; // Query type
+    let sourceCollection: 'incomingEmails' | 'outgoingEmails';
+    let statusFilter: EmailMessage['status'] | EmailMessage['status'][];
+
+    switch (currentEmailFolderTab) {
+      case 'inbox':
+        sourceCollection = 'incomingEmails';
+        q = query(
+          collection(db, sourceCollection),
+          where("crmUserId", "==", currentUser.id), // Assuming crmUserId is set for incoming emails
+          orderBy("receivedAt", "desc")
+        );
+        break;
+      case 'sent':
+        sourceCollection = 'outgoingEmails';
+        statusFilter = 'sent';
+        q = query(
+          collection(db, sourceCollection),
+          where("userId", "==", currentUser.id),
+          where("status", "==", statusFilter),
+          orderBy("sentAt", "desc") // Order by sentAt for sent items
+        );
+        break;
+      case 'pending':
+        sourceCollection = 'outgoingEmails';
+        statusFilter = 'pending';
+        q = query(
+          collection(db, sourceCollection),
+          where("userId", "==", currentUser.id),
+          where("status", "==", statusFilter),
+          orderBy("createdAt", "desc")
+        );
+        break;
+      case 'drafts':
+        sourceCollection = 'outgoingEmails';
+        statusFilter = 'draft';
+        q = query(
+          collection(db, sourceCollection),
+          where("userId", "==", currentUser.id),
+          where("status", "==", statusFilter),
+          orderBy("updatedAt", "desc") // Order drafts by last updated
+        );
+        break;
+      case 'trash':
+        sourceCollection = 'outgoingEmails'; // For now, only from outgoing. Expand later if needed.
+        statusFilter = 'deleted';
+        q = query(
+          collection(db, sourceCollection),
+          where("userId", "==", currentUser.id),
+          where("status", "==", statusFilter),
+          orderBy("updatedAt", "desc")
+        );
+        break;
+      default:
+        setIsLoading(false);
+        return;
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map(docSnap => {
+        try {
+          return mapFirestoreDocToEmailMessage(docSnap, currentUser.id, Array.isArray(statusFilter) ? statusFilter[0] : statusFilter || 'received', sourceCollection);
+        } catch (mapError: any) {
+          console.error(`Error mapeando documento de ${currentEmailFolderTab} ${docSnap.id}:`, mapError, "Datos:", docSnap.data());
+          return null;
+        }
+      }).filter(Boolean) as EmailMessage[];
+      setEmails(fetched);
+      setIsLoading(false);
+    }, (error) => {
+      console.error(`Error fetching ${currentEmailFolderTab} emails:`, error);
+      toast({ title: `Error al cargar ${currentEmailFolderTab}`, variant: "destructive", description: error.message });
+      setIsLoading(false);
+      setEmails([]);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, currentEmailFolderTab, toast, mapFirestoreDocToEmailMessage]);
+
+  const totalPages = Math.ceil(emails.length / ITEMS_PER_PAGE);
+  const paginatedEmails = emails.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const renderEmailListItem = (email: EmailMessage) => (
+    <div
+      key={email.id}
+      className={cn(
+          "w-full text-left p-2.5 hover:bg-accent focus-visible:bg-accent outline-none border-b cursor-pointer",
+          selectedEmailId === email.id && "bg-primary/10",
+          email.status === 'received' && !email.isRead && "bg-primary/5 border-l-2 border-primary font-semibold"
+      )}
+      onClick={() => onViewEmail(email)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onViewEmail(email)}
+    >
+      <div className="flex justify-between items-start text-xs mb-0.5">
+        <p className={cn(
+            "truncate max-w-[150px] md:max-w-[200px] text-sm",
+            email.status === 'received' && !email.isRead ? "text-primary font-bold" : "text-foreground font-medium"
+        )}>
+          {email.collectionSource === 'incomingEmails' || currentEmailFolderTab === 'inbox'
+           ? (email.from.name || email.from.email)
+           : (Array.isArray(email.to) && email.to.length > 0 ? `Para: ${email.to.map(t=>t.name || t.email).join(', ')}` : "Para: Desconocido")
+          }
+        </p>
+        <time className="text-muted-foreground text-[10px] shrink-0 whitespace-nowrap">
+          {isValid(parseISO(email.date)) ? formatDistanceToNowStrict(parseISO(email.date), { addSuffix: true, locale: es}) : "Fecha Inv."}
+        </time>
+      </div>
+      <p className={cn("text-sm truncate", email.status === 'received' && !email.isRead ? "text-primary" : "")}>
+          {email.subject || "(Sin Asunto)"}
+      </p>
+      <p className="text-xs text-muted-foreground truncate mt-0.5 h-4">
+        {email.bodyText || (typeof email.bodyHtml === 'string' && email.bodyHtml.trim() !== "" ? "" : "(Sin contenido)")}
+      </p>
+      {(currentEmailFolderTab === 'pending' && email.status === 'pending') && <Clock className="h-3 w-3 text-amber-500 inline-block mr-1 animate-pulse" />}
+    </div>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex-grow flex items-center justify-center text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (paginatedEmails.length === 0) {
+    return (
+      <div className="flex-grow flex items-center justify-center text-muted-foreground p-4 text-center">
+        <p className="text-sm">No hay correos en "{foldersConfig.find(f=>f.name===currentEmailFolderTab)?.label}".</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <ScrollArea className="flex-grow">
+        <div className="divide-y">
+          {paginatedEmails.map(email => renderEmailListItem(email))}
+        </div>
+      </ScrollArea>
+      {totalPages > 1 && (
+        <div className="p-2 border-t flex justify-center shrink-0">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem><PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(p => Math.max(1, p - 1)); }} disabled={currentPage === 1} /></PaginationItem>
+              {[...Array(Math.min(3, totalPages))].map((_, i) => {
+                  let pageNum = currentPage <= 2 ? i + 1 : (currentPage >= totalPages - 1 ? totalPages - 2 + i : currentPage - 1 + i);
+                  if (pageNum < 1 || pageNum > totalPages) return null;
+                  return <PaginationItem key={pageNum}><PaginationLink href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(pageNum); }} isActive={currentPage === pageNum}>{pageNum}</PaginationLink></PaginationItem>;
+              })}
+              {totalPages > 3 && currentPage < totalPages - 1 && <PaginationItem><PaginationEllipsis/></PaginationItem>}
+              <PaginationItem><PaginationNext href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(p => Math.min(totalPages, p + 1)); }} disabled={currentPage === totalPages} /></PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+    </>
+  );
+}
+
+const foldersConfig: {name: FolderType, label: string, icon: React.ElementType, count?: number | null, isLoading?: boolean}[] = [
+    { name: "inbox",    label: "Bandeja de Entrada", icon: Inbox },
+    { name: "pending",  label: "Enviando",           icon: Clock },
+    { name: "sent",     label: "Enviados",           icon: Send },
+    { name: "drafts",   label: "Borradores",         icon: ArchiveIcon },
+    { name: "trash",    label: "Papelera",           icon: Trash2, disabled: false },
+];
 
 function EmailPageContent() {
   const emailNavItem = NAV_ITEMS.find(item => item.href === '/email');
@@ -196,7 +388,7 @@ function EmailPageContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [activeFolder, setActiveFolder] = useState<FolderType>("inbox");
+  const [currentEmailFolderTab, setCurrentEmailFolderTab] = useState<FolderType>("inbox");
   const [selectedEmail, setSelectedEmail] = useState<EmailMessage | null>(null);
   
   const [showComposer, setShowComposer] = useState(false);
@@ -211,28 +403,9 @@ function EmailPageContent() {
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-
-  const [inboxEmails, setInboxEmails] = useState<EmailMessage[]>([]);
-  const [sentEmails, setSentEmails] = useState<EmailMessage[]>([]);
-  const [draftEmails, setDraftEmails] = useState<EmailMessage[]>([]);
-  const [pendingEmails, setPendingEmails] = useState<EmailMessage[]>([]);
-  const [deletedEmails, setDeletedEmails] = useState<EmailMessage[]>([]);
-  
-  const [isLoadingInbox, setIsLoadingInbox] = useState(true);
-  const [isLoadingSent, setIsLoadingSent] = useState(true);
-  const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
-  const [isLoadingPending, setIsLoadingPending] = useState(true);
-  const [isLoadingDeleted, setIsLoadingDeleted] = useState(true);
   
   const [isSubmittingEmail, setIsSubmittingEmail] = useState(false); 
   const [isSavingDraftState, setIsSavingDraftState] = useState(false); 
-  
-  const [currentPageInbox, setCurrentPageInbox] = useState(1);
-  const [currentPageSent, setCurrentPageSent] = useState(1);
-  const [currentPagePending, setCurrentPagePending] = useState(1);
-  const [currentPageDrafts, setCurrentPageDrafts] = useState(1);
-  const [currentPageDeleted, setCurrentPageDeleted] = useState(1);
-
 
   const handleOpenComposer = useCallback((initialData: Partial<typeof composerInitialData> = {}, openedByBtn: boolean = false, draftIdToEdit: string | null = null) => {
     setComposerInitialData({
@@ -277,14 +450,12 @@ function EmailPageContent() {
     }
   }, [composerOpenedByButton, router, pathname, searchParams]);
   
-  const markEmailAsRead = async (emailId: string, collectionSource: 'incomingEmails' | 'outgoingEmails') => {
-    if (!currentUser || !emailId || collectionSource !== 'incomingEmails') return;
+  const markEmailAsRead = async (emailId: string) => {
+    if (!currentUser || !emailId ) return;
     try {
-      await updateDoc(doc(db, collectionSource, emailId), { isRead: true, updatedAt: serverTimestamp() });
-      toast({ title: "Correo marcado como leído."});
-      // No need to manually refetch inbox, onSnapshot will handle it
+      await updateDoc(doc(db, "incomingEmails", emailId), { isRead: true, updatedAt: serverTimestamp() });
     } catch (error) {
-      console.error(`Error al marcar correo ${emailId} como leído en ${collectionSource}:`, error);
+      console.error(`Error al marcar correo ${emailId} como leído en incomingEmails:`, error);
       toast({ title: "Error al marcar correo como leído", variant: "destructive" });
     }
   };
@@ -303,7 +474,7 @@ function EmailPageContent() {
         setSelectedEmail(email);
         setShowComposer(false);
         if (email.collectionSource === 'incomingEmails' && !email.isRead) {
-            markEmailAsRead(email.id, 'incomingEmails');
+            markEmailAsRead(email.id);
         }
     }
   };
@@ -330,17 +501,10 @@ function EmailPageContent() {
     const bodyParam = searchParams.get("body");
     const emailIdParam = searchParams.get("emailId"); 
 
-    const allClientEmails = [...sentEmails, ...pendingEmails, ...inboxEmails, ...draftEmails, ...deletedEmails];
-
-    if (emailIdParam && !showComposer && !selectedEmail) {
-        const emailToOpen = allClientEmails.find(e => e.id === emailIdParam);
-        if (emailToOpen) {
-            handleViewEmail(emailToOpen);
-        }
-    } else if ((toParam || subjectParam || bodyParam) && !composerInitialData?.draftId && !selectedEmail && !showComposer) {
+    if ((toParam || subjectParam || bodyParam) && !composerInitialData?.draftId && !selectedEmail && !showComposer) {
       handleOpenComposer({ to: toParam || "", subject: subjectParam || "", body: bodyParam || "" }, false);
     }
-  }, [searchParams, handleOpenComposer, sentEmails, pendingEmails, inboxEmails, draftEmails, deletedEmails, showComposer, selectedEmail, composerInitialData]);
+  }, [searchParams, handleOpenComposer, showComposer, selectedEmail, composerInitialData]);
 
 
   const uploadAttachments = async (files: File[], userId: string, emailId: string): Promise<{ name: string; url: string; size: number; type: string }[]> => {
@@ -401,10 +565,13 @@ function EmailPageContent() {
 
     try {
         if (isSendingDraft) {
-            const draftBeingSent = draftEmails.find(d => d.id === editingDraftId);
-            await updateDoc(doc(db, "outgoingEmails", editingDraftId!), {
+            const draftBeingSentDocRef = doc(db, "outgoingEmails", editingDraftId!);
+            const draftBeingSentSnap = await getDoc(draftBeingSentDocRef);
+            const draftCreatedAt = draftBeingSentSnap.exists() ? draftBeingSentSnap.data().createdAt : serverTimestamp();
+
+            await updateDoc(draftBeingSentDocRef, {
                 ...emailDoc,
-                createdAt: draftBeingSent?.date ? Timestamp.fromDate(new Date(draftBeingSent.date)) : serverTimestamp(),
+                createdAt: draftCreatedAt, // Preserve original creation date of draft
             });
         } else {
             await setDoc(doc(db, "outgoingEmails", emailIdToUse), { ...emailDoc, createdAt: serverTimestamp() });
@@ -421,7 +588,7 @@ function EmailPageContent() {
   
   const handleEmailQueued = () => {
     handleCloseComposer();
-    setActiveFolder("pending");
+    setCurrentEmailFolderTab("pending");
   };
 
   const handleSaveDraft = async (data: { to: string; cc?: string; bcc?: string; subject: string; body: string; }, newAttachments: File[]) => {
@@ -453,13 +620,19 @@ function EmailPageContent() {
     };
     try {
         if (editingDraftId) {
-            await updateDoc(doc(db, "outgoingEmails", editingDraftId), draftDoc);
+            const draftBeingSavedDocRef = doc(db, "outgoingEmails", editingDraftId!);
+            const draftBeingSavedSnap = await getDoc(draftBeingSavedDocRef);
+            const draftCreatedAt = draftBeingSavedSnap.exists() ? draftBeingSavedSnap.data().createdAt : serverTimestamp();
+            await updateDoc(draftBeingSavedDocRef, {
+                ...draftDoc,
+                createdAt: draftCreatedAt, // Preserve original creation date
+            });
         } else {
             await setDoc(doc(db, "outgoingEmails", draftIdToUse), { ...draftDoc, createdAt: serverTimestamp() });
         }
         toast({ title: "Borrador Guardado"});
         handleCloseComposer();
-        setActiveFolder("drafts");
+        setCurrentEmailFolderTab("drafts");
         return true;
     } catch (error) {
         console.error("Error al guardar borrador:", error);
@@ -483,192 +656,30 @@ function EmailPageContent() {
         await updateDoc(doc(db, collectionName, email.id), { status: "deleted", updatedAt: serverTimestamp() });
         toast({ title: "Correo Movido a Papelera" });
         if (selectedEmail?.id === email.id) setSelectedEmail(null);
-        setActiveFolder("trash"); 
+        setCurrentEmailFolderTab("trash"); 
     } catch (error) {
         console.error("Error moviendo correo a papelera:", error);
         toast({ title: "Error al Eliminar Correo", variant: "destructive" });
     }
   };
 
-
-  const folders = useMemo(() => [
-    { name: "inbox",    label: "Bandeja de Entrada", icon: Inbox,    count: isLoadingUnreadCount ? null : (unreadInboxCount || 0), isLoading: isLoadingInbox,    data: inboxEmails },
-    { name: "pending",  label: "Enviando",           icon: Clock,    count: pendingEmails.length,  isLoading: isLoadingPending,  data: pendingEmails },
-    { name: "sent",     label: "Enviados",           icon: Send,     count: sentEmails.length,     isLoading: isLoadingSent,     data: sentEmails },
-    { name: "drafts",   label: "Borradores",         icon: ArchiveIcon, count: draftEmails.length,    isLoading: isLoadingDrafts,   data: draftEmails },
-    { name: "trash",    label: "Papelera",           icon: Trash2,   count: deletedEmails.length,  isLoading: isLoadingDeleted,  data: deletedEmails, disabled: false },
-  ], [
-    unreadInboxCount, isLoadingUnreadCount, 
-    inboxEmails, pendingEmails, sentEmails, draftEmails, deletedEmails, 
-    isLoadingInbox, isLoadingPending, isLoadingSent, isLoadingDrafts, isLoadingDeleted
-  ]);
-
-
-  // Fetch Inbox Emails
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    console.log(`INBOX: Intentando consulta para usuario ${currentUser?.id} en pestaña ${currentEmailFolderTab}`);
-    
-    if (!currentUser || currentEmailFolderTab !== 'inbox') {
-      console.log("INBOX: Condiciones NO cumplidas para la suscripción. CurrentUser:", !!currentUser, "ActiveFolder:", currentEmailFolderTab);
-      setIsLoadingInbox(false); setInboxEmails([]);
-      if (unsubscribe) unsubscribe(); // Ensure an existing subscription is cleaned up
-      return;
-    }
-    
-    console.log(`INBOX: Intentando consulta para usuario ${currentUser.id} en pestaña ${currentEmailFolderTab}`);
-    setIsLoadingInbox(true);
-    const q = query(
-        collection(db, "incomingEmails"),
-        where("userId", "==", currentUser.id), // Assuming incomingEmails are tagged with CRM user ID
-        orderBy("receivedAt", "desc")
-    );
-     console.log("INBOX: Firestore Query (conceptual):", `collection(db, "incomingEmails"), where("userId", "==", ${currentUser.id}), orderBy("receivedAt", "desc")`);
-    
-    unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log("Snapshot de Bandeja de Entrada recibido. ¿Vacío?:", snapshot.empty, "Número de docs:", snapshot.size);
-      if (snapshot.empty) {
-        console.log("INBOX: No hay documentos en 'incomingEmails' para este usuario o la consulta no los devuelve.");
-      }
-      
-      console.log("Raw fetched data from Firestore (inbox emails):", snapshot.docs.map(d => ({id: d.id, ...d.data()})));
-
-      const fetched = snapshot.docs.map(docSnap => {
-        try {
-          return mapFirestoreDocToEmailMessage(docSnap, currentUser?.id || "system_user_fallback", 'received', 'incomingEmails');
-        } catch (mapError: any) {
-          console.error(`Error mapeando el documento de la bandeja de entrada ${docSnap.id}:`, mapError, "Datos:", docSnap.data());
-          return null; 
+  // Memoize folder configuration
+  const folders = useMemo(() => {
+    const updatedFoldersConfig = foldersConfig.map(folder => {
+        if (folder.name === 'inbox') {
+            return { ...folder, count: isLoadingUnreadCount ? null : (unreadInboxCount || 0), isLoading: false /* isLoadingInbox will be handled by EmailFolderView */ };
         }
-      }).filter(Boolean) as EmailMessage[];
-      console.log("Mapped inbox emails for UI:", JSON.parse(JSON.stringify(fetched)));
-      setInboxEmails(fetched);
-      setIsLoadingInbox(false);
-    }, (error) => {
-      console.error("ERROR GRAVE AL OBTENER BANDEJA DE ENTRADA (onSnapshot):", error);
-      toast({ title: "Error Crítico al Cargar Bandeja de Entrada", variant: "destructive", description: `Detalles: ${error.message}. Revisa los permisos de Firestore para 'incomingEmails'.` });
-      setIsLoadingInbox(false); setInboxEmails([]);
+        // For other folders, count will be handled by EmailFolderView based on fetched data length
+        return { ...folder, count: 0, isLoading: false }; 
     });
-    return () => {
-      if (unsubscribe) {
-        console.log("INBOX: Desuscribiendo de la bandeja de entrada.");
-        unsubscribe();
-      }
-    };
-  }, [currentUser, currentEmailFolderTab, toast]); // Added mapFirestoreDocToEmailMessage to dependencies
-  
-  const createCommonOutgoingEffect = (
-    folderType: FolderType,
-    statusToFetch: EmailMessage['status'] | EmailMessage['status'][],
-    setData: React.Dispatch<React.SetStateAction<EmailMessage[]>>,
-    setIsLoading: React.Dispatch<React.SetStateAction<boolean>>,
-    orderByField: "createdAt" | "updatedAt" | "sentAt" = "createdAt"
-  ) => {
-    console.log(`DEBUG: Setting up effect for ${folderType}`);
-    let unsubscribe: (() => void) | undefined;
-    if (!currentUser || currentEmailFolderTab !== folderType) {
-      console.log(`${folderType.toUpperCase()}: Condiciones NO cumplidas. CurrentUser: ${!!currentUser}, ActiveFolder: ${currentEmailFolderTab}`);
-      setIsLoading(false); setData([]);
-      if (unsubscribe) unsubscribe();
-      return;
-    }
-    console.log(`${folderType.toUpperCase()}: Intentando consulta para usuario ${currentUser.id}`);
-    setIsLoading(true);
-    const q = query(
-      collection(db, "outgoingEmails"),
-      where("userId", "==", currentUser.id),
-      where("status", Array.isArray(statusToFetch) ? "in" : "==", statusToFetch),
-      orderBy(orderByField, "desc")
-    );
-     console.log(`${folderType.toUpperCase()}: Firestore Query (conceptual): collection(db, "outgoingEmails"), where("userId", "==", ${currentUser.id}), where("status", "${Array.isArray(statusToFetch) ? "in" : "=="}", ${statusToFetch}), orderBy("${orderByField}", "desc")`);
+    return updatedFoldersConfig;
+  }, [unreadInboxCount, isLoadingUnreadCount]);
 
-    unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log(`Snapshot de ${folderType} recibido. ¿Vacío?:`, snapshot.empty, "Número de docs:", snapshot.size);
-      console.log(`Raw fetched data from Firestore (${folderType} emails):`, snapshot.docs.map(d => ({id: d.id, ...d.data()})));
-      const fetched = snapshot.docs.map(docSnap => mapFirestoreDocToEmailMessage(docSnap, currentUser.id, Array.isArray(statusToFetch) ? statusToFetch[0] : statusToFetch, 'outgoingEmails')).filter(Boolean) as EmailMessage[];
-      console.log(`Mapped ${folderType} emails for UI:`, JSON.parse(JSON.stringify(fetched)));
-      setData(fetched);
-      setIsLoading(false);
-    }, (error) => {
-      console.error(`Error fetching ${folderType} emails:`, error);
-      toast({ title: `Error al cargar ${folderType}`, variant: "destructive", description: error.message });
-      setIsLoading(false); setData([]);
-    });
-    return () => {
-      if (unsubscribe) {
-        console.log(`${folderType.toUpperCase()}: Desuscribiendo de ${folderType}.`);
-        unsubscribe();
-      }
-    };
-  };
+  const currentFolderIsLoading = useMemo(() => {
+    // This logic will be handled inside EmailFolderView
+    return false;
+  }, [currentEmailFolderTab]);
 
-  // Renamed activeTab to currentEmailFolderTab
-  const [currentEmailFolderTab, setCurrentEmailFolderTab] = useState<FolderType>("inbox");
-
-  useEffect(() => createCommonOutgoingEffect("sent", "sent", setSentEmails, setIsLoadingSent, "sentAt"), [currentUser, currentEmailFolderTab, toast]);
-  useEffect(() => createCommonOutgoingEffect("pending", "pending", setPendingEmails, setIsLoadingPending, "createdAt"), [currentUser, currentEmailFolderTab, toast]);
-  useEffect(() => createCommonOutgoingEffect("drafts", "draft", setDraftEmails, setIsLoadingDrafts, "updatedAt"), [currentUser, currentEmailFolderTab, toast]);
-  useEffect(() => createCommonOutgoingEffect("trash", "deleted", setDeletedEmails, setIsLoadingDeleted, "updatedAt"), [currentUser, currentEmailFolderTab, toast]);
-
-  const emailsToDisplay = folders.find(f => f.name === currentEmailFolderTab)?.data || [];
-  const isLoadingCurrentList = folders.find(f => f.name === currentEmailFolderTab)?.isLoading || false;
-
-  const currentPageForFolder = 
-      currentEmailFolderTab === 'inbox' ? currentPageInbox :
-      currentEmailFolderTab === 'pending' ? currentPagePending :
-      currentEmailFolderTab === 'sent' ? currentPageSent :
-      currentEmailFolderTab === 'drafts' ? currentPageDrafts :
-      currentEmailFolderTab === 'trash' ? currentPageDeleted : 1;
-
-  const setCurrentPageForFolder = 
-      currentEmailFolderTab === 'inbox' ? setCurrentPageInbox :
-      currentEmailFolderTab === 'pending' ? setCurrentPagePending :
-      currentEmailFolderTab === 'sent' ? setCurrentPageSent :
-      currentEmailFolderTab === 'drafts' ? setCurrentPageDrafts :
-      currentEmailFolderTab === 'trash' ? setCurrentPageDeleted : React.useState(1)[1];
-
-
-  const totalPages = Math.ceil(emailsToDisplay.length / ITEMS_PER_PAGE);
-  const paginatedEmails = emailsToDisplay.slice((currentPageForFolder - 1) * ITEMS_PER_PAGE, currentPageForFolder * ITEMS_PER_PAGE);
-
-  useEffect(() => { setCurrentPageForFolder(1); }, [currentEmailFolderTab, setCurrentPageForFolder]);
-
-
-  const renderEmailListItem = (email: EmailMessage, folderType: FolderType) => (
-    <div
-      key={email.id}
-      className={cn(
-          "w-full text-left p-2.5 hover:bg-accent focus-visible:bg-accent outline-none border-b cursor-pointer",
-          selectedEmail?.id === email.id && "bg-primary/10",
-          !email.isRead && folderType === 'inbox' && "bg-primary/5 border-l-2 border-primary font-semibold"
-      )}
-      onClick={() => handleViewEmail(email)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && handleViewEmail(email)}
-    >
-      <div className="flex justify-between items-start text-xs mb-0.5">
-        <p className={cn(
-            "truncate max-w-[150px] md:max-w-[200px] text-sm", 
-            !email.isRead && folderType === 'inbox' ? "text-primary font-bold" : "text-foreground font-medium"
-        )}>
-          {folderType === 'sent' || folderType === 'pending' || folderType === 'drafts' || folderType === 'trash'
-           ? (Array.isArray(email.to) && email.to.length > 0 ? `Para: ${email.to.map(t=>t.name || t.email).join(', ')}` : "Para: Desconocido") 
-           : (email.from.name || email.from.email)}
-        </p>
-        <time className="text-muted-foreground text-[10px] shrink-0 whitespace-nowrap">
-          {isValid(parseISO(email.date)) ? formatDistanceToNowStrict(parseISO(email.date), { addSuffix: true, locale: es}) : "Fecha Inv."}
-        </time>
-      </div>
-      <p className={cn("text-sm truncate", !email.isRead && folderType === 'inbox' ? "text-primary" : "")}>
-          {email.subject || "(Sin Asunto)"}
-      </p>
-      <p className="text-xs text-muted-foreground truncate mt-0.5 h-4">
-        {email.bodyText || (typeof email.bodyHtml === 'string' && email.bodyHtml.trim() !== "" ? "" : "(Sin contenido)")}
-      </p>
-      {(folderType === 'pending' && email.status === 'pending') && <Clock className="h-3 w-3 text-amber-500 inline-block mr-1 animate-pulse" />}
-    </div>
-  );
 
   return (
     <div className="flex flex-col h-full">
@@ -683,9 +694,9 @@ function EmailPageContent() {
       
       <div className="flex flex-1 overflow-hidden">
         {/* Left Pane: Folders */}
-        <div className={cn("w-56 md:w-64 bg-muted/50 border-r p-3 flex-col hidden md:flex shrink-0", (showComposer || selectedEmail) && "md:hidden lg:flex")}>
+        <div className={cn("w-56 md:w-64 bg-muted/50 border-r p-3 flex-col shrink-0 hidden md:flex", (showComposer || selectedEmail) && "md:hidden lg:flex")}>
            <Button onClick={() => handleOpenComposer(undefined, true)} className="w-full mb-4" size="lg">
-            <Edit className="mr-2 h-4 w-4"/> Correo Nuevo
+            <Edit2 className="mr-2 h-4 w-4"/> Correo Nuevo
           </Button>
           <ScrollArea className="flex-grow">
             <nav className="flex flex-col gap-1">
@@ -695,11 +706,11 @@ function EmailPageContent() {
                   variant={currentEmailFolderTab === folder.name ? "secondary" : "ghost"}
                   className="w-full justify-start text-sm h-9"
                   onClick={() => { setCurrentEmailFolderTab(folder.name); setSelectedEmail(null); setShowComposer(false); }}
-                  disabled={folder.disabled}
+                  disabled={folder.disabled || false}
                 >
                   <folder.icon className={cn("mr-2 h-4 w-4", currentEmailFolderTab === folder.name ? "text-primary" : "text-muted-foreground")} /> 
                   {folder.label}
-                  {folder.count !== undefined && folder.count !== null && folder.count > 0 && (
+                  {(folder.count !== undefined && folder.count !== null && folder.count > 0) && (
                     <Badge 
                       className={cn(
                         "ml-auto text-xs px-1.5 py-0.5 font-normal h-5",
@@ -734,40 +745,17 @@ function EmailPageContent() {
                 />
             </div>
             <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden" onClick={() => handleOpenComposer(undefined, true)}>
-                <Edit className="h-5 w-5"/>
+                <Edit2 className="h-5 w-5"/>
             </Button>
           </div>
-          {isLoadingCurrentList ? (
-            <div className="flex-grow flex items-center justify-center text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : paginatedEmails.length === 0 ? (
-            <div className="flex-grow flex items-center justify-center text-muted-foreground p-4 text-center">
-              <p className="text-sm">No hay correos en "{folders.find(f=>f.name===currentEmailFolderTab)?.label}".</p>
-            </div>
-          ) : (
-            <ScrollArea className="flex-grow">
-              <div className="divide-y">
-                {paginatedEmails.map(email => renderEmailListItem(email, currentEmailFolderTab))}
-              </div>
-            </ScrollArea>
-          )}
-           {totalPages > 1 && (
-            <div className="p-2 border-t flex justify-center shrink-0">
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem><PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setCurrentPageForFolder(p => Math.max(1, p - 1)); }} disabled={currentPageForFolder === 1} /></PaginationItem>
-                  {[...Array(Math.min(3, totalPages))].map((_, i) => {
-                      let pageNum = currentPageForFolder <= 2 ? i + 1 : (currentPageForFolder >= totalPages - 1 ? totalPages - 2 + i : currentPageForFolder - 1 + i);
-                      if (pageNum < 1 || pageNum > totalPages) return null;
-                      return <PaginationItem key={pageNum}><PaginationLink href="#" onClick={(e) => { e.preventDefault(); setCurrentPageForFolder(pageNum); }} isActive={currentPageForFolder === pageNum}>{pageNum}</PaginationLink></PaginationItem>;
-                  })}
-                  {totalPages > 3 && currentPageForFolder < totalPages - 1 && <PaginationItem><PaginationEllipsis/></PaginationItem>}
-                  <PaginationItem><PaginationNext href="#" onClick={(e) => { e.preventDefault(); setCurrentPageForFolder(p => Math.min(totalPages, p + 1)); }} disabled={currentPageForFolder === totalPages} /></PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          )}
+          <EmailFolderView
+            currentUser={currentUser}
+            currentEmailFolderTab={currentEmailFolderTab}
+            toast={toast}
+            mapFirestoreDocToEmailMessage={mapFirestoreDocToEmailMessage}
+            onViewEmail={handleViewEmail}
+            selectedEmailId={selectedEmail?.id || null}
+          />
         </div>
         <Separator orientation="vertical" className="h-full hidden md:block"/>
 
@@ -815,16 +803,13 @@ function EmailPageContent() {
                 }, true);
               }}
               onForward={(emailToForward) => handleOpenComposer({ subject: `Fwd: ${emailToForward.subject}`, body: `\n\n\n----- Mensaje Reenviado -----\nDe: ${emailToForward.from.name || emailToForward.from.email}\nEnviado: ${isValid(parseISO(emailToForward.date)) ? format(parseISO(emailToForward.date), 'PPpp', {locale: es}) : 'Fecha inválida'}\nPara: ${emailToForward.to.map(t=>t.name || t.email).join(', ')}\nAsunto: ${emailToForward.subject}\n\n${emailToForward.bodyHtml || emailToForward.bodyText || ""}`, attachments: emailToForward.attachments }, true)}
-              onDelete={(emailId, currentStatus, collectionSource) => handleDeleteEmail({id: emailId, status: currentStatus, collectionSource: collectionSource} as EmailMessage)}
+              onDelete={() => handleDeleteEmail(selectedEmail)}
             />
           ) : (
             <div className="flex-grow flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
               <MailIcon size={48} className="mb-4 text-primary/50" />
               <p className="text-lg font-medium">Selecciona un correo para leerlo</p>
               <p className="text-sm">o crea un correo nuevo desde el panel de carpetas.</p>
-              <Button onClick={() => handleOpenComposer(undefined, true)} className="mt-4 md:hidden">
-                <Edit className="mr-2 h-4 w-4"/> Correo Nuevo
-              </Button>
             </div>
           )}
         </div>
@@ -833,22 +818,22 @@ function EmailPageContent() {
        <Card className="mt-4 bg-amber-50 border-amber-200">
         <CardHeader>
           <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
-            <AlertTriangle className="h-5 w-5" />
+            <Info className="h-5 w-5" />
             Estado de Desarrollo del Módulo de Correo
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-amber-600 space-y-2">
           <p><strong className="text-amber-800">Redacción y Puesta en Cola (Backend `sendSingleEmail`):</strong> <Badge className="bg-green-500 text-white">Implementado</Badge></p>
-          <p><strong className="text-amber-800">Visualización de Pendientes, Enviados, Borradores:</strong> <Badge className="bg-green-500 text-white">Implementado</Badge> (Borradores aún no guardan adjuntos correctamente).</p>
-          <p><strong className="text-amber-800">Guardar/Cargar Borradores (Texto):</strong> <Badge className="bg-green-500 text-white">Implementado</Badge>.</p>
+          <p><strong className="text-amber-800">Visualización de Pendientes, Enviados, Borradores:</strong> <Badge className="bg-green-500 text-white">Implementado</Badge></p>
+          <p><strong className="text-amber-800">Guardar/Cargar Borradores (con Adjuntos):</strong> <Badge className="bg-green-500 text-white">Implementado</Badge>.</p>
           <p><strong className="text-amber-800">Visualización Detallada y Paginación:</strong> <Badge className="bg-green-500 text-white">Implementado</Badge>.</p>
           <p><strong className="text-amber-800">Adjuntar Archivos (Subida a Storage y Enlace en Firestore):</strong> <Badge className="bg-green-500 text-white">Implementado</Badge>.</p>
-          <p><strong className="text-amber-800">Bandeja de Entrada (Recepción y Sincronización de Servidor IMAP/API):</strong> <Badge className="bg-green-500 text-white">Parcial (Backend IMAP implementado, UI lee 'incomingEmails' por userId)</Badge>. Se necesita lógica para asociar correos a usuarios CRM específicos si la cuenta IMAP es compartida.</p>
+          <p><strong className="text-amber-800">Bandeja de Entrada (Recepción y Sincronización IMAP):</strong> <Badge className="bg-green-500 text-white">Implementado (Backend IMAP vía Cloud Function, filtrado UI por crmUserId)</Badge>. Se necesita que la CF IMAP asigne `crmUserId` a los correos en `incomingEmails`.</p>
           <p><strong className="text-amber-800">Marcar como Leído/No Leído (Bandeja de Entrada):</strong> <Badge className="bg-green-500 text-white">Implementado</Badge>.</p>
           <p><strong className="text-amber-800">Papelera y Eliminación Lógica:</strong> <Badge className="bg-green-500 text-white">Implementado</Badge>.</p>
-          <p><strong className="text-amber-800">Búsqueda y Filtros Avanzados en Listas:</strong> <Badge className="bg-yellow-500 text-black">Pendiente</Badge>.</p>
+          <p><strong className="text-amber-800">Búsqueda en Lista de Correos:</strong> <Badge className="bg-yellow-500 text-black">Pendiente</Badge>.</p>
           <p><strong className="text-amber-800">Plantillas de Correo para Respuestas Rápidas:</strong> <Badge className="bg-yellow-500 text-black">Pendiente</Badge>.</p>
-          <p><strong className="text-amber-800">Sincronización Completa con Múltiples Cuentas Personales (Seguridad de Credenciales):</strong> <Badge className="bg-orange-500 text-white">Avanzado/Pendiente</Badge> (Requiere gestión segura de credenciales y backend robusto).</p>
+          <p><strong className="text-amber-800">Sincronización Completa con Múltiples Cuentas Personales (Configuración de Usuario):</strong> <Badge className="bg-orange-500 text-white">Avanzado/Backend Pendiente</Badge> (UI de configuración personal lista, backend para usar credenciales individuales pendiente).</p>
         </CardContent>
       </Card>
     </div>
@@ -857,9 +842,17 @@ function EmailPageContent() {
 
 export default function EmailPage() {
   return (
-    <Suspense fallback={<div className="flex flex-col gap-6 h-full"><Skeleton className="h-16 w-full shrink-0" /><div className="flex flex-1 overflow-hidden"><Skeleton className="w-64 border-r shrink-0"/><Skeleton className="flex-1 border-r"/><Skeleton className="flex-1"/></div></div>}>
+    <Suspense fallback={
+      <div className="flex flex-col gap-6 h-full">
+        <Skeleton className="h-16 w-full shrink-0" />
+        <div className="flex flex-1 overflow-hidden">
+          <Skeleton className="w-56 md:w-64 border-r shrink-0 hidden md:flex"/>
+          <Skeleton className="flex-1 border-r"/>
+          <Skeleton className="flex-1 flex-[2] xl:flex-[3]"/>
+        </div>
+      </div>
+    }>
       <EmailPageContent />
     </Suspense>
   );
 }
-
