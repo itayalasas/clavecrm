@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, setDoc } from "firebase/firestore";
 import { AddEditSurveyTemplateDialog } from "@/components/surveys/add-edit-survey-template-dialog";
+import { useRouter } from 'next/navigation';
 import { SurveyTemplateListItem } from "@/components/surveys/survey-template-list-item";
 import {
   AlertDialog,
@@ -37,8 +38,18 @@ export default function SatisfactionSurveysPage() {
   const [editingTemplate, setEditingTemplate] = useState<SurveyTemplate | null>(null);
   const [templateToDelete, setTemplateToDelete] = useState<SurveyTemplate | null>(null);
 
-  const { currentUser } = useAuth();
+  const { currentUser, loading, hasPermission } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
+
+  // Permission check effect
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser || !hasPermission('ver-encuestas')) {
+        router.push('/access-denied');
+      }
+    }
+  }, [currentUser, loading, hasPermission, router]);
 
   const fetchSurveyTemplates = useCallback(async () => {
     if (!currentUser) {
@@ -115,6 +126,11 @@ export default function SatisfactionSurveysPage() {
     }
   };
 
+  if (loading) {
+    return <div>Cargando...</div>;
+  }
+
+  // Only render if user has permission (effect handles redirection if not)
   return (
     <div className="flex flex-col gap-6">
       <Card className="shadow-lg">

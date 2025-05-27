@@ -11,12 +11,14 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
+import { useRouter } from 'next/navigation';
 import { collection, addDoc, getDocs, query, orderBy, Timestamp, serverTimestamp } from "firebase/firestore";
 import { AddEditActivityLogDialog } from "@/components/activity-log/add-edit-activity-log-dialog";
 import { ActivityLogListItem } from "@/components/activity-log/activity-log-list-item";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { isValid, parseISO } from "date-fns";
+
 
 
 export default function ActivityLogPage() {
@@ -35,7 +37,7 @@ export default function ActivityLogPage() {
   const [users, setUsers] = useState<User[]>([]);
 
 
-  const { currentUser, getAllUsers } = useAuth();
+  const { currentUser, getAllUsers, loading, hasPermission } = useAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -52,6 +54,19 @@ export default function ActivityLogPage() {
     return new Date().toISOString(); // Fallback
   };
 
+  const router = useRouter();
+
+  // Permission check
+  useEffect(() => {
+    // Wait for authentication state to load
+    if (!loading) {
+      // Check if the user has the 'ver-registro-actividad' permission
+      if (!currentUser || !hasPermission('ver-registro-actividad')) {
+        // If no permission, redirect
+        router.push('/access-denied'); // Or the route you prefer for access denied
+      }
+    }
+  }, [currentUser, loading, hasPermission, router]);
   const fetchActivities = useCallback(async () => {
     if (!currentUser) {
       setIsLoading(false);
@@ -128,6 +143,12 @@ export default function ActivityLogPage() {
     }
   };
 
+  // Show loading state based on auth loading
+    if (loading) {
+        return <div className="flex justify-center items-center h-screen">Cargando...</div>;
+    }
+
+    // Only render if the user has permission
   const filteredActivities = activities.filter(activity =>
     activity.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     activity.details.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, getDocs, doc, setDoc, deleteDoc, Timestamp, onSnapshot } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { format, parseISO } from 'date-fns';
@@ -37,36 +38,49 @@ export default function CalendarPage() {
 
   const { toast } = useToast();
   const { currentUser, getAllUsers } = useAuth();
+  const router = useRouter();
+
+  const { loading, hasPermission } = useAuth(); // Get loading and hasPermission from auth context
 
   useEffect(() => {
-    if (!currentUser) {
+    let unsubscribe: (() => void) | undefined; // Declare unsubscribe here
+    // Check permissions after authentication state is loaded
+    if (!loading) {
+      if (!currentUser || !hasPermission('ver-calendario')) {
+        router.push('/access-denied'); // Redirect if no permission
+      } else {
+        // If user is logged in and has permission, fetch meetings
         setIsLoadingMeetings(false);
-        return;
-    }
-    setIsLoadingMeetings(true);
-    const q = query(collection(db, "meetings"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const fetchedMeetings = querySnapshot.docs.map(docSnap => {
-            const data = docSnap.data();
-            return {
-            id: docSnap.id,
-            ...data,
-            startTime: (data.startTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-            endTime: (data.endTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-            createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-            updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-            } as Meeting;
+              const q = query(collection(db, "meetings"), orderBy("createdAt", "desc")); // Define q inside the block
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const fetchedMeetings = querySnapshot.docs.map(docSnap => {
+                const data = docSnap.data();
+                return {
+                id: docSnap.id,
+                ...data,
+                startTime: (data.startTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+                endTime: (data.endTime as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+                createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+                updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
+                } as Meeting;
+            });
+            setMeetings(fetchedMeetings);
+            setIsLoadingMeetings(false);
+        }, (error) => {
+            console.error("Error al obtener reuniones en tiempo real:", error);
+            toast({ title: "Error al Cargar Reuniones", variant: "destructive" });
+            setIsLoadingMeetings(false);
         });
-        setMeetings(fetchedMeetings);
-        setIsLoadingMeetings(false);
-    }, (error) => {
-        console.error("Error al obtener reuniones en tiempo real:", error);
-        toast({ title: "Error al Cargar Reuniones", variant: "destructive" });
-        setIsLoadingMeetings(false);
-    });
 
-    return () => unsubscribe();
-  }, [currentUser, toast]);
+      }
+    } else {
+        // Still loading, set loading state to true
+        setIsLoadingMeetings(true);
+    }
+
+    // Cleanup function
+    return () => { unsubscribe?.(); }; // Call unsubscribe only if it's defined
+  }, [currentUser, loading, hasPermission, router, toast]); // Added loading, hasPermission, router to dependencies
 
 
   const fetchSupportData = useCallback(async () => {
@@ -181,6 +195,15 @@ export default function CalendarPage() {
 
   const isLoading = isLoadingMeetings || isLoadingSupportData;
 
+    // Show a loading state or redirect based on auth and permissions
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <Skeleton className="h-12 w-1/4" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">

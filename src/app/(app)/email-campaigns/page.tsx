@@ -99,7 +99,7 @@ export default function EmailCampaignsPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, loading, hasPermission } = useAuth();
 
   const fetchContactLists = useCallback(async () => {
     setIsLoadingContactLists(true);
@@ -178,6 +178,13 @@ export default function EmailCampaignsPage() {
 
   useEffect(() => {
     fetchContactLists();
+  }, [fetchContactLists]);
+
+  useEffect(() => {
+    fetchAllContacts();
+  }, [fetchAllContacts]);
+
+  useEffect(() => {
     fetchAllContacts();
     fetchTemplates();
 
@@ -255,7 +262,20 @@ export default function EmailCampaignsPage() {
         unsubscribeCampaigns();
       }
     };
-  }, [currentUser, toast, fetchContactLists, fetchAllContacts, fetchTemplates]);
+  }, [currentUser, toast, fetchTemplates]);
+
+  // Permission check effect
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser || !hasPermission('ver-campañas-correo')) {
+        router.push('/access-denied');
+      }
+    }
+  }, [currentUser, loading, hasPermission, router]);
+
+  if (loading || (!currentUser && !loading)) {
+    return <div>Cargando...</div>; // Or a better loading component
+  }
 
 
   const handleSaveContactList = async (listData: Omit<ContactList, 'id' | 'createdAt' | 'contactCount'>) => {

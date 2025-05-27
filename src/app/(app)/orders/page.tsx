@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
 
@@ -35,7 +36,8 @@ export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Order['status']>("Todos");
 
   const ordersNavItem = NAV_ITEMS.find(item => item.href === '/orders');
-  const { currentUser, loading: authLoading, getAllUsers } = useAuth();
+  const { currentUser, loading: authLoading, getAllUsers, hasPermission } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
 
   const fetchOrders = useCallback(async () => {
@@ -135,6 +137,13 @@ export default function OrdersPage() {
 
 
   useEffect(() => {
+    // Permission check
+    if (!authLoading && (!currentUser || !hasPermission('ver-pedidos'))) {
+      router.push('/access-denied');
+      return;
+    }
+
+    // Data fetching logic
     if (!authLoading) {
       fetchLeads();
       fetchUsers();
@@ -146,7 +155,7 @@ export default function OrdersPage() {
         setIsLoadingOrders(false);
       }
     }
-  }, [authLoading, currentUser, fetchOrders, fetchLeads, fetchUsers, fetchQuotes]);
+  }, [authLoading, currentUser, hasPermission, router, fetchOrders, fetchLeads, fetchUsers, fetchQuotes]);
 
 
   const handleSaveOrder = async (orderData: Order) => {

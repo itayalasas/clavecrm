@@ -57,7 +57,7 @@ export default function AuditLogPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
 
-  const { currentUser, getAllUsers } = useAuth();
+  const { currentUser, hasPermission, getAllUsers } = useAuth();
   const { toast } = useToast();
 
   const parseTimestampField = (fieldValue: any): string => {
@@ -121,7 +121,7 @@ export default function AuditLogPage() {
   }, [getAllUsers]);
 
   useEffect(() => {
-    if (currentUser?.role === 'admin' || currentUser?.role === 'supervisor') {
+    if (!isLoading && currentUser && hasPermission('ver-registro-auditoria')) {
         fetchAuditLogs();
         fetchUsersMap();
     } else {
@@ -129,8 +129,20 @@ export default function AuditLogPage() {
         setAuditLogs([]); // Clear logs if not authorized
     }
   }, [fetchAuditLogs, fetchUsersMap, currentUser]);
+ 
+ if (isLoading) {
+    return (
+      <div className="flex flex-grow items-center justify-center">
+        <div className="space-y-2">
+         <Skeleton className="h-8 w-64" />
+         <Skeleton className="h-64 w-full" />
+         <Skeleton className="h-4 w-48" />
+        </div>
+      </div>
+   );
+  }
 
-  if (currentUser?.role !== 'admin' && currentUser?.role !== 'supervisor') {
+  if (!currentUser || !hasPermission('ver-registro-auditoria')) {
     return (
         <Card className="m-auto mt-10 max-w-md">
             <CardHeader>

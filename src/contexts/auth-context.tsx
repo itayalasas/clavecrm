@@ -11,7 +11,7 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp, Timestamp, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase'; // Assuming your firebase instance is exported as 'db' from here
 import type { User, UserRole, StoredLicenseInfo, EffectiveLicenseStatus, LicenseDetailsApiResponse } from '@/lib/types';
 import { DEFAULT_USER_ROLE } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +34,7 @@ interface AuthContextType {
   userCount: number | null;
   unreadInboxCount: number | null;
   isLoadingUnreadCount: boolean;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
@@ -43,6 +44,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [firebaseUser, setFirebaseUser] = React.useState<FirebaseUser | null>(null);
   const [loading, setLoading] = React.useState(true);
   const { toast } = useToast();
+  const [userPermissions, setUserPermissions] = React.useState<string[]>([]);
   
   const [licenseInfo, setLicenseInfo] = React.useState<StoredLicenseInfo | null>(null);
   const [effectiveLicenseStatus, setEffectiveLicenseStatus] = React.useState<EffectiveLicenseStatus>('pending');
@@ -52,12 +54,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const getAllUsers = React.useCallback(async (): Promise<User[]> => {
     try {
+      // 1. Fetch all roles first
+      const rolesCollectionRef = collection(db, "roles");
+      const rolesSnapshot = await getDocs(rolesCollectionRef);
+      const rolesMap = new Map<string, any>();
+      rolesSnapshot.docs.forEach(docSnap => {
+        rolesMap.set(docSnap.id, docSnap.data());
+      });
+
+      // 2. Fetch users
       const usersCollectionRef = collection(db, "users");
       const querySnapshot = await getDocs(usersCollectionRef);
       const usersList = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         let createdAtStr = new Date().toISOString();
-        if (data.createdAt instanceof Timestamp) {
+        if (data.createdAt instanceof Timestamp) { // Handling Firestore Timestamp
             createdAtStr = data.createdAt.toDate().toISOString();
         } else if (typeof data.createdAt === 'string') {
             const parsedDate = parseISO(data.createdAt);
@@ -70,12 +81,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             createdAtStr = new Date(data.createdAt).toISOString();
         }
 
+        const roleData = rolesMap.get(data.role);
+        const roleName = roleData?.name || 'Rol Desconocido';
+
         return {
             id: docSnap.id,
             name: data.name || "Nombre Desconocido",
             email: data.email || "Email Desconocido",
             avatarUrl: data.avatarUrl || null,
             role: data.role || DEFAULT_USER_ROLE,
+ roleName: roleName,
             createdAt: createdAtStr,
         } as User;
       });
@@ -173,10 +188,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   React.useEffect(() => {
     let unsubscribeUnreadCount: (() => void) | undefined;
 
+    const fetchAndSetUserPermissions = async (roleId: string) => {
+      try {
+        const roleDocRef = doc(db, "roles", roleId);
+        const roleDocSnap = await getDoc(roleDocRef);
+        if (roleDocSnap.exists()) {
+          const roleData = roleDocSnap.data();
+          setUserPermissions(roleData.permissions || []);
+        } else {
+          console.warn(`AuthProvider: Role document for ID ${roleId} not found. Setting empty permissions.`);
+          setUserPermissions([]);
+        }
+      } catch (error) {
+        console.error("Error fetching user permissions:", error);
+        setUserPermissions([]);
+      }
+    };
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
-      let fetchedUser: User | null = null;
       if (user) {
+        let fetchedUser; // Declare fetchedUser here
         const userDocRef = doc(db, "users", user.uid);
         try {
           const userDocSnap = await getDoc(userDocRef);
@@ -205,7 +237,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 createdAt: createdAtStr
             } as User;
             setCurrentUser(fetchedUser);
-            
+            await fetchAndSetUserPermissions(fetchedUser.role);
             setIsLoadingUnreadCount(true);
             const unreadQuery = query(
               collection(db, "incomingEmails"),
@@ -224,12 +256,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           } else {
              console.warn(`Firestore document for user UID ${user.uid} not found.`);
              setCurrentUser(null);
+             setUserPermissions([]);
              if (unsubscribeUnreadCount) unsubscribeUnreadCount();
              setUnreadInboxCount(0);
              setIsLoadingUnreadCount(false);
           }
         } catch (dbError) {
             console.error("Error fetching user document from Firestore:", dbError);
+            setUserPermissions([]);
             setCurrentUser(null);
             if (unsubscribeUnreadCount) unsubscribeUnreadCount();
             setUnreadInboxCount(0);
@@ -237,6 +271,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } else {
         setCurrentUser(null);
+        setUserPermissions([]);
         if (unsubscribeUnreadCount) unsubscribeUnreadCount();
         setUnreadInboxCount(0);
         setIsLoadingUnreadCount(false);
@@ -375,6 +410,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       window.removeEventListener('authChanged', handleAuthChangeRecheck);
     }
   }, [getAllUsers, toast, performLicenseRevalidation]);
+
+  const hasPermission = React.useCallback((permission: string): boolean => {
+    console.log(`Checking permission ${permission} for user role ${currentUser?.role}`);
+    if (currentUser?.role === 'admin') {
+      // Administrators have all permissions
+      return true;
+    }
+    return userPermissions.includes(permission);
+  }, [userPermissions, currentUser?.role]);
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
@@ -538,6 +582,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         updateUserInFirestore,
         licenseInfo,
         effectiveLicenseStatus,
+        hasPermission, // Add hasPermission to the context value
         userCount,
         unreadInboxCount,
         isLoadingUnreadCount
@@ -554,5 +599,4 @@ export const useAuth = () => {
   }
   return context;
 };
-
     

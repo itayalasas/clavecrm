@@ -12,6 +12,7 @@ import { format, parseISO, isValid, Timestamp as FirestoreTimestamp } from 'date
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D'];
@@ -33,6 +34,7 @@ const parseDateField = (fieldValue: any): string | undefined => {
 
 
 export default function DashboardPage() {
+  const { currentUser, loading: authLoading, hasPermission } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>(INITIAL_PIPELINE_STAGES);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -88,6 +90,17 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
+    // Redirect if not authenticated or lacks permission after loading
+    if (!authLoading && (!currentUser || !hasPermission('ver-dashboard'))) {
+      // TODO: Replace with your actual redirect logic, e.g., using Next.js router
+      // window.location.href = '/access-denied'; // Simple redirect example
+       console.warn("Access Denied: User does not have 'ver-dashboard' permission.");
+       // For now, just log, you'll integrate actual router redirect
+       // import { useRouter } from 'next/navigation';
+       // const router = useRouter();
+       // router.push('/access-denied');
+    }
+
     fetchLeadsAndTasks();
   }, [fetchLeadsAndTasks]);
 
@@ -129,7 +142,7 @@ export default function DashboardPage() {
     })).slice(0, 10);
 
   const isLoading = isLoadingLeads || isLoadingTasks;
-
+  const pageLoading = authLoading || isLoading; // Consider auth loading as part of page loading
   if (isLoading && leads.length === 0 && tasks.length === 0) {
     return (
       <div className="flex flex-col gap-6">
@@ -142,6 +155,14 @@ export default function DashboardPage() {
         </div>
          <Skeleton className="h-40 w-full" />
       </div>
+    );
+  }
+
+   if (authLoading) {
+    return (
+        <div className="flex items-center justify-center h-screen">
+            <p>Cargando autenticación...</p>
+        </div>
     );
   }
 

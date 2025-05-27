@@ -1,142 +1,250 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import type { User } from "@/lib/types";
-import { useAuth } from "@/contexts/auth-context";
-import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
-import { AddEditUserDialog } from "@/components/user-management/add-edit-user-dialog";
-import { UsersTable } from "@/components/user-management/users-table";
-import { useToast } from "@/hooks/use-toast";
-import { NAV_ITEMS } from "@/lib/constants";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/auth-context';
+import { collection, doc, updateDoc, setDoc, getDocs } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage';
+import { useCollection } from 'react-firebase-hooks/firestore';
+import { Button } from '@/components/ui/button';
+import { PlusCircle } from 'lucide-react';
+import { AddEditUserDialog } from '@/components/user-management/add-edit-user-dialog';
+import { UsersTable } from '@/components/user-management/users-table';
+import { NAV_ITEMS } from '@/lib/constants';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import type { User, Role } from '@/lib/types';
+
+/**
+ * Genera un Data URI de imagen SVG con las iniciales dadas.
+ */
+function generateInitialsAvatar(
+  firstName: string,
+  lastName: string,
+  size = 100,
+  bgColor = '#4F46E5'
+): string {
+  const initials =
+    (firstName.charAt(0) || '').toUpperCase() +
+    (lastName.charAt(0) || '').toUpperCase();
+  const fontSize = Math.floor(size * 0.4);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+      <rect width="100%" height="100%" fill="${bgColor}" />
+      <text x="50%" y="50%" dy=".35em"
+            fill="#ffffff"
+            font-family="Arial, Helvetica, sans-serif"
+            font-size="${fontSize}"
+            text-anchor="middle">
+        ${initials}
+      </text>
+    </svg>
+  `.trim();
+  const base64 = typeof window === 'undefined'
+    ? Buffer.from(svg).toString('base64')
+    : window.btoa(svg);
+  return `data:image/svg+xml;base64,${base64}`;
+}
+
+/**
+ * Convierte un Data URI en Blob.
+ */
+async function dataUriToBlob(dataUri: string): Promise<Blob> {
+  const [meta, b64] = dataUri.split(',');
+  const mime = meta.match(/:(.*?);/)![1];
+  const binary = atob(b64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    arr[i] = binary.charCodeAt(i);
+  }
+  return new Blob([arr], { type: mime });
+}
 
 export default function UserManagementPage() {
+  const router = useRouter();
+  const { currentUser, loading: loadingAuth, hasPermission } = useAuth();
+  const { toast } = useToast();
+
+  // State
   const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
-  
-  const { getAllUsers, currentUser } = useAuth();
-  const { toast } = useToast();
 
-  const userManagementNavItem = NAV_ITEMS.find(item => item.href === '/user-management');
+  // Fetch roles
+  const [rolesSnapshot, loadingRoles, rolesError] = useCollection(
+    collection(db, 'roles')
+  );
+  const roles: Role[] = rolesSnapshot
+    ? rolesSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Role))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
 
+  // Get nav label
+  const navItem = NAV_ITEMS.find(item => item.href === '/user-management');
+
+  // Random color generator for avatar background
+  const getRandomColor = useCallback(() => {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+      color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+  }, []);
+
+  // Fetch users
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const fetchedUsers = await getAllUsers();
-      setUsers(fetchedUsers);
+      // Assuming authContext.getAllUsers returns User[]
+      const snapshot = await getDocs(collection(db, 'users'));
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      setUsers(fetched);
     } catch (err: any) {
-      console.error("Error fetching users:", err);
-      setError(err.message || "Ocurrió un error al cargar los usuarios.");
-      toast({
-        title: "Error al Cargar Usuarios",
-        description: err.message || "No se pudieron cargar los datos de los usuarios.",
-        variant: "destructive",
-      });
+      setError(err.message);
+      toast({ title: 'Error al cargar usuarios', description: err.message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
-  }, [getAllUsers, toast]);
+  }, [toast]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
-
-  const handleSaveSuccess = (savedUser: User) => {
-    // If editingUser was set, it means it was an update.
-    if (editingUser) {
-      setUsers(prevUsers => prevUsers.map(u => u.id === savedUser.id ? savedUser : u));
-    } else { // Otherwise, it was an add operation.
-      setUsers(prevUsers => [savedUser, ...prevUsers]);
+    if (!loadingAuth) {
+      if (!currentUser || !hasPermission('ver-usuarios')) {
+        router.push('/access-denied');
+        return;
+      }
+      fetchUsers();
     }
-    fetchUsers(); // Re-fetch to ensure data consistency, especially after signup might re-login admin
-    setIsUserDialogOpen(false);
-    setEditingUser(null);
+  }, [loadingAuth, currentUser, hasPermission, router, fetchUsers]);
+
+  // Save (add or edit) user
+  const handleSaveUser = async (
+    userData: Partial<User> & { roleId: string }
+  ) => {
+    try {
+      const { name = '', lastName = '', roleId, ...rest } = userData;
+      const usersColl = collection(db, 'users');
+      let userId = editingUser?.id;
+
+      // New user: generate ID
+      if (!userId) {
+        userId = doc(usersColl).id;
+      }
+
+      const dataToSave: Partial<User> = {
+        ...rest,
+        name,
+        lastName,
+        role: roleId,
+      };
+
+      // Generate avatar
+      const dataUri = generateInitialsAvatar(
+        name,
+        lastName,
+        100,
+        getRandomColor()
+      );
+      const blob = await dataUriToBlob(dataUri);
+      const storage = getStorage();
+      const avatarRef = ref(storage, `avatars/${userId}.png`);
+      await uploadBytes(avatarRef, blob);
+      const downloadUrl = await getDownloadURL(avatarRef);
+      dataToSave.avatarUrl = downloadUrl;
+
+      // Write Firestore
+      if (editingUser) {
+        await updateDoc(doc(db, 'users', userId), dataToSave);
+        toast({ title: 'Usuario actualizado' });
+      } else {
+        await setDoc(doc(db, 'users', userId), dataToSave);
+        toast({ title: 'Usuario creado' });
+      }
+
+      fetchUsers();
+      setIsUserDialogOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Error guardando usuario', description: err.message, variant: 'destructive' });
+    }
   };
 
-  const handleEditUser = (user: User) => {
-    setEditingUser(user);
+  const handleEditUser = (u: User) => {
+    setEditingUser(u);
     setIsUserDialogOpen(true);
   };
 
-  const handleDeleteUser = (userId: string) => {
-    // Call delete user function from context (needs implementation with Admin SDK or Cloud Function)
-    toast({ title: "Funcionalidad no implementada", description: "La eliminación de usuarios aún no está disponible." });
-    // Example: Optimistic update or re-fetch
-    // setUsers(prevUsers => prevUsers.filter(u => u.id !== userId)); 
+  const handleDeleteUser = (id: string) => {
+    toast({ title: 'Funcionalidad no implementada' });
   };
-  
-  const openNewUserDialog = () => {
-    setEditingUser(null);
-    setIsUserDialogOpen(true);
-  };
-  
-  // Basic role check - in a real app, this would be more robust
-  if (currentUser?.role !== 'admin' && currentUser?.role !== 'supervisor') {
+
+  if (loadingAuth) {
+    return <div>Cargando...</div>;
+  }
+
+  if (!hasPermission('ver-usuarios')) {
     return (
-        <Card className="m-auto mt-10 max-w-md">
-            <CardHeader>
-                <CardTitle>Acceso Denegado</CardTitle>
-                <CardDescription>No tienes permisos para acceder a esta sección.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p>Por favor, contacta a un administrador si crees que esto es un error.</p>
-            </CardContent>
-        </Card>
+      <Card className="m-auto mt-10 max-w-md">
+        <CardHeader>
+          <CardTitle>Acceso Denegado</CardTitle>
+          <CardDescription>Sin permisos para acceder.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p>Contacta al administrador.</p>
+        </CardContent>
+      </Card>
     );
   }
 
-
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h2 className="text-2xl font-semibold">{userManagementNavItem?.label || "Gestión de Usuarios"}</h2>
-        <Button onClick={openNewUserDialog}>
-            <PlusCircle className="mr-2 h-5 w-5" /> Añadir Nuevo Usuario
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-semibold">
+          {navItem?.label || 'Gestión de Usuarios'}
+        </h2>
+        <Button onClick={() => setIsUserDialogOpen(true)}>
+          <PlusCircle className="mr-2 h-5 w-5" />Añadir Usuario
         </Button>
       </div>
-      
+
       {error && (
         <Card className="bg-destructive/10 border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive">Error</CardTitle>
+            <CardTitle>Error</CardTitle>
           </CardHeader>
           <CardContent>
             <p>{error}</p>
-            <Button onClick={fetchUsers} variant="outline" className="mt-4">Reintentar</Button>
+            <Button onClick={fetchUsers} variant="outline">
+              Reintentar
+            </Button>
           </CardContent>
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lista de Usuarios</CardTitle>
-          <CardDescription>Visualiza y gestiona los usuarios del sistema.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UsersTable
-            users={users}
-            isLoading={isLoading && !error} // Show skeleton only if loading and no error displayed
-            onEditUser={handleEditUser}
-            onDeleteUser={handleDeleteUser}
-          />
-        </CardContent>
-      </Card>
-      
+      <UsersTable
+        users={users}
+        isLoading={isLoading}
+        onEditUser={handleEditUser}
+        onDeleteUser={handleDeleteUser}
+      />
+
       <AddEditUserDialog
         isOpen={isUserDialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           setIsUserDialogOpen(open);
-          if (!open) {
-            setEditingUser(null); // Clear editingUser when dialog closes
-          }
+          if (!open) setEditingUser(null);
         }}
         userToEdit={editingUser}
-        onSaveSuccess={handleSaveSuccess}
+        onSave={handleSaveUser}
+        roles={roles}
+        loadingRoles={loadingRoles}
+        rolesError={rolesError}
       />
     </div>
   );

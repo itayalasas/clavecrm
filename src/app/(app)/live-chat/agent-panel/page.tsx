@@ -1,5 +1,4 @@
-"use client";
-
+'use client';
 import { useState, useEffect, useCallback } from "react";
 import { ChatList } from "@/components/live-chat/agent-panel/chat-list";
 import { ChatWindow } from "@/components/live-chat/agent-panel/chat-window";

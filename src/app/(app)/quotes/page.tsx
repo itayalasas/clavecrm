@@ -11,7 +11,7 @@ import { PlusCircle, Search, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast"; 
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
@@ -33,8 +33,19 @@ export default function QuotesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Quote['status']>("Todos");
 
   const quotesNavItem = NAV_ITEMS.find(item => item.href === '/quotes');
-  const { currentUser, loading: authLoading, getAllUsers } = useAuth();
+  const { currentUser, loading: authLoading, getAllUsers, hasPermission } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
+
+  // Permission check effect
+  useEffect(() => {
+    if (!authLoading) {
+      if (!currentUser || !hasPermission('ver-cotizaciones')) {
+        router.push('/access-denied');
+      }
+    }
+  }, [currentUser, authLoading, hasPermission, router]);
+
 
   const fetchQuotes = useCallback(async () => {
     if (!currentUser) {
@@ -116,7 +127,7 @@ export default function QuotesPage() {
         setIsLoadingQuotes(false);
       }
     }
-  }, [authLoading, currentUser, fetchQuotes, fetchLeads, fetchUsers]);
+  }, [authLoading, currentUser, fetchQuotes, fetchLeads, fetchUsers, hasPermission, router]);
 
   const handleSaveQuote = async (quoteData: Quote) => {
     if (!currentUser) {

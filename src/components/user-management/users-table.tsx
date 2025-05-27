@@ -107,7 +107,7 @@ export function UsersTable({ users, isLoading, onEditUser, onDeleteUser }: Users
             </TableCell>
             <TableCell>
               <Badge variant="secondary" className="capitalize">
-                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                {user.roleName}
               </Badge>
             </TableCell>
             <TableCell className="text-right">

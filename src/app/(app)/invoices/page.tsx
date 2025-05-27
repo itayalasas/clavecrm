@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
 
@@ -38,6 +39,7 @@ export default function InvoicesPage() {
   const { currentUser, loading: authLoading, getAllUsers } = useAuth();
   const { toast } = useToast();
 
+  const router = useRouter();
   const fetchInvoices = useCallback(async () => {
     if (!currentUser) {
       setIsLoadingInvoices(false);
@@ -119,6 +121,14 @@ export default function InvoicesPage() {
   }, [getAllUsers]);
 
   useEffect(() => {
+    // Permission validation effect
+    if (!authLoading) {
+      if (!currentUser || !hasPermission('ver-facturas')) {
+        router.push('/access-denied');
+      }
+    }
+
+    // Data fetching effect
     if (!authLoading) {
       fetchOrders();
       fetchLeads();
@@ -130,7 +140,7 @@ export default function InvoicesPage() {
         setIsLoadingInvoices(false);
       }
     }
-  }, [authLoading, currentUser, fetchInvoices, fetchOrders, fetchLeads, fetchUsers]);
+  }, [authLoading, currentUser, fetchInvoices, fetchOrders, fetchLeads, fetchUsers, hasPermission, router]);
 
   const handleSaveInvoice = async (invoiceData: Invoice) => {
     if (!currentUser) {
@@ -209,6 +219,12 @@ export default function InvoicesPage() {
 
   const pageIsLoading = authLoading || isLoadingInvoices || isLoadingOrders || isLoadingLeads || isLoadingUsers;
 
+  // Show loading indicator while authenticating or fetching initial data
+  if (authLoading) {
+    return <div className="flex justify-center items-center h-screen"><p>Cargando...</p></div>;
+  }
+
+  // If user doesn't have permission, the effect will redirect them. Render null or a placeholder if needed.
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">

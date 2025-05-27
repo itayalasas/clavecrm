@@ -12,42 +12,48 @@ export type NavItem = {
   subItems?: NavItem[];
   disabled?: boolean; // For features not yet implemented
   parentActiveIf?: (pathname: string) => boolean; // Optional: custom logic for parent active state
+  requiredPermission?: string; // Optional: Permission key required to view this item
 };
 
 export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Panel de Control', icon: LayoutDashboard },
   {
+    requiredPermission: 'ver-ventas', // Permission for the Sales section
     label: 'Ventas',
     icon: DollarSign,
     subItems: [
-      { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig },
-      { href: '/quotes', label: 'Cotizaciones', icon: FileText },
-      { href: '/orders', label: 'Pedidos', icon: ShoppingCart },
-      { href: '/invoices', label: 'Facturas', icon: Receipt },
+      { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig, requiredPermission: 'ver-pipeline' },
+      { href: '/leads', label: 'Gestión de Leads', icon: UsersIcon, requiredPermission: 'ver-leads' }, // Added Leads as a sub-item under Sales
+      { href: '/quotes', label: 'Cotizaciones', icon: FileText, requiredPermission: 'ver-cotizaciones' },
+      { href: '/orders', label: 'Pedidos', icon: ShoppingCart, requiredPermission: 'ver-pedidos' },
+      { href: '/invoices', label: 'Facturas', icon: Receipt, requiredPermission: 'ver-facturas' },
     ],
     parentActiveIf: (pathname) => ['/pipeline', '/quotes', '/orders', '/invoices'].some(p => pathname.startsWith(p)),
   },
   {
+    requiredPermission: 'ver-marketing', // Permission for the Marketing section
     label: 'Marketing',
     icon: Target,
     subItems: [
-      { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles },
-      { href: '/email-campaigns', label: 'Campañas de Email', icon: Send },
+      { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles, requiredPermission: 'usar-ai-email' },
+      { href: '/email-campaigns', label: 'Campañas de Email', icon: Send, requiredPermission: 'ver-campanas-email' },
       { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap, disabled: true },
       { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate, disabled: true },
       { href: '/social-crm', label: 'Social CRM', icon: Share2, disabled: true },
     ],
     parentActiveIf: (pathname) => ['/ai-email-assistant', '/email-campaigns', '/marketing-automation', '/landing-pages', '/social-crm'].some(p => pathname.startsWith(p)),
   },
-  { href: '/email', label: 'Correo Electrónico', icon: MailIcon },
+  { href: '/email', label: 'Correo Electrónico', icon: MailIcon, requiredPermission: 'ver-correos' },
+  // Assuming 'Correo Electrónico' doesn't require a specific permission beyond being authenticated
   {
+    requiredPermission: 'ver-colaboracion', // Permission for the Collaboration section
     label: 'Colaboración y Productividad',
     icon: UsersRound,
     subItems: [
-      { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays },
-      { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock },
-      { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban },
-      { href: '/tasks', label: 'Tareas', icon: ListChecks },
+      { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays, requiredPermission: 'ver-calendario' },
+      { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, requiredPermission: 'ver-registro-actividades' },
+      { href: '/documents', label: 'Gestión de Documentos', icon: FolderKanban, requiredPermission: 'ver-documentos' },
+      { href: '/tasks', label: 'Tareas', icon: ListChecks, requiredPermission: 'ver-tareas' },
     ],
     parentActiveIf: (pathname) => ['/calendar', '/activity-log', '/documents', '/tasks'].some(p => pathname.startsWith(p)),
   },
@@ -55,10 +61,10 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Soporte al Cliente',
     icon: LifeBuoy,
     subItems: [
-      { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList },
-      { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain },
-      { href: '/live-chat', label: 'Chat en Vivo / Chatbots', icon: MessagesSquare },
-      { href: '/satisfaction-surveys', label: 'Encuestas de Satisfacción', icon: Smile },
+      { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList, requiredPermission: 'ver-tickets' },
+      { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain, requiredPermission: 'ver-base-conocimiento' },
+      { href: '/live-chat', label: 'Chat en Vivo / Chatbots', icon: MessagesSquare, requiredPermission: 'ver-chat-vivo' },
+      { href: '/satisfaction-surveys', label: 'Encuestas de Satisfacción', icon: Smile, requiredPermission: 'ver-encuestas' },
     ],
     parentActiveIf: (pathname) => ['/tickets', '/knowledge-base', '/live-chat', '/satisfaction-surveys'].some(p => pathname.startsWith(p)),
   },
@@ -66,18 +72,19 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Administración',
     icon: SlidersHorizontal,
     subItems: [
-      { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon },
-      { href: '/settings', label: 'Configuración General', icon: Settings },
-      { href: '/settings/my-email-account', label: 'Mi Cuenta de Correo', icon: UserCircleIconLucide },
-      { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle },
-      { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck },
-      { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon },
-      { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon },
-      { href: '/settings/escalation-logs', label: 'Historial de Escalados', icon: AlertTriangle },
-      { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon },
-      { href: '/settings/license', label: 'Licencia de Aplicación', icon: KeyRound },
+      { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon, requiredPermission: 'PERMISO_REQUERIDO' },
+      { href: '/settings', label: 'Configuración General', icon: Settings, requiredPermission: 'acceder-configuracion-general' },
+      { href: '/settings/my-email-account', label: 'Mi Cuenta de Correo', icon: UserCircleIconLucide, requiredPermission: 'PERMISO_ADMON_ESPECIFICO' },
+      { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle, requiredPermission: 'PERMISO_ADMON_ESPECIFICO' },
+      { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck, requiredPermission: 'gestionar-slas' },
+      { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon, requiredPermission: 'gestionar-colas-soporte' },
+      { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon, requiredPermission: 'gestionar-reglas-escalamiento' },
+      { href: '/settings/escalation-logs', label: 'Historial de Escalados', icon: AlertTriangle, requiredPermission: 'ver-logs-escalamiento' },
+      { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon, requiredPermission: 'ver-registro-auditoria' },
+      { href: '/roles-and-permissions', label: 'Gestión de Roles y Permisos', icon: UsersIcon, requiredPermission: 'ver-roles-permisos' },
+      { href: '/settings/license', label: 'Licencia de Aplicación', icon: KeyRound, requiredPermission: 'ver-licencia' },
     ],
-    parentActiveIf: (pathname) => [
+ parentActiveIf: (pathname) => [
         '/user-management',
         '/settings', // This will match /settings and /settings/*
         '/audit-log',

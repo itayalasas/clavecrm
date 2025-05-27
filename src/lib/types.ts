@@ -3,6 +3,11 @@ import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to 
 
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
 
+export type FolderType = 'inbox' | 'sent' | 'pending' | 'drafts' | 'trash';
+
+
+
+
 export interface Lead {
   id: string;
   name: string;
@@ -711,6 +716,8 @@ export interface EmailMessage {
   relatedContactId?: string;
   relatedTicketId?: string;
   userId: string; // The CRM user this email is associated with (whose inbox/sent items it belongs to OR who sent it)
+  collectionSource: 'incomingEmails' | 'outgoingEmails';
+
 }
 
 // For emails being queued for sending, before they become full EmailMessage after sending

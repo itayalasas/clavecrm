@@ -19,6 +19,7 @@ import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy,
 import { addMonths, setDate, startOfMonth, format, parseISO } from "date-fns";
 import { es } from 'date-fns/locale';
 import { logSystemEvent } from "@/lib/auditLogger"; // Import audit logger
+import { useRouter } from "next/navigation"; // Import useRouter
 
 
 export default function TasksPage() {
@@ -38,7 +39,8 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
 
   const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
-  const { getAllUsers, currentUser, loading: authLoading } = useAuth();
+  const { getAllUsers, currentUser, loading: authLoading, hasPermission } = useAuth(); // Destructure hasPermission
+  const router = useRouter(); // Initialize useRouter
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
@@ -120,6 +122,14 @@ export default function TasksPage() {
       setIsLoadingUsers(false);
     }
   }, [getAllUsers, toast]);
+
+  useEffect(() => {
+    // Check permissions and redirect if necessary
+    if (!authLoading && !hasPermission('ver-tareas')) {
+      router.push('/access-denied');
+    }
+  }, [authLoading, hasPermission, router]);
+
 
   useEffect(() => {
     if (!authLoading) { 
@@ -319,6 +329,12 @@ export default function TasksPage() {
   const openDialogForEditTask = (task: Task) => {
     setEditingTask(task);
     setIsTaskDialogOpen(true);
+  };
+
+   if (authLoading) {
+    return (
+        <div className="flex flex-grow items-center justify-center h-full"><p>Cargando...</p></div>
+    );
   };
 
   const isLoading = authLoading || isLoadingTasks || isLoadingUsers || isLoadingLeads;

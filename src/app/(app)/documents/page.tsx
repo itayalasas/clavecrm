@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FolderKanban, PlusCircle, Search, Filter, Settings2, Share2 as ShareIconLucide, GitBranch, Info, History, FileSignature, Link as LinkIconLucideReal, RotateCcw, Library, Play, Users, Eye, Bell, Users2, View } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db, storage } from "@/lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, where, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
@@ -74,7 +75,7 @@ export default function DocumentsPage() {
   const [documentToView, setDocumentToView] = useState<DocumentFile | null>(null);
 
 
-  const { currentUser, getAllUsers } = useAuth();
+  const { currentUser, getAllUsers, loading, hasPermission } = useAuth();
   const { toast } = useToast();
 
   const fetchDocuments = useCallback(async () => {
@@ -218,6 +219,10 @@ export default function DocumentsPage() {
     fetchDocumentTemplates();
     fetchSupportData();
   }, [fetchDocuments, fetchDocumentTemplates, fetchSupportData]);
+
+  if (!loading && !hasPermission('ver-documentos')) {
+    redirect('/access-denied');
+  }
 
   const handleUploadSuccess = (uploadedFileName: string) => {
     fetchDocuments();

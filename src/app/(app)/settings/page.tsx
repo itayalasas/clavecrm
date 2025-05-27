@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NAV_ITEMS } from "@/lib/constants";
 import type { EmailSettings, SMTPSecurity, WhatsAppApiSettings } from "@/lib/types";
-import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle, Smartphone, UserCircle as UserCircleIcon } from "lucide-react";
+import { Settings, Mail, Share2Icon, AlertTriangle, Loader2, Eye, EyeOff, ShieldCheck, History, MessageCircle, Smartphone, UserCircle as UserCircleIcon, Frown } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, type Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -46,7 +46,7 @@ export default function SettingsPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.label === 'Configuración General');
   const PageIcon = navItem?.icon || Settings;
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, loading, hasPermission } = useAuth();
 
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
@@ -76,6 +76,14 @@ export default function SettingsPage() {
       webhookVerifyToken: "",
     },
   });
+
+  useEffect(() => {
+    if (!loading && !hasPermission('acceder-configuracion-general')) {
+      router.push('/access-denied');
+    }
+  }, [loading, hasPermission, router]);
+
+  const router = useRouter(); // Ensure useRouter is available
 
 
   useEffect(() => {
@@ -177,6 +185,19 @@ export default function SettingsPage() {
 
 
   return (
+    // Add permission check and loading state rendering
+    loading ? (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-var(--header-height,4rem))]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-lg text-muted-foreground">Cargando configuración...</p>
+      </div>
+    ) : (!hasPermission('acceder-configuracion-general') ? (
+       <div className="flex flex-col items-center justify-center h-[calc(100vh-var(--header-height,4rem))]">
+         <Frown className="h-12 w-12 text-amber-500" />
+         <p className="mt-4 text-xl font-semibold text-amber-700">Acceso Denegado</p>
+         <p className="mt-2 text-muted-foreground">No tienes permiso para ver esta página.</p>
+       </div>
+    ) : (
     <div className="flex flex-col gap-8">
       <Card className="shadow-lg">
         <CardHeader>
@@ -547,5 +568,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
     </div>
+    )) // Close conditional rendering
   );
 }

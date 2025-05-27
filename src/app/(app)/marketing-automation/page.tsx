@@ -1,11 +1,25 @@
 
 "use client";
 
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Zap } from "lucide-react";
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
 
 export default function MarketingAutomationPage() {
+  const { currentUser, loading, hasPermission } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser || !hasPermission('ver-automatizaciones')) {
+        router.push('/access-denied');
+      }
+    }
+  }, [currentUser, loading, hasPermission, router]);
+
   const navItem = NAV_ITEMS.find(item => item.href === '/marketing-automation');
   const PageIcon = navItem?.icon || Zap;
 
@@ -22,6 +36,8 @@ export default function MarketingAutomationPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+           {loading && <div>Cargando...</div>}
+           {!loading && currentUser && hasPermission('ver-automatizaciones') && (
            <div className="space-y-4">
             <div>
               <h3 className="text-lg font-semibold">Próximas Funcionalidades:</h3>
@@ -37,6 +53,7 @@ export default function MarketingAutomationPage() {
               Esta sección está actualmente en desarrollo. Vuelve pronto para ver las actualizaciones.
             </p>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

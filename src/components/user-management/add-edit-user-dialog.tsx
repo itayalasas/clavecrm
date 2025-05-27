@@ -5,7 +5,6 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { User, UserRole } from "@/lib/types";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +12,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"; // DialogTrigger removed as it's handled by parent
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,23 +23,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { USER_ROLES, DEFAULT_USER_ROLE } from "@/lib/constants";
 import { useAuth } from "@/contexts/auth-context";
-import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-
+import { collection, getDocs, setDoc, doc } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase"; // Assuming db and auth are exported from "@/lib/firebase"
+import { fetchSignInMethodsForEmail } from 'firebase/auth';
 const addUserFormSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio."),
   email: z.string().email("Correo electrónico inválido."),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
-  role: z.enum(USER_ROLES as [string, ...string[]], { errorMap: () => ({ message: "Rol inválido."}) }),
+  role: z.string().min(1, "Debes seleccionar un rol."),
 });
 
 const editUserFormSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio."),
-  email: z.string().email("Correo electrónico inválido."), // Will be read-only
-  role: z.enum(USER_ROLES as [string, ...string[]], { errorMap: () => ({ message: "Rol inválido."}) }),
+  email: z.string().email("Correo electrónico inválido."),
+  role: z.string().min(1, "Debes seleccionar un rol."),
 });
 
 type UserFormValues = z.infer<typeof addUserFormSchema> | z.infer<typeof editUserFormSchema>;
@@ -61,11 +62,26 @@ export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSucc
     resolver: zodResolver(formSchema),
     defaultValues: userToEdit 
       ? { name: userToEdit.name, email: userToEdit.email, role: userToEdit.role }
-      : { name: "", email: "", password: "", role: DEFAULT_USER_ROLE },
+ : { name: "", email: "", password: "", role: "" },
   });
 
+   const [roles, setRoles] = useState<UserRole[]>([]);
   useEffect(() => {
-    if (isOpen) {
+     if (isOpen) {
+       const fetchRoles = async () => {
+ try {
+ const fetchedRoles = await getDocs(collection(db, 'roles'));
+ setRoles(fetchedRoles.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserRole)));
+ } catch (error) {
+ console.error("Error fetching roles:", error);
+ }
+       };
+ fetchRoles();
+     }
+  }, [isOpen]); // Dependency array for the first useEffect
+  
+  useEffect(() => {
+    if (isOpen) { // Ensure reset only happens when dialog is open
       if (userToEdit) {
         form.reset({
           name: userToEdit.name,
@@ -77,46 +93,56 @@ export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSucc
           name: "",
           email: "",
           password: "",
-          role: DEFAULT_USER_ROLE,
+ role: "",
         });
       }
     }
-  }, [userToEdit, isOpen, form]);
+  }, [userToEdit, isOpen, form]); // Dependency array for the second useEffect
 
   const onSubmitHandler: SubmitHandler<UserFormValues> = async (data) => {
-    if (!adminUser) {
-      toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive"});
-      return;
-    }
-
+    console.log("onSubmitHandler: Iniciando envío del formulario.");
     if (userToEdit) { // Editing existing user
+      if (!adminUser) {
+        toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive" });
+        return;
+      }
       try {
         const updatedUserData: Partial<User> = {
             name: data.name,
             role: (data as z.infer<typeof editUserFormSchema>).role, // Type assertion
         };
-        await updateUserInFirestore(userToEdit.id, updatedUserData, adminUser);
-        onSaveSuccess({ ...userToEdit, ...updatedUserData });
+ await updateUserInFirestore(userToEdit.id, updatedUserData, adminUser); // Parent will refetch/update list
         toast({ title: "Usuario Actualizado", description: `Los datos de ${data.name} han sido actualizados.` });
         onOpenChange(false);
       } catch (error: any) {
-        console.error("Error updating user:", error);
-        toast({ title: "Error al Actualizar", description: error.message || "No se pudo actualizar el usuario.", variant: "destructive"});
+        console.error("Error updating user:", error); // Handle error (e.g., with a toast)
+        toast({ title: "Error al Actualizar", description: error.message || "No se pudo actualizar el usuario.", variant: "destructive" });
       }
     } else { // Adding new user
+      if (!adminUser) {
+        toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive" });
+        return;
+      }
       const addData = data as z.infer<typeof addUserFormSchema>; // Type assertion
       try {
-        const firebaseUser = await signup(addData.email, addData.password, addData.name, addData.role);
-        if (firebaseUser?.uid) {
-          onSaveSuccess({
-              id: firebaseUser.uid,
+        // Check if email already exists in Firebase Auth
+        const signInMethods = await fetchSignInMethodsForEmail(auth, addData.email);
+        if (signInMethods.length > 0) {
+          toast({ title: "Error", description: "El correo electrónico ya está registrado.", variant: "destructive" });
+          return; // Stop submission
+        }
+
+        const firebaseUser = await signup(addData.email, addData.password, addData.name, addData.role).then(firebaseUser => {
+          return { // Explicit return of the user object
+              id: firebaseUser.uid, // Use firebaseUser.uid as the ID
               name: addData.name,
               email: addData.email,
               role: addData.role,
-          });
-        }
+          };
+        });
         onOpenChange(false);
-      } catch (error: any) {
+      } catch (error: any) { // Handle error (e.g., with a toast)
+        toast({ title: "Error al Crear Usuario", description: error.message || "No se pudo crear el usuario.", variant: "destructive" });
         console.error("Error creating user (dialog):", error);
         // Toast is handled in signup
       }
@@ -197,9 +223,9 @@ export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSucc
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {USER_ROLES.map((role) => (
-                        <SelectItem key={role} value={role} className="capitalize">
-                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id} className="capitalize">
+                          {role.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

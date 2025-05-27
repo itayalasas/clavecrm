@@ -1,16 +1,29 @@
 
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS, INITIAL_KB_ARTICLES } from "@/lib/constants";
 import { Brain, AlertTriangle, Link as LinkIcon, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { KnowledgeBaseArticle } from "@/lib/types";
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
 
 export default function KnowledgeBasePage() {
+  const { currentUser, loading, hasPermission } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser || !hasPermission('ver-base-conocimiento')) {
+        router.push('/access-denied');
+      }
+    }
+  }, [currentUser, loading, hasPermission, router]);
+
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/knowledge-base');
   const PageIcon = navItem?.icon || Brain;
   const [searchTerm, setSearchTerm] = useState("");
@@ -24,6 +37,10 @@ export default function KnowledgeBasePage() {
     (article.tags && article.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))) ||
     (article.category && article.category.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+   if (loading) {
+    return <div>Cargando...</div>;
+  }
 
 
   return (

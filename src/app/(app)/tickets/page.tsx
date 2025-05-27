@@ -69,7 +69,7 @@ export default function TicketsPage() {
   const [filterAssignee, setFilterAssignee] = useState<"Todos" | string>("Todos");
   const [ticketToOpen, setTicketToOpen] = useState<string | null>(null); 
 
-  const { toast } = useToast();
+ const { toast } = useToast();
   const { getAllUsers, currentUser, loading: authLoading } = useAuth();
   const ticketsNavItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/tickets');
   const PageIcon = ticketsNavItem?.icon || ClipboardList;
@@ -195,6 +195,22 @@ export default function TicketsPage() {
         setIsLoadingSlasAndQueues(false);
     }
   }, [toast]);
+
+
+  // Permission validation
+  const { hasPermission, loading: permissionsLoading } = useAuth();
+
+  useEffect(() => {
+    // Wait until both auth and permissions are loaded
+    if (!authLoading && !permissionsLoading) {
+      // Check if the user is authenticated and has the 'ver-tickets' permission
+      if (!currentUser || !hasPermission('ver-tickets')) {
+        // If not, redirect to the access denied page
+        router.push('/access-denied'); 
+      }
+    }
+  }, [currentUser, authLoading, permissionsLoading, hasPermission, router]);
+
 
 
   useEffect(() => {
@@ -514,7 +530,7 @@ export default function TicketsPage() {
 
   const allTicketStatusesForTabs: ("Todos" | TicketStatus)[] = ["Todos", ...TICKET_STATUSES];
 
-  const isLoading = authLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads || isLoadingSlasAndQueues;
+ const isLoading = authLoading || permissionsLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads || isLoadingSlasAndQueues;
 
   return (
     <div className="flex flex-col gap-6">

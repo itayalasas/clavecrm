@@ -4,8 +4,22 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS } from "@/lib/constants";
 import { LayoutTemplate } from "lucide-react";
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function LandingPagesPage() {
+  const { currentUser, loading, hasPermission } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser || !hasPermission('ver-paginas-aterrizaje')) {
+        router.push('/access-denied');
+      }
+    }
+  }, [currentUser, loading, hasPermission, router]);
+
   const navItem = NAV_ITEMS.find(item => item.href === '/landing-pages');
   const PageIcon = navItem?.icon || LayoutTemplate;
 
@@ -14,6 +28,10 @@ export default function LandingPagesPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
+            {loading && <div>Cargando...</div>}
+            {(!loading && (!currentUser || !hasPermission('ver-paginas-aterrizaje'))) && null} {/* Render nothing if access is denied */}
+            {(!loading && currentUser && hasPermission('ver-paginas-aterrizaje')) && (
+              <>
             <PageIcon className="h-6 w-6 text-primary" />
             {navItem?.label || "Landing Pages y Formularios"}
           </CardTitle>
@@ -38,6 +56,8 @@ export default function LandingPagesPage() {
               Esta sección está actualmente en desarrollo. Vuelve pronto para ver las actualizaciones.
             </p>
           </div>
+           )}
+
         </CardContent>
       </Card>
     </div>
