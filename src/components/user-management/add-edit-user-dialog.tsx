@@ -49,10 +49,10 @@ interface AddEditUserDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   userToEdit?: User | null; 
-  onSaveSuccess: (user: User) => void; // Generalized callback
+  onSave: (userData: UserFormValues) => Promise<void>; // Callback to save user data (including creation)
 }
 
-export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSuccess }: AddEditUserDialogProps) {
+export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSave }: AddEditUserDialogProps) {
   const { signup, updateUserInFirestore, currentUser: adminUser } = useAuth();
   const { toast } = useToast();
   
@@ -117,7 +117,7 @@ export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSucc
       } catch (error: any) {
         console.error("Error updating user:", error); // Handle error (e.g., with a toast)
         toast({ title: "Error al Actualizar", description: error.message || "No se pudo actualizar el usuario.", variant: "destructive" });
-      }
+      } finally {} // No need to close dialog here, parent will handle after refetch
     } else { // Adding new user
       if (!adminUser) {
         toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive" });
@@ -132,15 +132,11 @@ export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSaveSucc
           return; // Stop submission
         }
 
-        const firebaseUser = await signup(addData.email, addData.password, addData.name, addData.role).then(firebaseUser => {
-          return { // Explicit return of the user object
-              id: firebaseUser.uid, // Use firebaseUser.uid as the ID
-              name: addData.name,
-              email: addData.email,
-              role: addData.role,
-          };
-        });
-        onOpenChange(false);
+        // Call the parent's onSave function with the form data
+        // The parent will handle user creation (including auth and firestore/avatar)
+        await onSave(addData);
+        toast({ title: "Usuario Creado", description: `El usuario ${addData.name} ha sido creado.` });
+        onOpenChange(false); // Close dialog on success
       } catch (error: any) { // Handle error (e.g., with a toast)
         toast({ title: "Error al Crear Usuario", description: error.message || "No se pudo crear el usuario.", variant: "destructive" });
         console.error("Error creating user (dialog):", error);

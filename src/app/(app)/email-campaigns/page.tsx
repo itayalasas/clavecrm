@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";import { useRouter } from 'next/navigation';
 import type { ContactList, EmailCampaign, EmailTemplate, Contact, EmailCampaignAnalytics, EmailCampaignStatus } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Send, Users, FileText as TemplateIcon, PlusCircle, Construction, Import, SlidersHorizontal, FileSignature, LucideIcon, Palette, ListChecks, BarChart2, TestTube2, Clock, Search, Filter as FilterIcon, CalendarIcon, Eraser, Beaker } from "lucide-react";
@@ -55,6 +55,7 @@ type EmailCampaignFormValues = {
 const ITEMS_PER_PAGE = 12; // 4 filas de 3 campañas
 
 export default function EmailCampaignsPage() {
+  const router = useRouter();
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/email-campaigns');
   const PageIcon = navItem?.icon || Send;
 
@@ -265,17 +266,11 @@ export default function EmailCampaignsPage() {
   }, [currentUser, toast, fetchTemplates]);
 
   // Permission check effect
-  useEffect(() => {
-    if (!loading) {
-      if (!currentUser || !hasPermission('ver-campañas-correo')) {
-        router.push('/access-denied');
-      }
+ useEffect(() => {
+    if (!loading && (!currentUser || !hasPermission('ver-campañas-correo'))) {
+      router.push('/access-denied');
     }
-  }, [currentUser, loading, hasPermission, router]);
-
-  if (loading || (!currentUser && !loading)) {
-    return <div>Cargando...</div>; // Or a better loading component
-  }
+ }, [currentUser, loading, hasPermission, router]);
 
 
   const handleSaveContactList = async (listData: Omit<ContactList, 'id' | 'createdAt' | 'contactCount'>) => {

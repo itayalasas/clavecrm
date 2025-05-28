@@ -13,9 +13,12 @@ import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Send, Paperclip, Archive as ArchiveIcon, Loader2, Trash2, MoreVertical, XCircle, UserPlus, X as XIcon, Edit2, Maximize, Minimize } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/firebase"; // Import firebase db
 import type { Lead, Contact } from "@/lib/types";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
+import { useAuth } from "@/contexts/auth-context"; // Import useAuth hook
+
 
 const emailComposerSchema = z.object({
   to: z.string().email("Dirección de correo 'Para' inválida."),
@@ -28,6 +31,7 @@ const emailComposerSchema = z.object({
   subject: z.string().min(1, "El asunto es obligatorio."),
   body: z.string().min(1, "El cuerpo del correo es obligatorio."),
 });
+import { collection, addDoc, serverTimestamp } from "firebase/firestore"; // Import firestore functions
 
 type EmailComposerFormValues = z.infer<typeof emailComposerSchema>;
 
@@ -58,6 +62,7 @@ export function EmailComposer({
   leads = [],
   contacts = [],
 }: EmailComposerProps) {
+  const { currentUser } = useAuth(); // Get the authenticated user
   const { toast } = useToast();
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -70,11 +75,6 @@ export function EmailComposer({
     defaultValues: { to: initialTo, cc: "", bcc: "", subject: initialSubject, body: initialBody, },
   });
 
-  useEffect(() => {
-    form.reset({ to: initialTo, cc: "", bcc: "", subject: initialSubject, body: initialBody, });
-    setShowCc(false); setShowBcc(false); setSelectedFiles([]);
-  }, [initialTo, initialSubject, initialBody, initialAttachments, form]);
-
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) setSelectedFiles(prevFiles => [...prevFiles, ...Array.from(event.target.files as FileList)]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -82,9 +82,36 @@ export function EmailComposer({
 
   const removeSelectedFile = (fileName: string) => setSelectedFiles(prevFiles => prevFiles.filter(file => file.name !== fileName));
 
+  // Modify onSubmit to save email to Firebase
   const onSubmit: SubmitHandler<EmailComposerFormValues> = async (data) => {
-    const success = await onQueueEmail(data, selectedFiles);
-    if (success && onClose) onClose();
+    if (!currentUser) {
+      toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      // Prepare email data for Firestore
+     const emailData = {
+        to: data.to,
+        cc: data.cc || null,
+        bcc: data.bcc || null,
+        subject: data.subject,
+        bodyHtml: data.body,
+        from: currentUser.email, // Use authenticated user's email
+        fromName: currentUser.name || currentUser.email, // Use authenticated user's name or email
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), // Keep updatedAt for potential future edits (draft to sent)
+        status: "pending", // Initial status
+        userId: currentUser.id, // Use authenticated user's ID from currentUser.id
+        attachments: selectedFiles.map(file => ({ // Basic attachment info
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        })),
+      };
+      await addDoc(collection(db, "outgoingEmails"), emailData);
+      if (onClose) onClose();
+    } catch (error) { toast({ title: "Error al enviar correo.", description: "No se pudo guardar el correo en la base de datos.", variant: "destructive" }); }
   };
 
   const handleDraftSave: SubmitHandler<EmailComposerFormValues> = async (data) => {

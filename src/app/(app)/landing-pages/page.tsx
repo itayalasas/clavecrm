@@ -24,7 +24,7 @@ export default function LandingPagesPage() {
   const PageIcon = navItem?.icon || LayoutTemplate;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6">\
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
@@ -32,10 +32,12 @@ export default function LandingPagesPage() {
             {(!loading && (!currentUser || !hasPermission('ver-paginas-aterrizaje'))) && null} {/* Render nothing if access is denied */}
             {(!loading && currentUser && hasPermission('ver-paginas-aterrizaje')) && (
               <>
+            {(!loading && currentUser && hasPermission('ver-paginas-aterrizaje')) && (\
+              <>
             <PageIcon className="h-6 w-6 text-primary" />
             {navItem?.label || "Landing Pages y Formularios"}
           </CardTitle>
-          <CardDescription>
+<CardDescription>
             Diseña landing pages y formularios web para capturar leads directamente en tu CRM.
           </CardDescription>
         </CardHeader>

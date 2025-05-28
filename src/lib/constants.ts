@@ -92,6 +92,44 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+export const allPermissions = [
+  { module: "Panel de Control", permissions: ["ver-dashboard"] },
+  { module: "Ventas", permissions: ["ver-ventas"] },
+  { module: "Embudo de Ventas", permissions: ["ver-pipeline"] },
+  { module: "Gestión de Leads", permissions: ["ver-leads", "crear-lead", "editar-lead", "eliminar-lead", "cambiar-etapa-lead"] },
+  { module: "Cotizaciones", permissions: ["ver-cotizaciones", "crear-cotizacion", "editar-cotizacion", "eliminar-cotizacion", "enviar-cotizacion"] },
+  { module: "Pedidos", permissions: ["ver-pedidos", "crear-pedido", "editar-pedido", "eliminar-pedido", "cambiar-estado-pedido"] },
+  { module: "Facturas", permissions: ["ver-facturas", "crear-factura", "editar-factura", "eliminar-factura", "enviar-factura"] },
+  { module: "Marketing", permissions: ["ver-marketing"] },
+  { module: "Asistente IA de Correo", permissions: ["usar-ai-email"] },
+  { module: "Campañas de Email", permissions: ["ver-campanas-email", "crear-campana-correo", "editar-campana-correo", "eliminar-campana-correo", "enviar-campana-correo", "ver-listas-contacto", "crear-lista-contacto", "editar-lista-contacto", "eliminar-lista-contacto", "gestionar-contactos-lista", "ver-plantillas-correo", "crear-plantilla-correo", "editar-plantilla-correo", "eliminar-plantilla-correo"] },
+  { module: "Automatización Marketing", permissions: ["ver-automatizaciones", "crear-automatizacion", "editar-automatizacion", "eliminar-automatizacion", "activar-automatizacion", "desactivar-automatizacion"] }, // Assuming these exist based on your NAV_ITEMS
+  { module: "Landing Pages y Formularios", permissions: ["ver-paginas-aterrizaje", "crear-pagina-aterrizaje", "editar-pagina-aterrizaje", "eliminar-pagina-aterrizaje", "publicar-pagina-aterrizaje"] }, // Assuming these exist
+  { module: "Social CRM", permissions: ["ver-social-crm", "publicar-redes-sociales", "interactuar-publicaciones-sociales"] }, // Assuming these exist
+  { module: "Correo Electrónico", permissions: ["ver-correos", "enviar-correo", "redactar-correo"] },
+  { module: "Colaboración y Productividad", permissions: ["ver-colaboracion"] },
+  { module: "Calendario y Reuniones", permissions: ["ver-calendario", "crear-reunion", "editar-reunion", "eliminar-reunion"] },
+  { module: "Registro de Actividades", permissions: ["ver-registro-actividades", "crear-actividad", "editar-actividad", "eliminar-actividad"] },
+  { module: "Gestión de Documentos", permissions: ["ver-documentos", "subir-documento", "editar-documento", "eliminar-documento", "compartir-documento", "ver-plantillas-documento", "crear-plantilla-documento", "editar-plantilla-documento", "eliminar-plantilla-documento"] },
+  { module: "Tareas", permissions: ["ver-tareas", "crear-tarea", "editar-tarea", "eliminar-tarea", "completar-tarea", "asignar-tarea"] },
+  { module: "Soporte al Cliente", permissions: ["ver-soporte"] }, // Added a general permission for the section
+  { module: "Gestión de Tickets", permissions: ["ver-tickets", "crear-ticket", "editar-ticket", "eliminar-ticket", "asignar-ticket", "cambiar-estado-ticket", "agregar-comentario-ticket", "sugerir-articulo-kb"] },
+  { module: "Base de Conocimiento", permissions: ["ver-base-conocimiento", "crear-articulo-kb", "editar-articulo-kb", "eliminar-articulo-kb"] }, // Added KB creation/editing permissions
+  { module: "Chat en Vivo / Chatbots", permissions: ["ver-chat-vivo", "enviar-mensajes-chat", "cerrar-chat", "transferir-chat", "usar-respuestas-predefinidas"] },
+  { module: "Encuestas de Satisfacción", permissions: ["ver-encuestas", "crear-encuesta", "editar-encuesta", "eliminar-encuesta", "enviar-encuesta", "ver-respuestas-encuestas"] },
+  { module: "Administración", permissions: ["ver-administracion"] }, // Added a general permission for the section
+  { module: "Gestión de Usuarios", permissions: ["ver-usuarios", "crear-usuario", "editar-usuario", "eliminar-usuario", "asignar-rol"] }, // Added user management permissions
+  { module: "Configuración General", permissions: ["acceder-configuracion-general"] },
+  { module: "Mi Cuenta de Correo", permissions: ["gestionar-cuenta-correo"] }, // Assuming this maps to gestionar-cuenta-correo
+  { module: "Configuración Chat en Vivo", permissions: ["gestionar-configuracion-chat"] }, // Assuming this maps to gestionar-configuracion-chat
+  { module: "Gestión de SLAs", permissions: ["gestionar-slas"] },
+  { module: "Colas de Soporte", permissions: ["gestionar-colas-soporte"] },
+  { module: "Reglas de Escalado", permissions: ["gestionar-reglas-escalamiento"] },
+  { module: "Historial de Escalados", permissions: ["ver-logs-escalamiento"] },
+  { module: "Historial de Auditoría", permissions: ["ver-registro-auditoria"] },
+  { module: "Gestión de Roles y Permisos", permissions: ["ver-roles", "crear-rol", "editar-rol", "eliminar-rol", "asignar-permisos-rol"] }, // Mapped existing
+  { module: "Licencia de Aplicación", permissions: ["ver-licencia"] },
+];
 
 export const USER_ROLES: UserRole[] = ['admin', 'supervisor', 'empleado', 'analista', 'desarrollador', 'vendedor', 'user'];
 export const DEFAULT_USER_ROLE: UserRole = 'user';

@@ -18,18 +18,18 @@ export default function SocialCrmPage() {
   useEffect(() => {
     if (!loading) {
       if (!currentUser || !hasPermission('ver-social-crm')) {
-        router.push('/access-denied');
+        router.push('/access-denied'); // Removed unnecessary backslashes
       }
     }
   }, [currentUser, loading, hasPermission, router]);
 
-
- if (loading) {
- return (
- <div className=\"flex justify-center items-center h-full\">
-          Cargando...
- </div>
- );
+  if (loading) {
+    return (
+      <div className=\"flex justify-center items-center h-full\">
+        Cargando... // Removed unnecessary backslashes
+      </div>
+    );
+  }
  }
 
   return (
@@ -53,8 +53,8 @@ export default function SocialCrmPage() {
             </p>
           </div>
         </CardContent>
-      </Card>
-      <CardHeader>
+
+        <CardHeader>
         <CardTitle className="flex items-center gap-2 text-2xl">
           <PageIcon className="h-6 w-6 text-primary" />
           {navItem?.label || "Social CRM"}

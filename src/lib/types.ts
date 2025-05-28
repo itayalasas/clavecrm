@@ -1,7 +1,13 @@
 
-import type { LucideIcon as LucideIconType } from 'lucide-react'; // Renamed to avoid conflict if LucideIcon is used as a type elsewhere
-
 export type UserRole = 'admin' | 'supervisor' | 'empleado' | 'analista' | 'desarrollador' | 'vendedor' | 'user';
+
+export interface Role {
+  id: string;
+  name: string;
+  permissions: string[]; // O el tipo correcto para tus permisos
+  // Añade cualquier otra propiedad que tengan tus documentos de rol en Firestore
+}
+
 
 export type FolderType = 'inbox' | 'sent' | 'pending' | 'drafts' | 'trash';
 
@@ -49,12 +55,13 @@ export interface Task {
 export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';
 export type TicketPriority = 'Alta' | 'Media' | 'Baja';
 
+// Modificar el tipo User para que 'role' sea string (el ID del rol)
 export interface User {
   id: string;
   name: string;
   email: string;
   avatarUrl?: string | null; // Made nullable for consistency
-  role: UserRole; // Updated to use UserRole
+  role: string; // <-- Cambiado a string (ID del rol)
   groups?: string[]; // IDs of groups the user belongs to
   createdAt?: string; // ISO string
   password?: string; // Only for initial creation, not stored in Firestore
@@ -435,6 +442,7 @@ export interface DocumentTemplate {
 }
 
 // LucideIcon type definition, using the renamed import
+import type { LucideIcon as LucideIconType } from 'lucide-react';
 export type LucideIcon = LucideIconType;
 
 // User Group (placeholder, to be defined properly if group management is implemented)

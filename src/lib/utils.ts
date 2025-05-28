@@ -1,3 +1,4 @@
+
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -5,34 +6,95 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-function findFirstVowel(str: string): string | null {
-  const vowels = "AEIOUaeiou";
-  for (let i = 0; i < str.length; i++) {
-    if (vowels.includes(str[i])) {
-      return str[i];
-    }
+export function getUserInitials(name?: string | null): string {
+  if (!name || typeof name !== 'string') {
+    // console.warn("getUserInitials: Input name is undefined, null, or not a string. Returning '?'.", name);
+    return "?";
   }
-  return null; // No vowel found
+  const trimmedName = name.trim();
+  if (trimmedName === "") {
+    // console.warn("getUserInitials: Input name is an empty string. Returning '?'.", trimmedName);
+    return "?";
+  }
+
+  const nameParts = trimmedName.split(/\s+/).filter(part => part.length > 0);
+
+  if (nameParts.length === 0) {
+    // console.warn("getUserInitials: No valid name parts found after splitting. Returning '?'.", trimmedName);
+    return "?";
+  }
+
+  let initials = "";
+  if (nameParts.length === 1) {
+    // console.log(`getUserInitials: Single name part: "${nameParts[0]}"`);
+    initials = nameParts[0].substring(0, 2).toUpperCase();
+  } else {
+    // console.log(`getUserInitials: Multiple name parts: First: "${nameParts[0]}", Last: "${nameParts[nameParts.length - 1]}"`);
+    const firstInitial = nameParts[0][0] || '';
+    const lastInitial = nameParts[nameParts.length - 1][0] || '';
+    initials = `${firstInitial}${lastInitial}`.toUpperCase();
+  }
+  // console.log(`getUserInitials: Generated initials: "${initials}" for name: "${trimmedName}"`);
+  return initials || "?";
 }
 
-export function getUserInitials(name?: string | null): string {
-  if (!name || typeof name !== 'string' || name.trim() === "") return "?";
 
-  const nameParts = name.trim().split(/\s+/).filter(part => part.length > 0);
+export function generateInitialsAvatar(initials: string, color: string): string {
+  const canvas = document.createElement('canvas');
+  const size = 128; // Output size of the avatar
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
 
-  if (nameParts.length === 0) return "?";
+  if (context) {
+    // Background color
+    context.fillStyle = color;
+    context.fillRect(0, 0, size, size);
 
-  if (nameParts.length === 1) {
-    // For a single name part, take the first two letters if available
-    return nameParts[0].substring(0, 2).toUpperCase();
-  } else {
-    // For multiple name parts, take the first letter of the first part
-    // and the first letter of the last part, prioritizing the first vowel.
-    const firstPart = nameParts[0];
-    const lastPart = nameParts[nameParts.length - 1];
+    // Text properties
+    context.fillStyle = '#FFFFFF'; // White text
+    context.font = `bold ${size / 2.5}px Arial`; // Adjust font size relative to avatar size
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
 
-    const firstInitial = findFirstVowel(firstPart) || firstPart[0];
-    const lastInitial = findFirstVowel(lastPart) || lastPart[0];
-    return `${firstInitial || '?'}${lastInitial || '?'}`.toUpperCase();
+    // Draw text
+    context.fillText(initials.toUpperCase(), size / 2, size / 2);
   }
+  return canvas.toDataURL('image/png');
+}
+
+export function getRandomColor(): string {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  // Ensure a minimum brightness for better text visibility (optional)
+  // This is a simple check, more sophisticated ones exist
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  if (brightness > 180) { // If too light, try again (recursive, be careful with max depth)
+    // return getRandomColor(); // Potentially recursive, could be an issue
+  }
+  return color;
+}
+
+export function dataUriToBlob(dataURI: string): Blob {
+  // convert base64 to raw binary data held in a string
+  // doesn't handle URLEncoded DataURIs - see SO answer #6850276 for code that does this
+  const byteString = atob(dataURI.split(',')[1]);
+
+  // separate out the mime component
+  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+
+  // write the bytes of the string to an ArrayBuffer
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+
+  return new Blob([ab], { type: mimeString });
 }
