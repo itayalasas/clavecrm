@@ -7,35 +7,45 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getUserInitials(name?: string | null): string {
+  console.log('[ClaveCRM Debug] getUserInitials - Input name:', name);
+
   if (!name || typeof name !== 'string') {
-    // console.warn("getUserInitials: Input name is undefined, null, or not a string. Returning '?'.", name);
+    console.warn('[ClaveCRM Debug] getUserInitials: Name is invalid (null, undefined, or not a string). Returning "?". Input was:', name);
     return "?";
   }
   const trimmedName = name.trim();
   if (trimmedName === "") {
-    // console.warn("getUserInitials: Input name is an empty string. Returning '?'.", trimmedName);
+    console.warn('[ClaveCRM Debug] getUserInitials: Trimmed name is empty. Returning "?". Original input was:', name);
     return "?";
   }
 
   const nameParts = trimmedName.split(/\s+/).filter(part => part.length > 0);
+  console.log('[ClaveCRM Debug] getUserInitials - Name parts for "' + trimmedName + '":', nameParts);
 
   if (nameParts.length === 0) {
-    // console.warn("getUserInitials: No valid name parts found after splitting. Returning '?'.", trimmedName);
+    console.warn('[ClaveCRM Debug] getUserInitials: No valid name parts found after splitting. Returning "?". Original input was:', name);
     return "?";
   }
 
   let initials = "";
   if (nameParts.length === 1) {
-    // console.log(`getUserInitials: Single name part: "${nameParts[0]}"`);
-    initials = nameParts[0].substring(0, 2).toUpperCase();
+    // For a single name part, take the first two letters if available, otherwise one.
+    if (nameParts[0].length >= 2) {
+      initials = nameParts[0].substring(0, 2).toUpperCase();
+    } else {
+      initials = nameParts[0].substring(0, 1).toUpperCase();
+    }
   } else {
-    // console.log(`getUserInitials: Multiple name parts: First: "${nameParts[0]}", Last: "${nameParts[nameParts.length - 1]}"`);
+    // For multiple name parts, take the first letter of the first part
+    // and the first letter of the last part.
     const firstInitial = nameParts[0][0] || '';
     const lastInitial = nameParts[nameParts.length - 1][0] || '';
     initials = `${firstInitial}${lastInitial}`.toUpperCase();
   }
-  // console.log(`getUserInitials: Generated initials: "${initials}" for name: "${trimmedName}"`);
-  return initials || "?";
+
+  const finalInitials = initials || "?";
+  console.log(`[ClaveCRM Debug] getUserInitials - For name "${trimmedName}", generated initials: "${finalInitials}"`);
+  return finalInitials;
 }
 
 
