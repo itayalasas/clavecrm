@@ -1,54 +1,52 @@
 
 import type { Lead, PipelineStage, Task, User, TicketStatus, TicketPriority, UserRole, QuoteStatus, OrderStatus, InvoiceStatus, EmailCampaignStatus, PredefinedEmailTemplate, CommonEmailVariable, MeetingStatus, ActivityLogUserActivityType, ActivityLogSystemAuditActionType, Resource, SLA, SupportQueue, EscalationRule, EscalationConditionType, EscalationActionType, SurveyType, SurveyQuestionType, KnowledgeBaseArticle, EmailMessage, UserEmailAccountSettings } from './types';
-import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter, KeyRound, Mail as MailIcon, UserCircle as UserCircleIconLucide } from 'lucide-react'; // Renamed UserCircle
+import { LayoutDashboard, BarChartBig, ListChecks, Sparkles, Briefcase, ClipboardList, Users as UsersIcon, FileText, ShoppingCart, Receipt, Send, Zap, LayoutTemplate, Share2, Settings, DollarSign, Target, LifeBuoy, SlidersHorizontal, type LucideIcon, ChevronDown, UsersRound, CalendarDays, FileClock, FolderKanban, Library, HistoryIcon, Brain, MessagesSquare, Smile, MessageCircle, ShieldCheck, LayersIcon, ClockIcon, HelpCircleIcon, AlertTriangle, ListFilter, KeyRound, Mail as MailIcon, UserCircle as UserCircleIconLucide } from 'lucide-react';
 
 export const APP_NAME = "ClaveCRM";
-// APP_ICON is removed as we will use an image logo directly
 
 export type NavItem = {
   href?: string;
   label: string;
   icon: LucideIcon;
   subItems?: NavItem[];
-  disabled?: boolean; // For features not yet implemented
-  parentActiveIf?: (pathname: string) => boolean; // Optional: custom logic for parent active state
-  requiredPermission?: string; // Optional: Permission key required to view this item
+  disabled?: boolean;
+  parentActiveIf?: (pathname: string) => boolean;
+  requiredPermission?: string;
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard', label: 'Panel de Control', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Panel de Control', icon: LayoutDashboard, requiredPermission: 'ver-dashboard' },
   {
-    requiredPermission: 'ver-ventas', // Permission for the Sales section
     label: 'Ventas',
     icon: DollarSign,
+    requiredPermission: 'ver-ventas',
     subItems: [
       { href: '/pipeline', label: 'Embudo de Ventas', icon: BarChartBig, requiredPermission: 'ver-pipeline' },
-      { href: '/leads', label: 'Gestión de Leads', icon: UsersIcon, requiredPermission: 'ver-leads' }, // Added Leads as a sub-item under Sales
+      { href: '/leads', label: 'Gestión de Leads', icon: UsersIcon, requiredPermission: 'ver-leads' },
       { href: '/quotes', label: 'Cotizaciones', icon: FileText, requiredPermission: 'ver-cotizaciones' },
       { href: '/orders', label: 'Pedidos', icon: ShoppingCart, requiredPermission: 'ver-pedidos' },
       { href: '/invoices', label: 'Facturas', icon: Receipt, requiredPermission: 'ver-facturas' },
     ],
-    parentActiveIf: (pathname) => ['/pipeline', '/quotes', '/orders', '/invoices'].some(p => pathname.startsWith(p)),
+    parentActiveIf: (pathname) => ['/pipeline', '/leads', '/quotes', '/orders', '/invoices'].some(p => pathname.startsWith(p)),
   },
   {
-    requiredPermission: 'ver-marketing', // Permission for the Marketing section
     label: 'Marketing',
     icon: Target,
+    requiredPermission: 'ver-marketing',
     subItems: [
       { href: '/ai-email-assistant', label: 'Asistente IA de Correo', icon: Sparkles, requiredPermission: 'usar-ai-email' },
       { href: '/email-campaigns', label: 'Campañas de Email', icon: Send, requiredPermission: 'ver-campanas-email' },
-      { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap, disabled: true },
-      { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate, disabled: true },
-      { href: '/social-crm', label: 'Social CRM', icon: Share2, disabled: true },
+      { href: '/marketing-automation', label: 'Automatización Marketing', icon: Zap, disabled: true, requiredPermission: 'ver-automatizaciones' },
+      { href: '/landing-pages', label: 'Landing Pages y Formularios', icon: LayoutTemplate, disabled: true, requiredPermission: 'ver-paginas-aterrizaje' },
+      { href: '/social-crm', label: 'Social CRM', icon: Share2, disabled: true, requiredPermission: 'ver-social-crm' },
     ],
     parentActiveIf: (pathname) => ['/ai-email-assistant', '/email-campaigns', '/marketing-automation', '/landing-pages', '/social-crm'].some(p => pathname.startsWith(p)),
   },
   { href: '/email', label: 'Correo Electrónico', icon: MailIcon, requiredPermission: 'ver-correos' },
-  // Assuming 'Correo Electrónico' doesn't require a specific permission beyond being authenticated
   {
-    requiredPermission: 'ver-colaboracion', // Permission for the Collaboration section
     label: 'Colaboración y Productividad',
     icon: UsersRound,
+    requiredPermission: 'ver-colaboracion',
     subItems: [
       { href: '/calendar', label: 'Calendario y Reuniones', icon: CalendarDays, requiredPermission: 'ver-calendario' },
       { href: '/activity-log', label: 'Registro de Actividades', icon: FileClock, requiredPermission: 'ver-registro-actividades' },
@@ -60,6 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label: 'Soporte al Cliente',
     icon: LifeBuoy,
+    requiredPermission: 'ver-soporte',
     subItems: [
       { href: '/tickets', label: 'Gestión de Tickets', icon: ClipboardList, requiredPermission: 'ver-tickets' },
       { href: '/knowledge-base', label: 'Base de Conocimiento', icon: Brain, requiredPermission: 'ver-base-conocimiento' },
@@ -69,26 +68,33 @@ export const NAV_ITEMS: NavItem[] = [
     parentActiveIf: (pathname) => ['/tickets', '/knowledge-base', '/live-chat', '/satisfaction-surveys'].some(p => pathname.startsWith(p)),
   },
   {
-    label: 'Administración',
-    icon: SlidersHorizontal,
+    label: 'Configuración',
+    icon: Settings,
+    requiredPermission: 'acceder-configuracion', // General permission for settings section
     subItems: [
-      { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon, requiredPermission: 'PERMISO_REQUERIDO' },
-      { href: '/settings', label: 'Configuración General', icon: Settings, requiredPermission: 'acceder-configuracion-general' },
-      { href: '/settings/my-email-account', label: 'Mi Cuenta de Correo', icon: UserCircleIconLucide, requiredPermission: 'PERMISO_ADMON_ESPECIFICO' },
-      { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle, requiredPermission: 'PERMISO_ADMON_ESPECIFICO' },
+      { href: '/settings', label: 'General', icon: Settings, requiredPermission: 'acceder-configuracion-general' },
+      { href: '/settings/my-email-account', label: 'Mi Cuenta de Correo', icon: UserCircleIconLucide, requiredPermission: 'gestionar-cuenta-correo' },
+      { href: '/settings/live-chat-widget', label: 'Config. Chat en Vivo', icon: MessageCircle, requiredPermission: 'gestionar-configuracion-chat' },
       { href: '/settings/slas', label: 'Gestión de SLAs', icon: ShieldCheck, requiredPermission: 'gestionar-slas' },
       { href: '/settings/support-queues', label: 'Colas de Soporte', icon: LayersIcon, requiredPermission: 'gestionar-colas-soporte' },
       { href: '/settings/escalation-rules', label: 'Reglas de Escalado', icon: ClockIcon, requiredPermission: 'gestionar-reglas-escalamiento' },
+    ],
+    parentActiveIf: (pathname) => pathname.startsWith('/settings') && 
+                                 !pathname.startsWith('/settings/license') &&
+                                 !pathname.startsWith('/settings/escalation-logs'), // Exclude admin-only settings
+  },
+  {
+    label: 'Administración',
+    icon: SlidersHorizontal,
+    requiredPermission: 'ver-administracion',
+    subItems: [
+      { href: '/user-management', label: 'Gestión de Usuarios', icon: UsersIcon, requiredPermission: 'ver-usuarios' },
+      { href: '/roles-and-permissions', label: 'Gestión de Roles y Permisos', icon: KeyRound, requiredPermission: 'ver-roles-permisos' }, // Changed icon
+      { href: '/settings/license', label: 'Licencia de Aplicación', icon: KeyRound, requiredPermission: 'ver-licencia' },
       { href: '/settings/escalation-logs', label: 'Historial de Escalados', icon: AlertTriangle, requiredPermission: 'ver-logs-escalamiento' },
       { href: '/audit-log', label: 'Historial de Auditoría', icon: HistoryIcon, requiredPermission: 'ver-registro-auditoria' },
-      { href: '/roles-and-permissions', label: 'Gestión de Roles y Permisos', icon: UsersIcon, requiredPermission: 'ver-roles-permisos' },
-      { href: '/settings/license', label: 'Licencia de Aplicación', icon: KeyRound, requiredPermission: 'ver-licencia' },
     ],
- parentActiveIf: (pathname) => [
-        '/user-management',
-        '/settings', // This will match /settings and /settings/*
-        '/audit-log',
-    ].some(p => pathname.startsWith(p)),
+    parentActiveIf: (pathname) => ['/user-management', '/roles-and-permissions', '/settings/license', '/settings/escalation-logs', '/audit-log'].some(p => pathname.startsWith(p)),
   },
 ];
 
@@ -103,32 +109,33 @@ export const allPermissions = [
   { module: "Marketing", permissions: ["ver-marketing"] },
   { module: "Asistente IA de Correo", permissions: ["usar-ai-email"] },
   { module: "Campañas de Email", permissions: ["ver-campanas-email", "crear-campana-correo", "editar-campana-correo", "eliminar-campana-correo", "enviar-campana-correo", "ver-listas-contacto", "crear-lista-contacto", "editar-lista-contacto", "eliminar-lista-contacto", "gestionar-contactos-lista", "ver-plantillas-correo", "crear-plantilla-correo", "editar-plantilla-correo", "eliminar-plantilla-correo"] },
-  { module: "Automatización Marketing", permissions: ["ver-automatizaciones", "crear-automatizacion", "editar-automatizacion", "eliminar-automatizacion", "activar-automatizacion", "desactivar-automatizacion"] }, // Assuming these exist based on your NAV_ITEMS
-  { module: "Landing Pages y Formularios", permissions: ["ver-paginas-aterrizaje", "crear-pagina-aterrizaje", "editar-pagina-aterrizaje", "eliminar-pagina-aterrizaje", "publicar-pagina-aterrizaje"] }, // Assuming these exist
-  { module: "Social CRM", permissions: ["ver-social-crm", "publicar-redes-sociales", "interactuar-publicaciones-sociales"] }, // Assuming these exist
+  { module: "Automatización Marketing", permissions: ["ver-automatizaciones", "crear-automatizacion", "editar-automatizacion", "eliminar-automatizacion", "activar-automatizacion", "desactivar-automatizacion"] },
+  { module: "Páginas de Aterrizaje", permissions: ["ver-paginas-aterrizaje", "crear-pagina-aterrizaje", "editar-pagina-aterrizaje", "eliminar-pagina-aterrizaje", "publicar-pagina-aterrizaje"] },
+  { module: "Social CRM", permissions: ["ver-social-crm", "publicar-redes-sociales", "interactuar-publicaciones-sociales"] },
   { module: "Correo Electrónico", permissions: ["ver-correos", "enviar-correo", "redactar-correo"] },
   { module: "Colaboración y Productividad", permissions: ["ver-colaboracion"] },
   { module: "Calendario y Reuniones", permissions: ["ver-calendario", "crear-reunion", "editar-reunion", "eliminar-reunion"] },
   { module: "Registro de Actividades", permissions: ["ver-registro-actividades", "crear-actividad", "editar-actividad", "eliminar-actividad"] },
   { module: "Gestión de Documentos", permissions: ["ver-documentos", "subir-documento", "editar-documento", "eliminar-documento", "compartir-documento", "ver-plantillas-documento", "crear-plantilla-documento", "editar-plantilla-documento", "eliminar-plantilla-documento"] },
   { module: "Tareas", permissions: ["ver-tareas", "crear-tarea", "editar-tarea", "eliminar-tarea", "completar-tarea", "asignar-tarea"] },
-  { module: "Soporte al Cliente", permissions: ["ver-soporte"] }, // Added a general permission for the section
+  { module: "Soporte al Cliente", permissions: ["ver-soporte"] },
   { module: "Gestión de Tickets", permissions: ["ver-tickets", "crear-ticket", "editar-ticket", "eliminar-ticket", "asignar-ticket", "cambiar-estado-ticket", "agregar-comentario-ticket", "sugerir-articulo-kb"] },
-  { module: "Base de Conocimiento", permissions: ["ver-base-conocimiento", "crear-articulo-kb", "editar-articulo-kb", "eliminar-articulo-kb"] }, // Added KB creation/editing permissions
+  { module: "Base de Conocimiento", permissions: ["ver-base-conocimiento", "crear-articulo-kb", "editar-articulo-kb", "eliminar-articulo-kb"] },
   { module: "Chat en Vivo / Chatbots", permissions: ["ver-chat-vivo", "enviar-mensajes-chat", "cerrar-chat", "transferir-chat", "usar-respuestas-predefinidas"] },
   { module: "Encuestas de Satisfacción", permissions: ["ver-encuestas", "crear-encuesta", "editar-encuesta", "eliminar-encuesta", "enviar-encuesta", "ver-respuestas-encuestas"] },
-  { module: "Administración", permissions: ["ver-administracion"] }, // Added a general permission for the section
-  { module: "Gestión de Usuarios", permissions: ["ver-usuarios", "crear-usuario", "editar-usuario", "eliminar-usuario", "asignar-rol"] }, // Added user management permissions
+  { module: "Configuración", permissions: ["acceder-configuracion"] }, // General permission for settings
   { module: "Configuración General", permissions: ["acceder-configuracion-general"] },
-  { module: "Mi Cuenta de Correo", permissions: ["gestionar-cuenta-correo"] }, // Assuming this maps to gestionar-cuenta-correo
-  { module: "Configuración Chat en Vivo", permissions: ["gestionar-configuracion-chat"] }, // Assuming this maps to gestionar-configuracion-chat
+  { module: "Mi Cuenta de Correo", permissions: ["gestionar-cuenta-correo"] },
+  { module: "Configuración Chat en Vivo", permissions: ["gestionar-configuracion-chat"] },
   { module: "Gestión de SLAs", permissions: ["gestionar-slas"] },
   { module: "Colas de Soporte", permissions: ["gestionar-colas-soporte"] },
   { module: "Reglas de Escalado", permissions: ["gestionar-reglas-escalamiento"] },
+  { module: "Administración", permissions: ["ver-administracion"] },
+  { module: "Gestión de Usuarios", permissions: ["ver-usuarios", "crear-usuario", "editar-usuario", "eliminar-usuario", "asignar-rol"] },
+  { module: "Gestión de Roles y Permisos", permissions: ["ver-roles-permisos", "crear-rol", "editar-rol", "eliminar-rol", "asignar-permisos-rol"] }, // Adjusted
+  { module: "Licencia de Aplicación", permissions: ["ver-licencia"] },
   { module: "Historial de Escalados", permissions: ["ver-logs-escalamiento"] },
   { module: "Historial de Auditoría", permissions: ["ver-registro-auditoria"] },
-  { module: "Gestión de Roles y Permisos", permissions: ["ver-roles", "crear-rol", "editar-rol", "eliminar-rol", "asignar-permisos-rol"] }, // Mapped existing
-  { module: "Licencia de Aplicación", permissions: ["ver-licencia"] },
 ];
 
 export const USER_ROLES: UserRole[] = ['admin', 'supervisor', 'empleado', 'analista', 'desarrollador', 'vendedor', 'user'];
@@ -293,11 +300,10 @@ export const DOCUMENT_TEMPLATE_CATEGORIES: string[] = [
   "Otros",
 ];
 
-// Initial placeholder data. In a real app, this would be fetched.
 export const INITIAL_SLAS: SLA[] = [
-    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], isEnabled: true, createdAt: new Date().toISOString() },
+    { id: 'sla-1', name: 'Estándar (8 Horas Resolución)', responseTimeTargetMinutes: 60, resolutionTimeTargetHours: 8, appliesToPriority: ['Media', 'Baja'], isEnabled: true, createdAt: new Date().toISOString(), businessHoursOnly: false },
     { id: 'sla-2', name: 'Urgente (4 Horas Resolución)', responseTimeTargetMinutes: 30, resolutionTimeTargetHours: 4, appliesToPriority: ['Alta'], businessHoursOnly: false, isEnabled: true, createdAt: new Date().toISOString() },
-    { id: 'sla-3', name: 'VIP (2 Horas Respuesta)', responseTimeTargetMinutes: 120, resolutionTimeTargetHours: 24, appliesToQueues: ['q-vip'], isEnabled: true, createdAt: new Date().toISOString()},
+    { id: 'sla-3', name: 'VIP (2 Horas Respuesta)', responseTimeTargetMinutes: 120, resolutionTimeTargetHours: 24, appliesToQueues: ['q-vip'], isEnabled: true, createdAt: new Date().toISOString(), businessHoursOnly: true},
 ];
 
 export const INITIAL_SUPPORT_QUEUES: SupportQueue[] = [
@@ -313,8 +319,8 @@ export const ESCALATION_CONDITION_TYPES: { value: EscalationConditionType, label
   { value: 'ticket_idle_for_x_hours', label: 'Ticket Inactivo por X Horas', requiresValue: 'number' },
   { value: 'ticket_priority_is', label: 'Prioridad del Ticket Es', requiresValue: 'priority'},
   { value: 'ticket_in_queue', label: 'Ticket está en Cola', requiresValue: 'queue'},
-  { value: 'ticket_sentiment_is_negative', label: 'Sentimiento del Ticket es Negativo (IA - Futuro)' }, // Example Advanced
-  { value: 'customer_response_pending_for_x_hours', label: 'Respuesta Cliente Pendiente por X Horas (Futuro)', requiresValue: 'number' }, // Example Advanced
+  { value: 'ticket_sentiment_is_negative', label: 'Sentimiento del Ticket es Negativo (IA - Futuro)' },
+  { value: 'customer_response_pending_for_x_hours', label: 'Respuesta Cliente Pendiente por X Horas (Futuro)', requiresValue: 'number' },
 ];
 
 export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: string, targetType?: 'user' | 'group' | 'queue' | 'priority', requiresValue?: 'string' }[] = [
@@ -323,8 +329,8 @@ export const ESCALATION_ACTION_TYPES: { value: EscalationActionType, label: stri
   { value: 'change_priority', label: 'Cambiar Prioridad del Ticket', targetType: 'priority' },
   { value: 'assign_to_user', label: 'Asignar a Usuario', targetType: 'user' },
   { value: 'assign_to_queue', label: 'Mover a Cola', targetType: 'queue' },
-  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string'}, // Example Advanced
-  { value: 'create_follow_up_task', label: 'Crear Tarea de Seguimiento (Futuro)', targetType: 'user'}, // Example Advanced
+  { value: 'trigger_webhook', label: 'Disparar Webhook (Avanzado - Futuro)', requiresValue: 'string'},
+  { value: 'create_follow_up_task', label: 'Crear Tarea de Seguimiento (Futuro)', targetType: 'user'},
 ];
 
 export const INITIAL_ESCALATION_RULES: EscalationRule[] = [
