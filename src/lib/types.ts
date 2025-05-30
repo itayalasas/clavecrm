@@ -27,6 +27,7 @@ export interface Lead {
   score?: number; // For lead scoring
   probability?: number; // 0-100 for sales forecast
   expectedCloseDate?: string; // ISO string for sales forecast
+  tenantId?: string;
 }
 
 export interface PipelineStage {
@@ -50,6 +51,7 @@ export interface Task {
   solutionDescription?: string; // Description of the solution
   attachments?: { name: string, url: string }[]; // Array of attachment objects
   isMonthlyRecurring?: boolean; // For tasks that recur monthly on the first day
+  tenantId?: string;
 }
 
 export type TicketStatus = 'Abierto' | 'En Progreso' | 'Resuelto' | 'Cerrado';
@@ -65,6 +67,8 @@ export interface User {
   groups?: string[]; // IDs of groups the user belongs to
   createdAt?: string; // ISO string
   password?: string; // Only for initial creation, not stored in Firestore
+  tenantId?: string; // ID del tenant al que pertenece el usuario primariamente
+  allowedTenantIds?: string[]; // Si un usuario puede acceder a múltiples tenants
 }
 
 export interface Comment {
@@ -101,6 +105,7 @@ export interface Ticket {
   satisfactionComment?: string;
   appliedEscalationRuleIds?: string[]; // IDs of escalation rules already applied to this ticket
   comments?: Comment[]; // Embedded or fetched separately
+  tenantId?: string;
 }
 
 // Sales Management Types
@@ -132,6 +137,7 @@ export interface Quote {
   notes?: string;
   validUntil?: string; // ISO string
   preparedByUserId: string;
+  tenantId?: string;
 }
 
 export interface OrderItem {
@@ -158,6 +164,7 @@ export interface Order {
   shippingAddress?: string;
   billingAddress?: string;
   placedByUserId: string;
+  tenantId?: string;
 }
 
 export interface InvoiceItem {
@@ -187,6 +194,7 @@ export interface Invoice {
   paymentDate?: string; // ISO string
   notes?: string;
   issuedByUserId: string;
+  tenantId?: string;
 }
 
 // Email Campaign Types
@@ -200,6 +208,7 @@ export interface Contact {
   createdAt: string; // ISO string
   listIds?: string[]; // IDs of ContactList this contact belongs to
   customFields?: Record<string, any>; // For custom data
+  tenantId?: string;
 }
 
 export interface ContactList {
@@ -208,6 +217,7 @@ export interface ContactList {
   description?: string;
   createdAt: string; // ISO string
   contactCount?: number; // Denormalized, can be updated via triggers
+  tenantId?: string;
 }
 
 export interface EmailTemplate {
@@ -220,6 +230,7 @@ export interface EmailTemplate {
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
   previewImageUrl?: string; // Optional
+  tenantId?: string;
 }
 
 export type EmailCampaignStatus = 'Borrador' | 'Programada' | 'Enviando' | 'Enviada' | 'Archivada' | 'Fallida';
@@ -272,6 +283,7 @@ export interface EmailCampaign {
   updatedAt?: string; // ISO string
   analytics: EmailCampaignAnalytics;
   abTest?: ABTestConfig | null; // A/B Test configuration
+  tenantId?: string;
 }
 
 // Types for new email template features
@@ -346,6 +358,7 @@ export interface ActivityLog {
   // actionDetails?: string; // Specific details of the system action, (details field can be used)
 
   createdAt: string; // ISO string - when the log entry was created in Firestore
+  tenantId?: string;
 }
 
 
@@ -353,6 +366,7 @@ export interface Opportunity { // Added Opportunity type for relatedOpportunityI
     id: string;
     name: string;
     // Add other relevant fields for Opportunity
+    tenantId?: string;
 }
 
 
@@ -424,6 +438,7 @@ export interface DocumentFile {
 
   basedOnTemplateId?: string | null; // ID of the DocumentTemplate used to generate this document
   templateVariablesFilled?: Record<string, string> | null; // Values used for template variables during generation
+  tenantId?: string;
 }
 
 export interface DocumentTemplate {
@@ -439,6 +454,7 @@ export interface DocumentTemplate {
   fileNameInStorage?: string | null; // If the template is a file
   fileURL?: string | null; // If the template is a file
   fileType?: string | null; // MIME type if template is a file
+  tenantId?: string;
 }
 
 // LucideIcon type definition, using the renamed import
@@ -451,7 +467,7 @@ export interface UserGroup {
     name: string;
     description?: string;
     memberIds?: string[]; // Array of User IDs
-    // other group-specific fields
+    tenantId?: string;
 }
 
 export interface Resource {
@@ -462,6 +478,7 @@ export interface Resource {
   location?: string;
   capacity?: number;
   isAvailable?: boolean; // Basic availability flag
+  tenantId?: string;
 }
 
 export interface Meeting {
@@ -481,6 +498,7 @@ export interface Meeting {
   status: MeetingStatus;
   reminderSent?: boolean;
   resourceId?: string | null; // ID of the selected resource
+  tenantId?: string;
 }
 
 export interface MeetingAttendee {
@@ -506,6 +524,7 @@ export interface ChatSession {
   relatedContactId?: string | null;
   relatedTicketId?: string | null;
   channel?: 'web' | 'whatsapp'; // Added channel property
+  tenantId?: string;
 }
 
 export interface ChatMessage {
@@ -516,6 +535,7 @@ export interface ChatMessage {
   senderType: 'visitor' | 'agent';
   text: string; // Message content
   timestamp: string; // ISO string (serverTimestamp on write, converted on read)
+  tenantId?: string;
 }
 
 export interface CannedResponse {
@@ -524,6 +544,7 @@ export interface CannedResponse {
   text: string; // The full response text
   agentId?: string; // Optional: if this response is specific to an agent
   isGlobal?: boolean; // If true, available to all agents
+  tenantId?: string;
 }
 
 // Advanced Ticket Management Types
@@ -539,6 +560,7 @@ export interface SLA {
   isEnabled: boolean;
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
+  tenantId?: string;
 }
 
 export interface SupportQueue {
@@ -550,6 +572,7 @@ export interface SupportQueue {
   memberUserIds?: string[]; // Users part of this queue
   createdAt: string; // ISO string
   updatedAt?: string; // ISO string
+  tenantId?: string;
 }
 
 export type EscalationConditionType =
@@ -587,6 +610,7 @@ export interface EscalationRule {
   isEnabled: boolean;
   createdAt: string;
   updatedAt?: string;
+  tenantId?: string;
 }
 
 export interface EscalationLog {
@@ -599,6 +623,7 @@ export interface EscalationLog {
   timestamp: string; // ISO string
   details?: string;
   loggedBySystem?: boolean; // Default to true if not specified
+  tenantId?: string;
 }
 
 
@@ -626,6 +651,7 @@ export interface SurveyTemplate {
   updatedAt?: string; // ISO string
   createdByUserId: string;
   isEnabled?: boolean;
+  tenantId?: string;
 }
 
 export interface SurveyResponse {
@@ -641,6 +667,7 @@ export interface SurveyResponse {
   answers?: SurveyResponseAnswer[]; // Stored after submission
   csatScore?: number; // If CSAT survey
   npsScore?: number; // If NPS survey
+  tenantId?: string;
 }
 
 
@@ -661,6 +688,7 @@ export interface KnowledgeBaseArticle {
   authorId: string;
   visibility: 'public' | 'internal'; // or more granular roles
   slug?: string; // For URL generation
+  tenantId?: string;
 }
 
 // Application License
@@ -725,7 +753,7 @@ export interface EmailMessage {
   relatedTicketId?: string;
   userId: string; // The CRM user this email is associated with (whose inbox/sent items it belongs to OR who sent it)
   collectionSource: 'incomingEmails' | 'outgoingEmails';
-
+  tenantId?: string;
 }
 
 // For emails being queued for sending, before they become full EmailMessage after sending
@@ -745,6 +773,7 @@ export interface OutgoingEmail {
   fromEmail?: string;
   userId: string; // ID of the CRM user initiating the send
   attachments?: { name: string; url: string; size?: number; type?: string }[]; // Added for drafts/pending
+  tenantId?: string;
 }
 
 // General type for Firestore Timestamp conversion
