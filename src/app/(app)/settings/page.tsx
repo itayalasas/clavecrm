@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const emailSettingsSchema = z.object({
   smtpHost: z.string().min(1, "El host SMTP es obligatorio."),
@@ -43,10 +44,11 @@ type WhatsAppApiSettingsFormValues = z.infer<typeof whatsAppApiSettingsSchema>;
 
 
 export default function SettingsPage() {
-  const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.label === 'Configuración General');
+  const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.label === 'General' && item.href === '/settings');
   const PageIcon = navItem?.icon || Settings;
   const { toast } = useToast();
-  const { currentUser, loading, hasPermission } = useAuth();
+  const { currentUser, loading: authLoading, hasPermission } = useAuth();
+  const router = useRouter(); // Initialize useRouter here
 
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
@@ -78,16 +80,18 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    if (!loading && !hasPermission('acceder-configuracion-general')) {
+    if (!authLoading && !hasPermission('acceder-configuracion-general')) {
       router.push('/access-denied');
     }
-  }, [loading, hasPermission, router]);
-
-  const router = useRouter(); // Ensure useRouter is available
+  }, [authLoading, hasPermission, router]);
 
 
   useEffect(() => {
     const fetchAllSettings = async () => {
+      if (!currentUser || !hasPermission('acceder-configuracion-general')) {
+        setIsLoadingSettings(false);
+        return;
+      }
       setIsLoadingSettings(true);
       try {
         const emailSettingsDocRef = doc(db, "settings", "emailConfiguration");
@@ -114,7 +118,7 @@ export default function SettingsPage() {
       }
     };
     fetchAllSettings();
-  }, [emailForm, whatsAppForm, toast]);
+  }, [emailForm, whatsAppForm, toast, currentUser, hasPermission]);
 
   const logSystemEvent = async (action: string, entityType: string, entityId: string, details: string) => {
     if (!currentUser) return;
@@ -185,8 +189,7 @@ export default function SettingsPage() {
 
 
   return (
-    // Add permission check and loading state rendering
-    loading ? (
+    authLoading ? (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-var(--header-height,4rem))]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="mt-4 text-lg text-muted-foreground">Cargando configuración...</p>
@@ -568,6 +571,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
     </div>
-    )) // Close conditional rendering
+    ))
   );
 }
