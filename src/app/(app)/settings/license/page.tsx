@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as FormDescriptionUI } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { StoredLicenseInfo, LicenseDetailsApiResponse } from "@/lib/types"; // User type no es necesaria aquí si usamos authContext.currentUser
+import type { StoredLicenseInfo, LicenseDetailsApiResponse } from "@/lib/types";
 import { Settings, KeyRound, Loader2, CheckCircle, XCircle, AlertTriangle, Info, Users, CalendarDays } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore"; // serverTimestamp no se usa aquí directamente
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
@@ -30,12 +30,10 @@ type LicenseFormValues = z.infer<typeof licenseFormSchema>;
 
 export default function LicensePage() {
   const { toast } = useToast();
-  // currentUser, userCount y effectiveLicenseStatus ahora vienen del AuthContext
-  const { currentUser, userCount: currentUsersCountFromAuth, effectiveLicenseStatus } = useAuth(); 
+  const { currentUser, userCount: currentUsersCountFromAuth, effectiveLicenseStatus, hasPermission } = useAuth(); 
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [storedLicenseInfo, setStoredLicenseInfo] = useState<StoredLicenseInfo | null>(null);
-  // currentUsersCount se obtiene ahora de currentUsersCountFromAuth
   const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
 
   const licenseForm = useForm<LicenseFormValues>({
@@ -45,16 +43,13 @@ export default function LicensePage() {
     },
   });
 
+  const userCanManageLicenseGlobal = currentUser ? hasPermission('gestionar-licencia') : false;
+
   const fetchLicenseData = useCallback(async () => {
     if (!currentUser || !currentUser.tenantId) {
-      // Si no hay currentUser o tenantId, no se puede cargar la licencia específica del tenant.
-      // Esto podría pasar si el admin accede antes de que AuthContext esté completamente listo,
-      // o si hay un problema con la cuenta del admin.
       console.warn("LicensePage: currentUser o currentUser.tenantId no disponible para fetchLicenseData.");
       setIsLoadingPage(false);
-      // El renderizado de la página mostrará un mensaje si el rol no es admin.
-      // Si es admin pero falta tenantId, es un estado de error que debe ser investigado.
-      if (currentUser && currentUser.role === 'admin' && !currentUser.tenantId) {
+      if (currentUser && userCanManageLicenseGlobal && !currentUser.tenantId) { // Usar userCanManageLicenseGlobal
           toast({title: "Error de Configuración", description: "La cuenta de administrador no tiene un tenant asignado.", variant: "destructive"});
       }
       return;
@@ -62,10 +57,8 @@ export default function LicensePage() {
 
     setIsLoadingPage(true);
     try {
-      // Leer la licencia desde la subcolección del tenant
       const licenseDocRef = doc(db, "tenants", currentUser.tenantId, "license", "info");
       const licenseDocSnap = await getDoc(licenseDocRef);
-
       if (licenseDocSnap.exists()) {
         const data = licenseDocSnap.data() as StoredLicenseInfo;
         setStoredLicenseInfo(data);
@@ -76,25 +69,21 @@ export default function LicensePage() {
         licenseForm.setValue("licenseKey", "");
         console.log("LicensePage: No se encontró documento de licencia para tenant", currentUser.tenantId);
       }
-      // currentUsersCount ya está disponible desde currentUsersCountFromAuth, no es necesario volver a cargarlo aquí.
-
     } catch (error) {
       console.error("Error al cargar datos de licencia del tenant:", error);
       toast({ title: "Error al Cargar Datos de Licencia", description: "No se pudo cargar la información de la licencia para tu tenant.", variant: "destructive" });
     } finally {
       setIsLoadingPage(false);
     }
-  }, [currentUser, toast, licenseForm]);
+  }, [currentUser, toast, licenseForm, userCanManageLicenseGlobal]); // Añadido userCanManageLicenseGlobal a dependencias
 
   useEffect(() => {
-    // Solo admin puede acceder y cargar datos.
-    // fetchLicenseData ya verifica currentUser y currentUser.tenantId.
-    if (currentUser?.role === 'admin') {
+    if (userCanManageLicenseGlobal) { // CAMBIO AQUÍ
       fetchLicenseData();
     } else {
       setIsLoadingPage(false); 
     }
-  }, [currentUser, fetchLicenseData]);
+  }, [currentUser, fetchLicenseData, userCanManageLicenseGlobal, hasPermission]); //Añadido hasPermission y userCanManageLicenseGlobal
 
 
   const onSubmitHandler: SubmitHandler<LicenseFormValues> = async (data) => {
@@ -102,72 +91,58 @@ export default function LicensePage() {
       toast({ title: "Error", description: "Usuario no autenticado o sin tenant asignado.", variant: "destructive" });
       return;
     }
+    // También verificamos permiso aquí por si acaso, aunque la UI ya debería bloquearlo
+    if (!userCanManageLicenseGlobal) {
+        toast({ title: "Acceso Denegado", description: "No tienes permiso para realizar esta acción.", variant: "destructive" });
+        return;
+    }
     setIsSubmitting(true);
-
     const requestBody = {
       licenseKey: data.licenseKey,
-      appId: currentAppProjectId, // Este debería ser el ID de producto/aplicación que tu servidor de licencias espera
+      appId: currentAppProjectId,
     };
-
     console.log("Enviando solicitud de validación a:", LICENSE_VALIDATION_ENDPOINT);
     console.log("Cuerpo de la solicitud:", JSON.stringify(requestBody, null, 2));
-
     try {
       const response = await fetch(LICENSE_VALIDATION_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: response.statusText }));
         throw new Error(`Error del servidor de licencias (${response.status}): ${errorData.message || response.statusText}`);
       }
-
       const result: LicenseDetailsApiResponse = await response.json();
       const nowISO = new Date().toISOString();
-      
-      // Construir StoredLicenseInfo basado en la respuesta de validación
-      // y la estructura que definimos en auth-context.tsx
       let newLicenseInfo: StoredLicenseInfo = {
         licenseKey: data.licenseKey,
         lastValidatedAt: nowISO,
-        status: 'not_configured', // Default status
-        // Guardar la respuesta completa de validación podría ser útil, pero adaptamos a StoredLicenseInfo
-        // validationResponse: result, // Si aún quieres guardar la respuesta completa
+        status: 'not_configured',
         expiryDate: result.expiresAt || undefined,
         maxUsersAllowed: typeof result.maxUsers === 'number' ? result.maxUsers : undefined,
-        type: result.productName || undefined, // O un campo específico de tipo de licencia de tu API
-        // projectId: currentAppProjectId, // El ID del proyecto de la app, no necesariamente de la licencia
+        type: result.productName || undefined,
       };
-
       if (result.isValid) {
         if (result.productId !== currentAppProjectId) {
-          newLicenseInfo.status = 'active'; // Licencia es válida, pero para otro producto. Marcamos como 'active' pero el UI lo indicará.
+          newLicenseInfo.status = 'active';
           toast({ title: "Clave de Licencia para Otro Producto", description: "La clave es válida, pero para un producto/proyecto diferente. Verifica la clave.", variant: "warning", duration: 7000 });
         } else if (result.expiresAt && new Date(result.expiresAt) < new Date()) {
           newLicenseInfo.status = 'expired';
           toast({ title: "Licencia Expirada", description: "Esta licencia ha expirado.", variant: "destructive" });
         } else {
-          newLicenseInfo.status = 'active'; // Estado principal de la licencia
+          newLicenseInfo.status = 'active';
           toast({ title: "Licencia Válida", description: "La licencia ha sido validada y guardada exitosamente." });
         }
       } else {
-        newLicenseInfo.status = 'cancelled'; // O 'invalid' si manejas ese estado
+        newLicenseInfo.status = 'cancelled';
         toast({ title: "Clave de Licencia Inválida", description: result.reason || "La clave proporcionada no es válida o no se pudo verificar.", variant: "destructive" });
       }
-
-      // Guardar la licencia en la subcolección del tenant
       const licenseDocRef = doc(db, "tenants", currentUser.tenantId, "license", "info");
       await setDoc(licenseDocRef, newLicenseInfo, { merge: true });
       setStoredLicenseInfo(newLicenseInfo);
       await logSystemEvent(currentUser, 'config_change', 'LicenseSettings', `tenants/${currentUser.tenantId}/license/info`, `Clave de licencia actualizada. Nuevo estado: ${newLicenseInfo.status}.`);
-      
-      // Disparar un evento para que AuthContext pueda recargar la licencia si es necesario
-      // O mejor, que AuthContext actualice su `licenseInfo` si se pasa `setLicenseInfo` del contexto aquí.
-      // Por ahora, un evento simple.
       window.dispatchEvent(new Event('licenseChanged')); 
-
     } catch (error: any) {
       console.error("Error al validar licencia:", error);
       let description = error.message;
@@ -175,11 +150,10 @@ export default function LicensePage() {
         description = "No se pudo conectar al servidor de licencias. Verifica tu conexión y que el servidor de licencias sea accesible (podría ser CORS).";
       }
       toast({ title: "Error de Validación de Licencia", description, variant: "destructive", duration: 10000 });
-      
       const errorLicenseInfo: StoredLicenseInfo = {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
-        status: 'not_configured', // O un estado de error específico
+        status: 'not_configured',
         expiryDate: undefined,
         maxUsersAllowed: undefined,
       };
@@ -193,23 +167,20 @@ export default function LicensePage() {
   };
 
   const renderLicenseStatus = () => {
-    if (isLoadingPage && !storedLicenseInfo) { // Muestra Skeleton solo si realmente está cargando y no hay datos aún
+    if (isLoadingPage && !storedLicenseInfo) {
       return (
         <Card className="mt-6"><CardHeader><Skeleton className="h-6 w-1/2" /></CardHeader>
           <CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /></CardContent>
         </Card>
       );
     }
-
-    const currentLicenseToDisplay = storedLicenseInfo; // Usar la licencia cargada específica del tenant
-    const usersForTenant = currentUsersCountFromAuth; // Usar el conteo de usuarios del AuthContext
-
+    const currentLicenseToDisplay = storedLicenseInfo;
+    const usersForTenant = currentUsersCountFromAuth;
     let statusText = "Desconocido";
     let StatusIcon = AlertTriangle;
     let statusColorClass = "text-muted-foreground";
     let cardBorderClass = "border-gray-300";
     let specificMessage = "";
-
     if (!currentLicenseToDisplay || currentLicenseToDisplay.status === 'not_configured' || !currentLicenseToDisplay.status) {
       return <div className="p-4 border rounded-md bg-muted/50 text-center mt-6">
         <Info className="h-8 w-8 mx-auto text-muted-foreground mb-2"/>
@@ -217,22 +188,13 @@ export default function LicensePage() {
         <p className="text-xs text-muted-foreground">Ingresa una clave de licencia y valídala.</p>
       </div>;
     }
-    
-    // Validaciones basadas en la información de StoredLicenseInfo
     const isExpired = currentLicenseToDisplay.expiryDate && 
                       ( (currentLicenseToDisplay.expiryDate instanceof Timestamp ? currentLicenseToDisplay.expiryDate.toDate() : new Date(currentLicenseToDisplay.expiryDate as string)) < new Date() );
-    
     const userLimitExceeded = typeof currentLicenseToDisplay.maxUsersAllowed === 'number' && 
                               usersForTenant !== null && 
                               currentLicenseToDisplay.maxUsersAllowed > 0 && 
                               usersForTenant > currentLicenseToDisplay.maxUsersAllowed;
-
     statusText = currentLicenseToDisplay.status || "No Verificada";
-
-    // Lógica para determinar el mensaje y estilo basado en el estado EFECTIVO (calculado aquí o desde AuthContext)
-    // Aquí podríamos usar `effectiveLicenseStatus` de AuthContext si preferimos una fuente única de verdad para el estado.
-    // Por ahora, recalculamos para la UI basado en `currentLicenseToDisplay`.
-
     if (currentLicenseToDisplay.status === 'cancelled') {
         StatusIcon = XCircle; statusText = "Cancelada"; statusColorClass = "text-red-600"; cardBorderClass = "border-red-500";
         specificMessage = "La licencia ha sido cancelada.";
@@ -245,11 +207,9 @@ export default function LicensePage() {
     } else if (currentLicenseToDisplay.status === 'active' || currentLicenseToDisplay.status === 'trial') {
         StatusIcon = CheckCircle; statusText = currentLicenseToDisplay.status === 'trial' ? "Prueba Activa" : "Válida"; statusColorClass = "text-green-600"; cardBorderClass = "border-green-500";
     } else {
-        // Otros estados como 'no_license' si se guardó así, o un fallback
         StatusIcon = AlertTriangle; statusText = "Atención Requerida"; statusColorClass = "text-yellow-600"; cardBorderClass = "border-yellow-500";
         specificMessage = `El estado de la licencia es '${currentLicenseToDisplay.status}'. Por favor, verifica o valida la clave.`;
     }
-
     return (
       <Card className={`mt-6 ${cardBorderClass}`}>
         <CardHeader>
@@ -274,8 +234,8 @@ export default function LicensePage() {
     );
   };
 
-  // Restricción de acceso a la página si no es admin
-  if (!currentUser || currentUser.role !== 'admin') {
+  // CAMBIO: Usar userCanManageLicenseGlobal para la restricción de acceso
+  if (!currentUser || !userCanManageLicenseGlobal) {
     return (
         <Card className="m-auto mt-10 max-w-md">
             <CardHeader>
@@ -286,7 +246,6 @@ export default function LicensePage() {
     );
   }
 
-  // Si es admin pero aún está cargando información esencial del AuthContext (como currentUser o tenantId)
   if (isLoadingPage && (!currentUser || !currentUser.tenantId)) {
       return (
         <div className="flex justify-center items-center h-64">
@@ -303,7 +262,6 @@ export default function LicensePage() {
           <CardDescription> Gestiona la clave de licencia para el tenant actual: <strong>{currentUser?.tenantId || "Desconocido"}</strong>. </CardDescription>
         </CardHeader>
         <CardContent>
-            {/* ... (resto del formulario y visualización del estado de licencia sin cambios significativos en la estructura) ... */}
             <div className="mb-4 p-3 border rounded-md bg-muted/30">
                 <p className="text-sm font-medium">ID de Proyecto de Aplicación (appId para validación externa):</p>
                 <p className="text-lg font-mono text-primary bg-muted p-1.5 rounded inline-block mt-1">{currentAppProjectId}</p>
