@@ -133,7 +133,7 @@ export const allPermissions = [
   { module: "Administración", permissions: ["ver-administracion"] },
   { module: "Gestión de Usuarios", permissions: ["ver-usuarios", "crear-usuario", "editar-usuario", "eliminar-usuario", "asignar-rol"] },
   { module: "Gestión de Roles y Permisos", permissions: ["ver-roles-permisos", "crear-rol", "editar-rol", "eliminar-rol", "asignar-permisos-rol"] }, // Adjusted
-  { module: "Licencia de Aplicación", permissions: ["ver-licencia"] },
+  { module: "Licencia de Aplicación", permissions: ["ver-licencia","gestionar-licencia"] },
   { module: "Historial de Escalados", permissions: ["ver-logs-escalamiento"] },
   { module: "Historial de Auditoría", permissions: ["ver-registro-auditoria"] },
 ];

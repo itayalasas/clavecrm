@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ShieldAlert, KeyRound, ExternalLink, Settings, XCircle, LogIn } from "lucide-react"; 
 import { Skeleton } from "@/components/ui/skeleton";
-import { SidebarProvider } from "@/contexts/sidebar-context"; // <--- AÑADIDO: Asegúrate que esta ruta sea correcta
+import { SidebarProvider } from "@/contexts/sidebar-context";
 
 function LicenseAccessDeniedBlock({ status, isAdmin, forBaseDomain }: { status: string, isAdmin: boolean, forBaseDomain?: boolean }) {
   let title = "Acceso Denegado por Licencia";
@@ -58,11 +58,17 @@ function LicenseAccessDeniedBlock({ status, isAdmin, forBaseDomain }: { status: 
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { currentUser, effectiveLicenseStatus, loading, isUserDataLoaded } = useAuth();
+  // Asegúrate de obtener hasPermission de useAuth
+  const { currentUser, effectiveLicenseStatus, loading, isUserDataLoaded, hasPermission } = useAuth();
   const pathname = usePathname();
-  const isAdminOnLicensePage = currentUser?.role === 'admin' && pathname === '/settings/license';
+  
+  // Determina si el usuario es admin BASADO EN PERMISOS
+  const userCanManageLicense = currentUser ? hasPermission('gestionar-licencia') : false;
 
-  console.log("AppLayout: loading:", loading, "isUserDataLoaded:", isUserDataLoaded, "currentUser:", !!currentUser, "effectiveLicenseStatus:", effectiveLicenseStatus, "pathname:", pathname);
+  // Y usa esta nueva variable
+  const isAdminOnLicensePage = userCanManageLicense && pathname === '/settings/license';
+
+  console.log("AppLayout: loading:", loading, "isUserDataLoaded:", isUserDataLoaded, "currentUser:", !!currentUser, "effectiveLicenseStatus:", effectiveLicenseStatus, "pathname:", pathname, "userCanManageLicense:", userCanManageLicense);
 
   if (loading || !isUserDataLoaded) {
     console.log("AppLayout: Mostrando Skeleton Loader (carga inicial)");
@@ -75,18 +81,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!currentUser && isUserDataLoaded) {
     console.log("AppLayout: No currentUser y datos cargados. Status Licencia:", effectiveLicenseStatus, ". Mostrando bloqueo para dominio base o no logueado.");
+    // Para el bloqueo de dominio base, isAdmin es siempre false ya que no hay usuario.
     return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={false} forBaseDomain={true} />;
   }
 
   const hasLicenseProblem = effectiveLicenseStatus !== 'active' && effectiveLicenseStatus !== 'trial' && effectiveLicenseStatus !== 'pending';
   if (currentUser && hasLicenseProblem && !isAdminOnLicensePage) {
     console.log("AppLayout: currentUser existe, hay problema de licencia y no es admin en pág. licencia. Bloqueando.");
-    return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={currentUser.role === 'admin'} />;
+    // Pasa userCanManageLicense a isAdmin
+    return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={userCanManageLicense} />;
   }
   
   console.log("AppLayout: Renderizando contenido normal de la aplicación.");
   return (
-    <SidebarProvider> {/* <--- SidebarProvider envuelve el contenido principal de la app */}
+    <SidebarProvider>
       <div className="flex h-screen bg-background">
         {currentUser && <AppSidebar />} 
         <div className="flex flex-1 flex-col overflow-hidden">
