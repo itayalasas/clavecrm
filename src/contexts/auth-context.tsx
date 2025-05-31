@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from 'react';
@@ -35,6 +34,7 @@ interface AuthContextType {
   unreadInboxCount: number | null;
   isLoadingUnreadCount: boolean;
   hasPermission: (permission: string) => boolean;
+  isUserDataLoaded: boolean; // Add this line
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
@@ -44,6 +44,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [firebaseUser, setFirebaseUser] = React.useState<FirebaseUser | null>(null);
   const [loading, setLoading] = React.useState(true);
   const { toast } = useToast();
+  const [isUserDataLoaded, setIsUserDataLoaded] = React.useState(false); // Add this line
   const [userPermissions, setUserPermissions] = React.useState<string[]>([]);
   
   const [licenseInfo, setLicenseInfo] = React.useState<StoredLicenseInfo | null>(null);
@@ -90,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             email: data.email || "Email Desconocido",
             avatarUrl: data.avatarUrl || null,
             role: data.role || DEFAULT_USER_ROLE,
- roleName: roleName,
+            roleName: roleName,
             createdAt: createdAtStr,
         } as User;
       });
@@ -199,6 +200,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.warn(`AuthProvider: Role document for ID ${roleId} not found. Setting empty permissions.`);
           setUserPermissions([]);
         }
+        
       } catch (error) {
         console.error("Error fetching user permissions:", error);
         setUserPermissions([]);
@@ -207,6 +209,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
+      setIsUserDataLoaded(false); // Set to false at the start of auth state change
       if (user) {
         let fetchedUser; // Declare fetchedUser here
         const userDocRef = doc(db, "users", user.uid);
@@ -214,6 +217,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
             const data = userDocSnap.data();
+           
             let createdAtStr = new Date().toISOString();
             if (data.createdAt instanceof Timestamp) {
                 createdAtStr = data.createdAt.toDate().toISOString();
@@ -234,7 +238,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 email: data.email || user.email || "",
                 avatarUrl: data.avatarUrl || user.photoURL || null,
                 role: data.role || DEFAULT_USER_ROLE,
-                createdAt: createdAtStr
+                createdAt: createdAtStr,
+                tenantId: data.tenantId // PRIMERA CORRECCIÓN: Asegurar que tenantId se carga
             } as User;
             setCurrentUser(fetchedUser);
             await fetchAndSetUserPermissions(fetchedUser.role);
@@ -253,6 +258,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               setIsLoadingUnreadCount(false);
             });
 
+            setIsUserDataLoaded(true); // Set to true after user data is loaded
           } else {
              console.warn(`Firestore document for user UID ${user.uid} not found.`);
              setCurrentUser(null);
@@ -260,6 +266,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
              if (unsubscribeUnreadCount) unsubscribeUnreadCount();
              setUnreadInboxCount(0);
              setIsLoadingUnreadCount(false);
+             setIsUserDataLoaded(true); // Set to true even if no user doc is found
           }
         } catch (dbError) {
             console.error("Error fetching user document from Firestore:", dbError);
@@ -267,6 +274,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setCurrentUser(null);
             if (unsubscribeUnreadCount) unsubscribeUnreadCount();
             setUnreadInboxCount(0);
+            setIsUserDataLoaded(true); // Set to true even if there's a DB error
             setIsLoadingUnreadCount(false);
         }
       } else {
@@ -275,6 +283,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (unsubscribeUnreadCount) unsubscribeUnreadCount();
         setUnreadInboxCount(0);
         setIsLoadingUnreadCount(false);
+        setIsUserDataLoaded(true); // Set to true when no user is authenticated
       }
 
       let currentStoredLicenseInfo: StoredLicenseInfo | null = null;
@@ -311,7 +320,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 projectId: currentAppProjectId
             };
             await setDoc(doc(db, "settings", "licenseConfiguration"), currentStoredLicenseInfo, { merge: true });
-            console.log("AuthProvider: No hay configuración de licencia, creando una por defecto como 'NotChecked'.");
         }
         setLicenseInfo(currentStoredLicenseInfo);
 
@@ -343,12 +351,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         }
       } catch (licenseError) {
-        console.error("Error fetching/validating license information:", licenseError);
         setLicenseInfo(null);
         newEffectiveStatus = 'api_error';
       }
       
-      console.log("AuthProvider: Effective license status determined:", newEffectiveStatus);
       setEffectiveLicenseStatus(newEffectiveStatus);
       setLoading(false);
     });
@@ -394,7 +400,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
             }
         } catch (e) {
-            console.error("AuthProvider: Error during explicit re-check:", e);
             setLicenseInfo(null); 
             newEffectiveStatus = 'api_error';
         }
@@ -460,14 +465,78 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signup = async (email: string, pass: string, name: string, roleParam?: UserRole): Promise<FirebaseUser | null> => {
     const adminPerformingSignup = currentUser; 
+
+    if (!isUserDataLoaded) {
+       console.warn("AuthProvider: Attempted signup before user data was loaded.");
+       toast({ title: "Procesando", description: "Espere un momento mientras se carga la información del usuario.", variant: "default"});
+       return null;
+    }
+
     if (!adminPerformingSignup) {
         toast({ title: "Error de Permisos", description: "Solo un administrador autenticado puede crear nuevos usuarios.", variant: "destructive"});
         return null;
     }
-    
     let newFirebaseUser: FirebaseUser | null = null;
+    let tenantId: string;
 
     try {
+      const emailParts = email.split('@');
+      if (emailParts.length !== 2) {
+        throw new Error("Formato de correo electrónico inválido.");
+      }
+      const domain = emailParts[1];
+
+      const tenantsCollectionRef = collection(db, "tenants");
+      const q = query(tenantsCollectionRef, where("domain", "==", domain));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        tenantId = querySnapshot.docs[0].id;
+        console.log(`AuthProvider: Found existing tenant for domain ${domain} with ID: ${tenantId}`);
+      } else {
+        const newTenantRef = doc(tenantsCollectionRef);
+        tenantId = newTenantRef.id;
+        await setDoc(newTenantRef, {
+          domain: domain,
+          createdAt: serverTimestamp(),
+        });
+        console.log(`AuthProvider: Created new tenant for domain ${domain} with ID: ${tenantId}`);
+      }
+
+      // SEGUNDA CORRECCIÓN: Verificar que adminPerformingSignup.tenantId existe
+      if (!adminPerformingSignup.tenantId) {
+          console.error(`AuthProvider: El usuario administrador ${adminPerformingSignup.id} (email: ${adminPerformingSignup.email}) no tiene un tenantId asignado en su perfil.`);
+          toast({
+              title: "Error de Configuración del Administrador",
+              description: "La cuenta del administrador actual no tiene un ID de tenant asociado. Verifica los datos del administrador en Firestore o contacta a soporte.",
+              variant: "destructive",
+          });
+          return null;
+      }
+
+      const adminTenantDocRef = doc(tenantsCollectionRef, adminPerformingSignup.tenantId);
+      const adminTenantDocSnap = await getDoc(adminTenantDocRef);
+
+      if (!adminTenantDocSnap.exists()) {
+          console.error(`AuthProvider: No se encontró el documento de tenant del administrador para el ID ${adminPerformingSignup.tenantId}.`);
+           toast({
+            title: "Error de Configuración",
+            description: `No se encontró la configuración del tenant para el administrador (Tenant ID: ${adminPerformingSignup.tenantId}). Contacta a soporte.`,
+            variant: "destructive",
+          });
+         return null;
+      }
+
+      if (adminTenantDocSnap.data()?.domain !== domain) { // Removida la condición !adminTenantDocSnap.exists() porque ya se verificó arriba
+        console.warn(`AuthProvider: Admin's tenant domain (${adminTenantDocSnap.data()?.domain || 'N/A'}) does not match new user's domain (${domain}).`);
+        toast({
+          title: "Error de Dominio",
+          description: "No tienes permiso para agregar usuarios a este dominio.",
+          variant: "destructive",
+        });
+        return null; 
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       newFirebaseUser = userCredential.user;
 
@@ -477,8 +546,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         email: newFirebaseUser.email,
         name: name,
         role: role,
-        createdAt: serverTimestamp(), 
-        avatarUrl: `https://avatar.vercel.sh/${newFirebaseUser.email}.png` 
+        createdAt: serverTimestamp(),
+        avatarUrl: `https://avatar.vercel.sh/${newFirebaseUser.email}.png`,
+        tenantId: tenantId 
       };
       await setDoc(userDocRef, newUserFirestoreData);
       
@@ -499,20 +569,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       await logSystemEvent(adminPerformingSignup, 'create', 'User', newFirebaseUser.uid, `Usuario ${name} (${email}) creado con rol ${role}.`);
       
-      if (auth.currentUser && auth.currentUser.uid === newFirebaseUser.uid && adminPerformingSignup.email && adminPerformingSignup.password) {
-          console.log("AuthProvider: Re-authenticating admin after new user creation...");
-          await signOut(auth);
-          try {
-            await signInWithEmailAndPassword(auth, adminPerformingSignup.email, adminPerformingSignup.password);
-            console.log("AuthProvider: Admin re-authenticated successfully.");
-          } catch (reauthError) {
-             console.error("AuthProvider: Error re-authenticating admin:", reauthError);
-             window.dispatchEvent(new Event('authChanged')); 
-          }
-      } else {
-         window.dispatchEvent(new Event('authChanged'));
-      }
-      
       return newFirebaseUser;
     } catch (error: any) {
       console.error("Error en signup (admin):", error);
@@ -521,6 +577,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         errorMessage = "Este correo electrónico ya está en uso.";
       } else if (error.code === 'auth/weak-password') {
         errorMessage = "La contraseña es demasiado débil. Debe tener al menos 6 caracteres.";
+      } else if (error.message && error.message.includes("cannot be called with an empty path")) { // Específico para el error de path vacío
+        errorMessage = "Error interno: El ID del tenant del administrador parece estar vacío. Contacta a soporte.";
       }
       toast({
         title: "Error al Crear Usuario",
@@ -528,7 +586,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         variant: "destructive",
       });
       window.dispatchEvent(new Event('authChanged')); 
-      throw error; 
+      return null; // Siempre devolver null en caso de error en signup
     }
   };
 
@@ -582,7 +640,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         updateUserInFirestore,
         licenseInfo,
         effectiveLicenseStatus,
-        hasPermission, // Add hasPermission to the context value
+        hasPermission,
+        isUserDataLoaded, 
         userCount,
         unreadInboxCount,
         isLoadingUnreadCount
@@ -599,4 +658,3 @@ export const useAuth = () => {
   }
   return context;
 };
-    

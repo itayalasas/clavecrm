@@ -1,39 +1,25 @@
-
 "use client";
 
-import { useState, useEffect, useCallback }
-from "react";
-import type { Lead, PipelineStage }
-from "@/lib/types";
-import { INITIAL_PIPELINE_STAGES, NAV_ITEMS }
-from "@/lib/constants";
-import { PipelineStageColumn }
-from "@/components/pipeline/pipeline-stage-column";
-import { AddEditLeadDialog }
-from "@/components/pipeline/add-edit-lead-dialog";
-import { Button }
-from "@/components/ui/button";
-import { PlusCircle }
-from "lucide-react";
-import { ScrollArea, ScrollBar }
-from "@/components/ui/scroll-area";
-import { db }
-from "@/lib/firebase";
-import { collection, getDocs, doc, setDoc, query, orderBy, Timestamp, where } // Added where
-from "firebase/firestore";
-import { useToast }
-from "@/hooks/use-toast";
-import { Skeleton }
-from "@/components/ui/skeleton";
+import { useState, useEffect, useCallback } from "react";
+import type { Lead, PipelineStage } from "@/lib/types";
+import { INITIAL_PIPELINE_STAGES, NAV_ITEMS } from "@/lib/constants";
+import { PipelineStageColumn } from "@/components/pipeline/pipeline-stage-column";
+import { AddEditLeadDialog } from "@/components/pipeline/add-edit-lead-dialog";
+import { Button } from "@/components/ui/button";
+import { PlusCircle } from "lucide-react";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, doc, setDoc, query, orderBy, Timestamp, where } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
 import { logSystemEvent } from "@/lib/auditLogger";
-import { useSearchParams, useRouter } from "next/navigation"; 
+import { useSearchParams, useRouter } from "next/navigation";
 import { isValid, parseISO } from "date-fns";
-import { headers } from 'next/headers'; // Import headers
 
 const parseDateField = (fieldValue: any): string | undefined => {
     if (!fieldValue) return undefined;
-    if (fieldValue instanceof Timestamp) { 
+    if (fieldValue instanceof Timestamp) {
         return fieldValue.toDate().toISOString();
     }
     if (typeof fieldValue === 'string') {
@@ -42,19 +28,16 @@ const parseDateField = (fieldValue: any): string | undefined => {
             return parsedDate.toISOString();
         }
     }
-    // Handle cases where it might be a Firestore serverTimestamp pending write (less likely for reads)
     if (fieldValue && typeof fieldValue === 'object' && fieldValue.hasOwnProperty('_methodName') && fieldValue._methodName === 'serverTimestamp') {
-        return new Date().toISOString(); // Or handle as "Pending"
+        return new Date().toISOString(); 
     }
     console.warn("Formato de fecha inesperado en parseDateField para Pipeline:", fieldValue);
-    // Fallback if it's already a string that's not ISO but might be usable by new Date()
     if (typeof fieldValue === 'string') {
         const parsed = new Date(fieldValue);
         if (isValid(parsed)) return parsed.toISOString();
     }
-    return undefined; 
+    return undefined;
 };
-
 
 export default function PipelinePage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -62,48 +45,51 @@ export default function PipelinePage() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
   const [isSubmittingLead, setIsSubmittingLead] = useState(false);
-  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false); 
+  const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
 
   const pipelineNavItem = NAV_ITEMS.find(item => item.href === '/pipeline');
   const { toast } = useToast();
-  const { currentUser } = useAuth(); 
-  const searchParams = useSearchParams(); 
-  const router = useRouter(); 
-  const headerList = typeof window === 'undefined' ? headers() : null; // Get headers only on server
-  const tenantId = headerList?.get('x-tenant-id');
+  const { currentUser } = useAuth(); // Ya lo tienes
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  const [cookieTenantId, setCookieTenantId] = useState<string | null>(null); // Renombrado para claridad
+  const [tenantIdLoaded, setTenantIdLoaded] = useState(false); 
 
   useEffect(() => {
-    if (typeof window === 'undefined' && headerList) {
-      const currentTenantId = headerList.get('x-tenant-id');
-      console.log("PipelinePage (Server Component Context): Tenant ID from headers:", currentTenantId);
-      // Aquí podrías pasar tenantId como prop a un componente cliente si fuera necesario,
-      // o usarlo directamente en fetchLeads si PipelinePage fuera un Server Component que hace fetch.
-      // Como es un Client Component, este log es más para demostrar la lectura en el servidor.
+    if (typeof window !== 'undefined') {
+      const idFromCookie = document.cookie.match(/tenantId=([^;]+)/)?.[1] || null;
+      setCookieTenantId(idFromCookie);
+      setTenantIdLoaded(true); 
+      console.log("PipelinePage useEffect (Cookie Reader): Tenant ID leído de la cookie:", idFromCookie);
     }
-  }, [headerList]);
+  }, []);
+
+  // Determinar el tenantId efectivo a usar
+  const effectiveTenantId = currentUser?.tenantId || cookieTenantId;
 
   const fetchLeads = useCallback(async () => {
+    // Esperar a que currentUser esté disponible y se haya intentado cargar la cookie.
+    // currentUser puede ser undefined inicialmente hasta que el contexto de autenticación se cargue.
+    if (currentUser === undefined || !tenantIdLoaded) { 
+        // console.log("PipelinePage fetchLeads: Esperando a currentUser y tenantIdLoaded.");
+        // setIsLoadingLeads(false); // Opcional: indicar que no se está cargando si se retorna temprano
+        return []; 
+    }
+
     setIsLoadingLeads(true);
-    // En un componente cliente, no podemos usar headers() directamente para el fetch.
-    // El tenantId necesitaría ser obtenido de otra manera (e.g., context, prop, o una API route que lo lea).
-    // Para esta demostración, simularemos que lo tenemos.
-    // En una app real, este tenantId vendría de un AuthContext o similar que lo obtiene en el cliente
-    // (posiblemente de un cookie seteado por el middleware, o de props pasadas por un server component padre).
-    const currentTenantId = tenantId || (typeof window !== 'undefined' ? (document.cookie.match(/tenantId=([^;]+)/)?.[1] || null) : null);
-    console.log("PipelinePage (Client Component fetchLeads): Tenant ID being used for query:", currentTenantId);
+    console.log("PipelinePage fetchLeads: Usando effectiveTenantId para la consulta:", effectiveTenantId);
 
     try {
       const leadsCollectionRef = collection(db, "leads");
       let q;
-      if (currentTenantId) {
-        // EJEMPLO: Así filtrarías por tenantId si el campo existiera en tus documentos de leads
-        // q = query(leadsCollectionRef, where("tenantId", "==", currentTenantId), orderBy("createdAt", "desc"));
-        // Por ahora, como no tenemos tenantId en todos los leads, seguimos mostrando todos:
-        console.warn(`PipelinePage: Tenant ID '${currentTenantId}' detectado, pero la consulta aún no filtra por tenantId. Mostrando todos los leads.`);
-        q = query(leadsCollectionRef, orderBy("createdAt", "desc"));
+      if (effectiveTenantId) {
+        q = query(leadsCollectionRef, where("tenantId", "==", effectiveTenantId), orderBy("createdAt", "desc"));
       } else {
-        console.log("PipelinePage: No Tenant ID detectado. Mostrando todos los leads (o según lógica de acceso sin tenant).");
-        q = query(leadsCollectionRef, orderBy("createdAt", "desc"));
+        console.log("PipelinePage fetchLeads: No hay effectiveTenantId (ni de currentUser ni de cookie). No se cargarán leads.");
+        setLeads([]);
+        setIsLoadingLeads(false);
+        return []; 
       }
       
       const querySnapshot = await getDocs(q);
@@ -114,11 +100,10 @@ export default function PipelinePage() {
           ...data,
           createdAt: parseDateField(data.createdAt) || new Date().toISOString(),
           expectedCloseDate: parseDateField(data.expectedCloseDate),
-          // tenantId: data.tenantId || undefined, // Asegúrate de que los leads tengan este campo
         } as Lead;
       });
       setLeads(fetchedLeads);
-      return fetchedLeads; 
+      return fetchedLeads;
     } catch (error) {
       console.error("Error al obtener leads:", error);
       toast({
@@ -126,76 +111,101 @@ export default function PipelinePage() {
         description: "No se pudieron cargar los leads del embudo.",
         variant: "destructive",
       });
-      return []; 
+      return [];
     } finally {
       setIsLoadingLeads(false);
     }
-  }, [toast, tenantId]); // Añadir tenantId a las dependencias si lo usas directamente para el fetch
+  }, [currentUser, cookieTenantId, tenantIdLoaded, toast]);
 
   useEffect(() => {
     setStages(INITIAL_PIPELINE_STAGES.sort((a, b) => a.order - b.order));
-    fetchLeads().then(fetchedLeads => {
-      const leadIdFromQuery = searchParams.get('leadId');
-      if (leadIdFromQuery && fetchedLeads) {
-        const leadToOpen = fetchedLeads.find(l => l.id === leadIdFromQuery);
-        if (leadToOpen) {
-          setEditingLead(leadToOpen);
-          setIsLeadDialogOpen(true);
-        }
-      }
-    });
-  }, [fetchLeads, searchParams, router]);
+    // Solo llamar fetchLeads si currentUser no es undefined (es decir, el contexto de autenticación ha resuelto)
+    // y si tenantIdLoaded es true.
+    if (currentUser !== undefined && tenantIdLoaded) { 
+        fetchLeads().then(fetchedLeads => {
+          if (!fetchedLeads) return; 
+          const leadIdFromQuery = searchParams.get('leadId');
+          if (leadIdFromQuery && fetchedLeads) {
+            const leadToOpen = fetchedLeads.find(l => l.id === leadIdFromQuery);
+            if (leadToOpen) {
+              setEditingLead(leadToOpen);
+              setIsLeadDialogOpen(true);
+            }
+          }
+        });
+    }
+  }, [fetchLeads, searchParams, router, tenantIdLoaded, currentUser]); 
 
   const handleSaveLead = async (leadData: Lead) => {
+    console.log("handleSaveLead: Iniciando guardado de lead...");
+    console.log("handleSaveLead: currentUser.tenantId:", currentUser?.tenantId);
+    console.log("handleSaveLead: cookieTenantId (del estado/cookie):", cookieTenantId);
+    console.log("handleSaveLead: leadData recibida:", JSON.stringify(leadData, null, 2));
+    console.log("handleSaveLead: leadData.tenantId (del formulario):", leadData.tenantId);
+
     if (!currentUser) {
       toast({ title: "Error", description: "Usuario no autenticado.", variant: "destructive" });
       return;
     }
+
+    let tenantIdToSave: string | null | undefined = leadData.tenantId; // Para edición
+    if (!tenantIdToSave) { // Si es nuevo lead o el lead editado no tiene tenantId
+        tenantIdToSave = currentUser?.tenantId;
+    }
+    if (!tenantIdToSave) { // Fallback a la cookie si currentUser no tiene tenantId
+        tenantIdToSave = cookieTenantId;
+    }
+    
+    console.log("handleSaveLead: tenantIdToSave determinado:", tenantIdToSave);
+
+    if (!tenantIdToSave) {
+      console.error("handleSaveLead: Error - No se pudo determinar un Tenant ID para guardar el lead.");
+      toast({ title: "Error Crítico", description: "No se puede guardar el lead. Falta el Tenant ID.", variant: "destructive" });
+      return;
+    }
+
     setIsSubmittingLead(true);
     const isEditing = !!leadData.id && leads.some(l => l.id === leadData.id);
     const leadId = leadData.id || doc(collection(db, "leads")).id;
 
-    // Aquí también, el tenantId debería ser obtenido de una fuente confiable en el cliente
-    const currentTenantId = tenantId || (typeof window !== 'undefined' ? (document.cookie.match(/tenantId=([^;]+)/)?.[1] || null) : null);
-
     try {
         const leadDocRef = doc(db, "leads", leadId);
         
-        const firestoreSafeLead: Lead = {
+        const finalLeadData = {
             ...leadData,
             id: leadId,
-            createdAt: leadData.createdAt ? leadData.createdAt : new Date().toISOString(), // Ensure createdAt is ISO string
-            updatedAt: new Date().toISOString(), // Ensure updatedAt is ISO string
-            expectedCloseDate: leadData.expectedCloseDate ? leadData.expectedCloseDate : undefined, // Ensure it's ISO string or undefined
-            tenantId: leadData.tenantId || currentTenantId || undefined, // Añadir tenantId al guardar
+            createdAt: leadData.createdAt ? (typeof leadData.createdAt === 'string' ? leadData.createdAt : (leadData.createdAt as unknown as Timestamp).toDate().toISOString()) : new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            expectedCloseDate: leadData.expectedCloseDate ? (typeof leadData.expectedCloseDate === 'string' ? leadData.expectedCloseDate : (leadData.expectedCloseDate as unknown as Timestamp).toDate().toISOString()) : undefined,
+            tenantId: tenantIdToSave, // Usar el tenantId determinado
         };
         
-        // Convertir fechas a Timestamps para Firestore
         const dataToSaveForFirestore = {
-          ...firestoreSafeLead,
-          createdAt: Timestamp.fromDate(new Date(firestoreSafeLead.createdAt)),
-          updatedAt: Timestamp.fromDate(new Date(firestoreSafeLead.updatedAt!)),
-          expectedCloseDate: firestoreSafeLead.expectedCloseDate ? Timestamp.fromDate(new Date(firestoreSafeLead.expectedCloseDate)) : null,
+          ...finalLeadData,
+          createdAt: Timestamp.fromDate(new Date(finalLeadData.createdAt)),
+          updatedAt: Timestamp.fromDate(new Date(finalLeadData.updatedAt!)),
+          expectedCloseDate: finalLeadData.expectedCloseDate ? Timestamp.fromDate(new Date(finalLeadData.expectedCloseDate)) : null,
+          // tenantId ya está en finalLeadData y se guardará
         };
         
         await setDoc(leadDocRef, dataToSaveForFirestore, { merge: true });
 
-        fetchLeads(); 
+        fetchLeads();
         toast({
           title: isEditing ? "Lead Actualizado" : "Lead Creado",
-          description: `El lead "${leadData.name}" ha sido guardado exitosamente${currentTenantId ? ` para el tenant ${currentTenantId}` : ''}.`,
+          description: `El lead "${leadData.name}" ha sido guardado exitosamente para el tenant ${tenantIdToSave}.`,
         });
 
         const actionType = isEditing ? 'update' : 'create';
-        const actionDetails = isEditing ? 
-          `Lead "${leadData.name}" actualizado.` : 
+        const actionDetails = isEditing ?
+          `Lead "${leadData.name}" actualizado.` :
           `Lead "${leadData.name}" creado.`;
-        if (currentUser) { // currentUser should not be null here based on earlier check
+        if (currentUser) { 
           await logSystemEvent(currentUser, actionType, 'Lead', leadId, actionDetails);
         }
         
         setEditingLead(null);
-        setIsLeadDialogOpen(false); 
+        setIsLeadDialogOpen(false);
     } catch (error) {
         console.error("Error al guardar lead:", error);
         toast({
@@ -210,37 +220,59 @@ export default function PipelinePage() {
 
   const handleEditLead = (lead: Lead) => {
     setEditingLead(lead);
-    setIsLeadDialogOpen(true); 
+    setIsLeadDialogOpen(true);
   };
   
   const openNewLeadDialog = () => {
-    setEditingLead(null); 
-    setIsLeadDialogOpen(true); 
+     if (!effectiveTenantId) { 
+      toast({ title: "Acción no permitida", description: "No se puede crear un lead sin un Tenant ID asociado.", variant: "destructive" });
+      return;
+    }
+    setEditingLead(null);
+    setIsLeadDialogOpen(true);
   };
-
 
   return (
     <div className="flex flex-col h-[calc(100vh-var(--header-height,4rem)-2rem)]">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-semibold">{pipelineNavItem ? pipelineNavItem.label : "Embudo de Ventas"}</h2>
-        <Button onClick={openNewLeadDialog} disabled={isSubmittingLead}>
+        <Button onClick={openNewLeadDialog} disabled={isSubmittingLead || !tenantIdLoaded || currentUser === undefined}>
           <PlusCircle className="mr-2 h-5 w-5" /> Añadir Lead
         </Button>
       </div>
-      {typeof window !== 'undefined' && tenantId && ( // Mostrar solo en el cliente para depuración
-        <div className="mb-4 p-2 bg-blue-100 border border-blue-300 text-blue-700 rounded-md text-sm">
-          Tenant ID actual (desde header): {tenantId}
-        </div>
-      )}
       
-      {isLoadingLeads ? (
+      {/* {tenantIdLoaded && (
+         <div className="mb-4 p-2 bg-gray-100 border text-xs">
+           Debug Info:<br />
+           effectiveTenantId: {effectiveTenantId || "null"} <br />
+           currentUser.tenantId: {currentUser?.tenantId || "(currentUser no disponible o sin tenantId)"} <br />
+           cookieTenantId: {cookieTenantId || "null"} <br />
+           tenantIdLoaded: {tenantIdLoaded ? "true" : "false"} <br />
+           currentUser evaluated: {currentUser !== undefined ? "true" : "false"}
+         </div>
+      )} */}
+
+      {isLoadingLeads && tenantIdLoaded && currentUser !== undefined ? (
          <div className="flex flex-grow items-center justify-center">
-           <div className="space-y-2">
-            <Skeleton className="h-8 w-64" />
+           <div className="space-y-2 text-center">
+            <Skeleton className="h-8 w-64 mx-auto" />
             <Skeleton className="h-64 w-full" />
-            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-48 mx-auto" />
+            <p className="text-sm text-muted-foreground">Cargando leads...</p>
            </div>
          </div>
+      ) : (!tenantIdLoaded || currentUser === undefined) ? (
+        <div className="flex flex-grow items-center justify-center">
+            <p className="text-sm text-muted-foreground">Inicializando y esperando datos de usuario...</p>
+        </div>
+      ) : leads.length === 0 && effectiveTenantId ? (
+         <div className="flex flex-grow items-center justify-center">
+            <p className="text-lg text-muted-foreground">No hay leads en este embudo para el tenant ({effectiveTenantId}).</p>
+        </div>
+      ) : leads.length === 0 && !effectiveTenantId && tenantIdLoaded ? (
+         <div className="flex flex-grow items-center justify-center">
+            <p className="text-lg text-red-500">Error: No se pudo determinar un Tenant ID. No se pueden mostrar leads.</p>
+        </div>
       ) : (
         <ScrollArea className="flex-grow pb-4">
           <div className="flex gap-4 h-full">
@@ -257,13 +289,13 @@ export default function PipelinePage() {
         </ScrollArea>
       )}
       <AddEditLeadDialog
-          isOpen={isLeadDialogOpen} 
-          onOpenChange={setIsLeadDialogOpen} 
+          isOpen={isLeadDialogOpen}
+          onOpenChange={setIsLeadDialogOpen}
           stages={stages}
           leadToEdit={editingLead}
           onSave={handleSaveLead}
           isSubmitting={isSubmittingLead}
-          trigger={<span style={{ display: 'none' }} />} 
+          trigger={<span style={{ display: 'none' }} />}
         />
     </div>
   );

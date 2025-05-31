@@ -163,8 +163,11 @@ export default function UserManagementPage() {
 
                 if (newFirebaseUser && newFirebaseUser.uid) {
                     const initials = getUserInitials(addData.name); // Use full name
+ // Corrected function name
                     const avatarColor = getRandomColor();
+ // Corrected function name
                     const avatarDataUri = generateInitialsAvatar(initials, avatarColor);
+ // Corrected function name
                     const avatarBlob = dataUriToBlob(avatarDataUri);
                     const storage = getStorage();
                     const avatarRef = storageRef(storage, `avatars/${newFirebaseUser.uid}.png`);
@@ -179,7 +182,11 @@ export default function UserManagementPage() {
                 } else {
                    // Handle case where signup might not return a user or uid, though signup should throw if it fails
                    throw new Error("La creación del usuario en Firebase Authentication falló o no devolvió un UID.");
-                }
+ // Remove this throw
+ toast({ title: "Error de Creación de Usuario", description: "La creación del usuario falló o no se recibió un ID de usuario.", variant: "destructive" }); // Add this toast
+ // You might want to add a return here if you don't want fetchUsers and handleCloseDialog to run
+ return;
+ }
             }
             fetchUsers();
             handleCloseDialog();

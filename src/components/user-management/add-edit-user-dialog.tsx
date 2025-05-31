@@ -125,23 +125,31 @@ export function AddEditUserDialog({ isOpen, onOpenChange, userToEdit, onSave }: 
       }
       const addData = data as z.infer<typeof addUserFormSchema>; // Type assertion
       try {
-        // Check if email already exists in Firebase Auth
-        const signInMethods = await fetchSignInMethodsForEmail(auth, addData.email);
-        if (signInMethods.length > 0) {
-          toast({ title: "Error", description: "El correo electrónico ya está registrado.", variant: "destructive" });
-          return; // Stop submission
-        }
-
         // Call the parent's onSave function with the form data
-        // The parent will handle user creation (including auth and firestore/avatar)
-        await onSave(addData);
-        toast({ title: "Usuario Creado", description: `El usuario ${addData.name} ha sido creado.` });
-        onOpenChange(false); // Close dialog on success
-      } catch (error: any) { // Handle error (e.g., with a toast)
-        toast({ title: "Error al Crear Usuario", description: error.message || "No se pudo crear el usuario.", variant: "destructive" });
-        console.error("Error creating user (dialog):", error);
-        // Toast is handled in signup
-      }
+        // The parent will handle user creation (including auth and firestore/avatar).
+        // signup function in auth-context should return null if email is already in use.
+        const createdUser = await onSave(addData);
+
+        // If createdUser is null, it means signup returned null (duplicate email)
+        if (createdUser === null) {
+ form.setError("email", {
+            type: "manual",
+ message: "Este correo electrónico ya está registrado.",
+          });
+        } else {
+           // If onSave (and signup) was successful, show success toast and close dialog
+           toast({ title: "Usuario Creado", description: `El usuario ${addData.name} ha sido creado.` });
+           onOpenChange(false); // Close dialog on success
+        }
+      } catch (error: any) {
+ console.error("Error creating user (dialog):", error); // Handle other errors that onSave or signup might throw
+ if (error.code === 'auth/email-already-in-use') {
+ toast({ title: "Error de Registro", description: "Este correo electrónico ya está registrado.", variant: "destructive" });
+ } else {
+ toast({ title: "Error al Crear Usuario", description: error.message || "No se pudo crear el usuario.", variant: "destructive" });
+ }
+
+        }
     }
   };
 
