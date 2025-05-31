@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -36,7 +37,7 @@ export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Order['status']>("Todos");
 
   const ordersNavItem = NAV_ITEMS.find(item => item.href === '/orders');
-  const { currentUser, loading: authLoading, getAllUsers, hasPermission } = useAuth();
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); // <-- CAMBIO: getAllUsers eliminado
   const router = useRouter();
   const { toast } = useToast();
 
@@ -97,14 +98,15 @@ export default function OrdersPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers();
+      const fetchedUsers = await getAllUsers(); // <-- CAMBIO: Ahora usa la función importada
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para pedidos:", error);
+      toast({ title: "Error al Cargar Usuarios", description: "No se pudieron obtener los datos de los usuarios.", variant: "destructive" });
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [getAllUsers]);
+  }, [toast]); // <-- CAMBIO: getAllUsers ya no es una dependencia si se importa directamente
 
   const fetchQuotes = useCallback(async () => {
     setIsLoadingQuotes(true);
@@ -137,23 +139,20 @@ export default function OrdersPage() {
 
 
   useEffect(() => {
-    // Permission check
     if (!authLoading && (!currentUser || !hasPermission('ver-pedidos'))) {
       router.push('/access-denied');
       return;
     }
-
-    // Data fetching logic
-    if (!authLoading) {
-      fetchLeads();
-      fetchUsers();
-      fetchQuotes();
+    if (!authLoading) { 
       if (currentUser) {
-        fetchOrders();
+        fetchOrders(); 
       } else {
-        setOrders([]);
+        setOrders([]); 
         setIsLoadingOrders(false);
       }
+      fetchLeads();
+      fetchUsers(); 
+      fetchQuotes();
     }
   }, [authLoading, currentUser, hasPermission, router, fetchOrders, fetchLeads, fetchUsers, fetchQuotes]);
 
@@ -171,14 +170,14 @@ export default function OrdersPage() {
         createdAt: Timestamp.fromDate(new Date(orderData.createdAt)),
         updatedAt: Timestamp.now(),
         placedByUserId: orderData.placedByUserId || currentUser.id,
-        quoteId: orderData.quoteId || null, // Ensure quoteId is null if undefined
+        quoteId: orderData.quoteId || null, 
     };
 
     try {
       const orderDocRef = doc(db, "orders", orderData.id);
       await setDoc(orderDocRef, firestoreSafeOrder, { merge: true });
       
-      fetchOrders(); // Re-fetch
+      fetchOrders(); 
       toast({
         title: isEditing ? "Pedido Actualizado" : "Pedido Creado",
         description: `El pedido "${orderData.orderNumber}" ha sido ${isEditing ? 'actualizado' : 'creado'} exitosamente.`,
@@ -235,7 +234,7 @@ export default function OrdersPage() {
   const pageIsLoading = authLoading || isLoadingOrders || isLoadingLeads || isLoadingUsers || isLoadingQuotes;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 w-full"> {/* <-- AÑADIDO: w-full */} 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{ordersNavItem?.label || "Pedidos"}</h2>
          <AddEditOrderDialog
