@@ -32,7 +32,7 @@ export default function LicensePage() {
   const { toast } = useToast();
   const { currentUser, userCount: currentUsersCountFromAuth, effectiveLicenseStatus, hasPermission, loading: authLoading, isUserDataLoaded } = useAuth(); 
   
-  const [isLoadingPage, setIsLoadingPage] = useState(true); // Para la carga de datos de licencia específicos de esta página
+  const [isLoadingPage, setIsLoadingPage] = useState(true); 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [storedLicenseInfo, setStoredLicenseInfo] = useState<StoredLicenseInfo | null>(null);
   const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
@@ -44,20 +44,16 @@ export default function LicensePage() {
     },
   });
 
-  // Se recalcula userCanManageLicenseGlobal cuando currentUser o isUserDataLoaded cambian
   const userCanManageLicenseGlobal = currentUser && isUserDataLoaded ? hasPermission('gestionar-licencia') : false;
 
   const fetchLicenseData = useCallback(async () => {
-    // Esta función ahora asume que userCanManageLicenseGlobal ya fue verificado antes de llamarla
-    // y que currentUser y currentUser.tenantId están disponibles.
     if (!currentUser || !currentUser.tenantId) {
-      console.warn("LicensePage: fetchLicenseData llamada sin currentUser o currentUser.tenantId. Esto no debería pasar si la lógica de useEffect es correcta.");
+      console.warn("LicensePage: fetchLicenseData llamada sin currentUser o currentUser.tenantId.");
       setIsLoadingPage(false);
       return;
     }
-
     console.log("LicensePage: Iniciando fetchLicenseData para tenant:", currentUser.tenantId);
-    setIsLoadingPage(true); // Indicar que estamos cargando datos específicos de la licencia
+    setIsLoadingPage(true);
     try {
       const licenseDocRef = doc(db, "tenants", currentUser.tenantId, "license", "info");
       const licenseDocSnap = await getDoc(licenseDocRef);
@@ -75,9 +71,9 @@ export default function LicensePage() {
       console.error("Error al cargar datos de licencia del tenant:", error);
       toast({ title: "Error al Cargar Datos de Licencia", description: "No se pudo cargar la información de la licencia para tu tenant.", variant: "destructive" });
     } finally {
-      setIsLoadingPage(false); // Termina la carga de datos específicos de la licencia
+      setIsLoadingPage(false);
     }
-  }, [currentUser, toast, licenseForm]); // currentUser está aquí, pero la lógica de llamada se asegura que es válido
+  }, [currentUser, toast, licenseForm]);
 
   useEffect(() => {
     console.log("LicensePage useEffect: isUserDataLoaded:", isUserDataLoaded, "userCanManageLicenseGlobal:", userCanManageLicenseGlobal, "authLoading:", authLoading);
@@ -85,20 +81,14 @@ export default function LicensePage() {
       if (userCanManageLicenseGlobal) {
         fetchLicenseData();
       } else {
-        // Si los datos del usuario están cargados pero no tiene permiso, no hacer nada más que dejar de cargar.
-        // El bloqueo de renderizado se encargará de mostrar "Acceso Denegado".
         setIsLoadingPage(false);
         console.log("LicensePage useEffect: Usuario no tiene permiso 'gestionar-licencia'. No se carga fetchLicenseData.");
       }
     } else {
-      // Si los datos del usuario aún no están cargados (isUserDataLoaded es false), 
-      // no hacemos nada aquí, esperamos al siguiente ciclo de renderizado.
-      // El return de más abajo que verifica authLoading se encargará del loader.
       console.log("LicensePage useEffect: Esperando a isUserDataLoaded...");
     }
   }, [isUserDataLoaded, userCanManageLicenseGlobal, fetchLicenseData]);
 
-  // 1. Bloque de Carga Inicial (para AuthContext)
   if (authLoading || !isUserDataLoaded) {
     console.log("LicensePage Render: authLoading o !isUserDataLoaded. Mostrando Loader principal.");
     return (
@@ -108,8 +98,6 @@ export default function LicensePage() {
     );
   }
 
-  // 2. Bloque de Acceso Denegado (basado en permisos, después de que AuthContext cargó)
-  // userCanManageLicenseGlobal ya considera isUserDataLoaded.
   if (!currentUser || !userCanManageLicenseGlobal) { 
     console.log("LicensePage Render: !currentUser o !userCanManageLicenseGlobal. Mostrando Acceso Denegado.", "currentUser:", !!currentUser, "userCanManageLicenseGlobal:", userCanManageLicenseGlobal);
     return (
@@ -122,8 +110,6 @@ export default function LicensePage() {
     );
   }
   
-  // 3. Bloque de Carga Específico de la Página (para fetchLicenseData)
-  // Esto solo se muestra si el usuario TIENE permiso pero los datos de la licencia aún se están cargando.
   if (isLoadingPage) {
     console.log("LicensePage Render: Tiene permiso, pero isLoadingPage es true. Mostrando Loader secundario.");
     return (
@@ -133,7 +119,6 @@ export default function LicensePage() {
     );
   }
   
-  // Si llegamos aquí, el usuario está autenticado, tiene permiso y los datos de la licencia (o su ausencia) han sido cargados.
   console.log("LicensePage Render: Renderizando contenido principal de la página de licencia.");
 
   const onSubmitHandler: SubmitHandler<LicenseFormValues> = async (data) => {
@@ -164,14 +149,16 @@ export default function LicensePage() {
       }
       const result: LicenseDetailsApiResponse = await response.json();
       const nowISO = new Date().toISOString();
+      
       let newLicenseInfo: StoredLicenseInfo = {
         licenseKey: data.licenseKey,
         lastValidatedAt: nowISO,
         status: 'not_configured',
-        expiryDate: result.expiresAt || undefined,
-        maxUsersAllowed: typeof result.maxUsers === 'number' ? result.maxUsers : undefined,
-        type: result.productName || undefined,
+        expiryDate: result.expiresAt || null, // CAMBIO: undefined a null
+        maxUsersAllowed: typeof result.maxUsers === 'number' ? result.maxUsers : null, // CAMBIO: undefined a null
+        type: result.productName || null, // CAMBIO: undefined a null
       };
+
       if (result.isValid) {
         if (result.productId !== currentAppProjectId) {
           newLicenseInfo.status = 'active';
@@ -199,12 +186,14 @@ export default function LicensePage() {
         description = "No se pudo conectar al servidor de licencias. Verifica tu conexión y que el servidor de licencias sea accesible (podría ser CORS).";
       }
       toast({ title: "Error de Validación de Licencia", description, variant: "destructive", duration: 10000 });
+      
       const errorLicenseInfo: StoredLicenseInfo = {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
         status: 'not_configured',
-        expiryDate: undefined,
-        maxUsersAllowed: undefined,
+        expiryDate: null, // CAMBIO: undefined a null
+        maxUsersAllowed: null, // CAMBIO: undefined a null
+        // type no es necesario aquí si es un error y no tenemos tipo
       };
       const licenseDocRef = doc(db, "tenants", currentUser.tenantId, "license", "info");
       await setDoc(licenseDocRef, errorLicenseInfo, { merge: true }).catch(dbError => console.error("Error guardando estado de error de licencia:", dbError));
@@ -216,7 +205,6 @@ export default function LicensePage() {
   };
 
   const renderLicenseStatus = () => {
-    //isLoadingPage aquí se refiere al estado local de esta página, no al authLoading global.
     if (isLoadingPage && !storedLicenseInfo) { 
       return (
         <Card className="mt-6"><CardHeader><Skeleton className="h-6 w-1/2" /></CardHeader>
@@ -284,7 +272,6 @@ export default function LicensePage() {
     );
   };
   
-  // El return principal de la página
   return (
     <div className="flex flex-col gap-8 p-4 md:p-6">
       <Card className="shadow-lg">
