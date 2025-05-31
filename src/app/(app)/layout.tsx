@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ShieldAlert, KeyRound, ExternalLink, Settings, XCircle, LogIn } from "lucide-react"; 
 import { Skeleton } from "@/components/ui/skeleton";
+import { SidebarProvider } from "@/contexts/sidebar-context"; // <--- AÑADIDO: Asegúrate que esta ruta sea correcta
 
 function LicenseAccessDeniedBlock({ status, isAdmin, forBaseDomain }: { status: string, isAdmin: boolean, forBaseDomain?: boolean }) {
   let title = "Acceso Denegado por Licencia";
@@ -72,34 +73,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Caso 1: Usuario no autenticado (o en dominio base donde currentUser no se setea) Y ya terminó la carga.
-  // `effectiveLicenseStatus` será 'not_configured' si AuthContext funciona como se espera para dominio base.
   if (!currentUser && isUserDataLoaded) {
     console.log("AppLayout: No currentUser y datos cargados. Status Licencia:", effectiveLicenseStatus, ". Mostrando bloqueo para dominio base o no logueado.");
-    // El estado 'not_configured' es el que se espera del AuthContext cuando no hay slug o no hay tenant.
     return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={false} forBaseDomain={true} />;
   }
 
-  // Caso 2: Usuario autenticado, pero hay un problema con la licencia Y no es un admin en la página de licencias.
   const hasLicenseProblem = effectiveLicenseStatus !== 'active' && effectiveLicenseStatus !== 'trial' && effectiveLicenseStatus !== 'pending';
   if (currentUser && hasLicenseProblem && !isAdminOnLicensePage) {
     console.log("AppLayout: currentUser existe, hay problema de licencia y no es admin en pág. licencia. Bloqueando.");
     return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={currentUser.role === 'admin'} />;
   }
   
-  // Si llegamos aquí, o el usuario no está (y es manejado por redirección de página), o tiene licencia válida, o es admin en pág. licencia
   console.log("AppLayout: Renderizando contenido normal de la aplicación.");
   return (
-    <div className="flex h-screen bg-background">
-      {currentUser && <AppSidebar />} 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {currentUser && <AppHeader />} 
-        <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 ${!currentUser ? 'h-screen flex items-center justify-center' : ''}`}>
-          {/* Si no hay currentUser aquí, significa que la página es pública o no protegida por este layout general de app */} 
-          {children}
-        </main>
+    <SidebarProvider> {/* <--- SidebarProvider envuelve el contenido principal de la app */}
+      <div className="flex h-screen bg-background">
+        {currentUser && <AppSidebar />} 
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {currentUser && <AppHeader />} 
+          <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 ${!currentUser ? 'h-screen flex items-center justify-center' : ''}`}>
+            {children}
+          </main>
+        </div>
+        <Toaster />
       </div>
-      <Toaster />
-    </div>
+    </SidebarProvider>
   );
 }
