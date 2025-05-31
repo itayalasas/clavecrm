@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import type { StoredLicenseInfo, LicenseDetailsApiResponse } from "@/lib/types";
 import { Settings, KeyRound, Loader2, CheckCircle, XCircle, AlertTriangle, Info, Users, CalendarDays } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+// AÑADIDO Timestamp a la importación de firestore
+import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore"; 
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
@@ -154,9 +155,9 @@ export default function LicensePage() {
         licenseKey: data.licenseKey,
         lastValidatedAt: nowISO,
         status: 'not_configured',
-        expiryDate: result.expiresAt || null, // CAMBIO: undefined a null
-        maxUsersAllowed: typeof result.maxUsers === 'number' ? result.maxUsers : null, // CAMBIO: undefined a null
-        type: result.productName || null, // CAMBIO: undefined a null
+        expiryDate: result.expiresAt || null, 
+        maxUsersAllowed: typeof result.maxUsers === 'number' ? result.maxUsers : null, 
+        type: result.productName || null, 
       };
 
       if (result.isValid) {
@@ -191,9 +192,8 @@ export default function LicensePage() {
         licenseKey: data.licenseKey,
         lastValidatedAt: new Date().toISOString(),
         status: 'not_configured',
-        expiryDate: null, // CAMBIO: undefined a null
-        maxUsersAllowed: null, // CAMBIO: undefined a null
-        // type no es necesario aquí si es un error y no tenemos tipo
+        expiryDate: null, 
+        maxUsersAllowed: null, 
       };
       const licenseDocRef = doc(db, "tenants", currentUser.tenantId, "license", "info");
       await setDoc(licenseDocRef, errorLicenseInfo, { merge: true }).catch(dbError => console.error("Error guardando estado de error de licencia:", dbError));
