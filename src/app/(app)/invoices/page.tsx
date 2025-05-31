@@ -19,9 +19,9 @@ import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy,
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]); 
-  const [leads, setLeads] = useState<Lead[]>([]); 
-  const [users, setUsers] = useState<User[]>([]); 
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(true);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
@@ -36,10 +36,10 @@ export default function InvoicesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Invoice['status']>("Todos");
 
   const invoicesNavItem = NAV_ITEMS.find(item => item.href === '/invoices');
-  const { currentUser, loading: authLoading, getAllUsers } = useAuth();
+  const { currentUser, loading: authLoading, getAllUsers, hasPermission } = useAuth(); // Correctly destructure hasPermission
   const { toast } = useToast();
-
   const router = useRouter();
+
   const fetchInvoices = useCallback(async () => {
     if (!currentUser) {
       setIsLoadingInvoices(false);
@@ -129,16 +129,20 @@ export default function InvoicesPage() {
     }
 
     // Data fetching effect
-    if (!authLoading) {
+    if (!authLoading && currentUser && hasPermission('ver-facturas')) { // Ensure currentUser and permission before fetching
       fetchOrders();
       fetchLeads();
       fetchUsers();
-      if (currentUser) {
-        fetchInvoices();
-      } else {
+      fetchInvoices();
+    } else if (!authLoading && !currentUser) { // If not logged in, clear data
         setInvoices([]);
         setIsLoadingInvoices(false);
-      }
+        setOrders([]);
+        setIsLoadingOrders(false);
+        setLeads([]);
+        setIsLoadingLeads(false);
+        setUsers([]);
+        setIsLoadingUsers(false);
     }
   }, [authLoading, currentUser, fetchInvoices, fetchOrders, fetchLeads, fetchUsers, hasPermission, router]);
 
@@ -225,6 +229,11 @@ export default function InvoicesPage() {
   }
 
   // If user doesn't have permission, the effect will redirect them. Render null or a placeholder if needed.
+  // This check is secondary to the useEffect redirect but handles initial render before effect runs.
+  if (!currentUser || !hasPermission('ver-facturas')) {
+    return null; // Or a custom access denied component if preferred.
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
