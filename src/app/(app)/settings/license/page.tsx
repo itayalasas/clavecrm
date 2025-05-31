@@ -30,8 +30,9 @@ type LicenseFormValues = z.infer<typeof licenseFormSchema>;
 
 export default function LicensePage() {
   const { toast } = useToast();
-  const { currentUser, userCount: currentUsersCountFromAuth, effectiveLicenseStatus, hasPermission } = useAuth(); 
-  const [isLoadingPage, setIsLoadingPage] = useState(true);
+  const { currentUser, userCount: currentUsersCountFromAuth, effectiveLicenseStatus, hasPermission, loading: authLoading, isUserDataLoaded } = useAuth(); 
+  
+  const [isLoadingPage, setIsLoadingPage] = useState(true); // Para la carga de datos de licencia específicos de esta página
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [storedLicenseInfo, setStoredLicenseInfo] = useState<StoredLicenseInfo | null>(null);
   const currentAppProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "PROJECT_ID_NO_CONFIGURADO";
@@ -43,19 +44,20 @@ export default function LicensePage() {
     },
   });
 
-  const userCanManageLicenseGlobal = currentUser ? hasPermission('gestionar-licencia') : false;
+  // Se recalcula userCanManageLicenseGlobal cuando currentUser o isUserDataLoaded cambian
+  const userCanManageLicenseGlobal = currentUser && isUserDataLoaded ? hasPermission('gestionar-licencia') : false;
 
   const fetchLicenseData = useCallback(async () => {
+    // Esta función ahora asume que userCanManageLicenseGlobal ya fue verificado antes de llamarla
+    // y que currentUser y currentUser.tenantId están disponibles.
     if (!currentUser || !currentUser.tenantId) {
-      console.warn("LicensePage: currentUser o currentUser.tenantId no disponible para fetchLicenseData.");
+      console.warn("LicensePage: fetchLicenseData llamada sin currentUser o currentUser.tenantId. Esto no debería pasar si la lógica de useEffect es correcta.");
       setIsLoadingPage(false);
-      if (currentUser && userCanManageLicenseGlobal && !currentUser.tenantId) { // Usar userCanManageLicenseGlobal
-          toast({title: "Error de Configuración", description: "La cuenta de administrador no tiene un tenant asignado.", variant: "destructive"});
-      }
       return;
     }
 
-    setIsLoadingPage(true);
+    console.log("LicensePage: Iniciando fetchLicenseData para tenant:", currentUser.tenantId);
+    setIsLoadingPage(true); // Indicar que estamos cargando datos específicos de la licencia
     try {
       const licenseDocRef = doc(db, "tenants", currentUser.tenantId, "license", "info");
       const licenseDocSnap = await getDoc(licenseDocRef);
@@ -73,25 +75,72 @@ export default function LicensePage() {
       console.error("Error al cargar datos de licencia del tenant:", error);
       toast({ title: "Error al Cargar Datos de Licencia", description: "No se pudo cargar la información de la licencia para tu tenant.", variant: "destructive" });
     } finally {
-      setIsLoadingPage(false);
+      setIsLoadingPage(false); // Termina la carga de datos específicos de la licencia
     }
-  }, [currentUser, toast, licenseForm, userCanManageLicenseGlobal]); // Añadido userCanManageLicenseGlobal a dependencias
+  }, [currentUser, toast, licenseForm]); // currentUser está aquí, pero la lógica de llamada se asegura que es válido
 
   useEffect(() => {
-    if (userCanManageLicenseGlobal) { // CAMBIO AQUÍ
-      fetchLicenseData();
+    console.log("LicensePage useEffect: isUserDataLoaded:", isUserDataLoaded, "userCanManageLicenseGlobal:", userCanManageLicenseGlobal, "authLoading:", authLoading);
+    if (isUserDataLoaded) {
+      if (userCanManageLicenseGlobal) {
+        fetchLicenseData();
+      } else {
+        // Si los datos del usuario están cargados pero no tiene permiso, no hacer nada más que dejar de cargar.
+        // El bloqueo de renderizado se encargará de mostrar "Acceso Denegado".
+        setIsLoadingPage(false);
+        console.log("LicensePage useEffect: Usuario no tiene permiso 'gestionar-licencia'. No se carga fetchLicenseData.");
+      }
     } else {
-      setIsLoadingPage(false); 
+      // Si los datos del usuario aún no están cargados (isUserDataLoaded es false), 
+      // no hacemos nada aquí, esperamos al siguiente ciclo de renderizado.
+      // El return de más abajo que verifica authLoading se encargará del loader.
+      console.log("LicensePage useEffect: Esperando a isUserDataLoaded...");
     }
-  }, [currentUser, fetchLicenseData, userCanManageLicenseGlobal, hasPermission]); //Añadido hasPermission y userCanManageLicenseGlobal
+  }, [isUserDataLoaded, userCanManageLicenseGlobal, fetchLicenseData]);
 
+  // 1. Bloque de Carga Inicial (para AuthContext)
+  if (authLoading || !isUserDataLoaded) {
+    console.log("LicensePage Render: authLoading o !isUserDataLoaded. Mostrando Loader principal.");
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // 2. Bloque de Acceso Denegado (basado en permisos, después de que AuthContext cargó)
+  // userCanManageLicenseGlobal ya considera isUserDataLoaded.
+  if (!currentUser || !userCanManageLicenseGlobal) { 
+    console.log("LicensePage Render: !currentUser o !userCanManageLicenseGlobal. Mostrando Acceso Denegado.", "currentUser:", !!currentUser, "userCanManageLicenseGlobal:", userCanManageLicenseGlobal);
+    return (
+        <Card className="m-auto mt-10 max-w-md">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><KeyRound className="h-6 w-6 text-destructive"/>Acceso Denegado</CardTitle>
+                <CardDescription>No tienes permisos para gestionar la licencia de la aplicación.</CardDescription>
+            </CardHeader>
+        </Card>
+    );
+  }
+  
+  // 3. Bloque de Carga Específico de la Página (para fetchLicenseData)
+  // Esto solo se muestra si el usuario TIENE permiso pero los datos de la licencia aún se están cargando.
+  if (isLoadingPage) {
+    console.log("LicensePage Render: Tiene permiso, pero isLoadingPage es true. Mostrando Loader secundario.");
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  // Si llegamos aquí, el usuario está autenticado, tiene permiso y los datos de la licencia (o su ausencia) han sido cargados.
+  console.log("LicensePage Render: Renderizando contenido principal de la página de licencia.");
 
   const onSubmitHandler: SubmitHandler<LicenseFormValues> = async (data) => {
     if (!currentUser || !currentUser.tenantId) {
       toast({ title: "Error", description: "Usuario no autenticado o sin tenant asignado.", variant: "destructive" });
       return;
     }
-    // También verificamos permiso aquí por si acaso, aunque la UI ya debería bloquearlo
     if (!userCanManageLicenseGlobal) {
         toast({ title: "Acceso Denegado", description: "No tienes permiso para realizar esta acción.", variant: "destructive" });
         return;
@@ -167,7 +216,8 @@ export default function LicensePage() {
   };
 
   const renderLicenseStatus = () => {
-    if (isLoadingPage && !storedLicenseInfo) {
+    //isLoadingPage aquí se refiere al estado local de esta página, no al authLoading global.
+    if (isLoadingPage && !storedLicenseInfo) { 
       return (
         <Card className="mt-6"><CardHeader><Skeleton className="h-6 w-1/2" /></CardHeader>
           <CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /></CardContent>
@@ -233,27 +283,8 @@ export default function LicensePage() {
       </Card>
     );
   };
-
-  // CAMBIO: Usar userCanManageLicenseGlobal para la restricción de acceso
-  if (!currentUser || !userCanManageLicenseGlobal) {
-    return (
-        <Card className="m-auto mt-10 max-w-md">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><KeyRound className="h-6 w-6 text-destructive"/>Acceso Denegado</CardTitle>
-                <CardDescription>No tienes permisos para gestionar la licencia de la aplicación.</CardDescription>
-            </CardHeader>
-        </Card>
-    );
-  }
-
-  if (isLoadingPage && (!currentUser || !currentUser.tenantId)) {
-      return (
-        <div className="flex justify-center items-center h-64">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-      );
-  }
-
+  
+  // El return principal de la página
   return (
     <div className="flex flex-col gap-8 p-4 md:p-6">
       <Card className="shadow-lg">
