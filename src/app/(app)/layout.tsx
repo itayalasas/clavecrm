@@ -11,7 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ShieldAlert, KeyRound, ExternalLink, Settings, XCircle, LogIn } from "lucide-react"; 
 import { Skeleton } from "@/components/ui/skeleton";
-import { SidebarProvider } from "@/contexts/sidebar-context";
+// CAMBIADO: Importar SidebarProvider desde la ubicación correcta (componentes UI)
+import { SidebarProvider } from "@/components/ui/sidebar"; 
 
 function LicenseAccessDeniedBlock({ status, isAdmin, forBaseDomain }: { status: string, isAdmin: boolean, forBaseDomain?: boolean }) {
   let title = "Acceso Denegado por Licencia";
