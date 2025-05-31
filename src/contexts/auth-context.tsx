@@ -19,7 +19,7 @@ export interface User extends DocumentData {
   email: string;
   name?: string;
   tenantId: string; // ID del documento del tenant
-  roleId: string;
+  role: string; // <--- CAMBIADO DE roleId a role
   createdAt?: string;
 }
 
@@ -49,7 +49,7 @@ interface AuthContextType {
   effectiveLicenseStatus: EffectiveLicenseStatus;
   userCount: number | null;
   login: (email: string, pass: string) => Promise<FirebaseUser | null>;
-  signup: (email: string, pass: string, name: string, role: Role, adminPerformingSignup?: User | null) => Promise<FirebaseUser | null>;
+  signup: (email: string, pass: string, name: string, targetRole: Role, adminPerformingSignup?: User | null) => Promise<FirebaseUser | null>; // Cambiado 'role' a 'targetRole' para evitar conflicto
   logout: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   unreadInboxCount: number | null;
@@ -58,42 +58,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Función para extraer solo el hostname de una URL (si se proporciona)
 const getHostnameFromString = (urlOrHostname: string | undefined): string => {
-  if (!urlOrHostname) return "localhost"; // Default si no hay nada
+  if (!urlOrHostname) return "localhost";
   try {
-    // Si es una URL completa (http://localhost:3000), extraer el hostname
     if (urlOrHostname.includes(':/')) {
       const url = new URL(urlOrHostname);
-      return url.hostname; // Devuelve 'localhost' o 'midominio.com'
+      return url.hostname;
     }
-    // Si ya es solo un hostname (posiblemente con puerto), quitar el puerto si existe
     return urlOrHostname.split(':')[0];
   } catch (e) {
-    // Si no se puede parsear como URL, asumir que es un hostname (quizás con puerto)
     return urlOrHostname.split(':')[0];
   }
 };
 
 const getSubdomainSlugFromClientHostname = (): string | null => {
   if (typeof window === 'undefined') return null;
-  
-  const currentClientHostname = window.location.hostname; // ej. "clavecrm.localhost"
-  // Usar NEXT_PUBLIC_BASE_URL y extraer el hostname de él.
+  const currentClientHostname = window.location.hostname;
   const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  const baseHostname = getHostnameFromString(configuredBaseUrl); // ej. "localhost" o "midominio.com"
-
+  const baseHostname = getHostnameFromString(configuredBaseUrl);
   console.log("AUTH_CONTEXT: getSubdomainSlug - currentClientHostname:", currentClientHostname);
   console.log("AUTH_CONTEXT: getSubdomainSlug - configuredBaseUrl (NEXT_PUBLIC_BASE_URL):", configuredBaseUrl);
   console.log("AUTH_CONTEXT: getSubdomainSlug - parsed baseHostname:", baseHostname);
-
   const clientParts = currentClientHostname.split('.');
   const basePartsCount = baseHostname.split('.').length;
-
   if (clientParts.length > basePartsCount && clientParts[0].toLowerCase() !== 'www') {
-    // Compara la parte final del clientHostname con el baseHostname
-    // ej. client: "clavecrm.localhost", base: "localhost" -> client.slice(1).join('.') === "localhost"
-    // ej. client: "tenant.midominio.com", base: "midominio.com" -> client.slice(1).join('.') === "midominio.com"
     if (clientParts.slice(clientParts.length - basePartsCount).join('.') === baseHostname) {
       console.log("AUTH_CONTEXT: getSubdomainSlug - Detected slug:", clientParts[0]);
       return clientParts[0];
@@ -140,12 +128,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       console.log("AUTH_CONTEXT: onAuthStateChanged triggered. fbUser:", fbUser ? fbUser.uid : "null");
       setFirebaseUser(fbUser); setCurrentUser(null); setUserPermissions([]); setLicenseInfo(null); setUserCount(null); setIsUserDataLoaded(false); setLoading(true);
-
       if (fbUser) {
         const subdomainSlug = getSubdomainSlugFromClientHostname();
         console.log("AUTH_CONTEXT: onAuthStateChanged - Subdomain Slug:", subdomainSlug);
         if (!subdomainSlug) { console.warn("AUTH_CONTEXT: onAuthStateChanged - Base domain. currentUser null."); setIsUserDataLoaded(true); setLoading(false); return; }
-
         let actualTenantDocId: string | null = null;
         try {
           const tenantsRef = collection(db, "tenants");
@@ -155,9 +141,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (actualTenantDocId) console.log(`AUTH_CONTEXT: onAuthStateChanged - Slug '${subdomainSlug}' -> TenantDocID: '${actualTenantDocId}'`);
           else console.warn(`AUTH_CONTEXT: onAuthStateChanged - No tenant found for slug '${subdomainSlug}'.`);
         } catch (e) { console.error("AUTH_CONTEXT: Error fetching tenant by slug:", e); setIsUserDataLoaded(true); setLoading(false); return; }
-
         if (!actualTenantDocId) { toast({ title: "Tenant No Encontrado", description: `Tenant '${subdomainSlug}' no configurado.`, variant: "destructive" }); setIsUserDataLoaded(true); setLoading(false); return; }
-
         const userDocRef = doc(db, "users", fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
@@ -166,7 +150,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (userData.tenantId !== actualTenantDocId) { console.warn(`AUTH_CONTEXT: User ${fbUser.uid} (tenant ${userData.tenantId}) MISMATCH for slug ${subdomainSlug} (expected ${actualTenantDocId}).`); toast({ title: "Acceso Denegado", description: `No tienes permiso para '${subdomainSlug}'.`, variant: "destructive" }); setIsUserDataLoaded(true); setLoading(false); return; }
           console.log("AUTH_CONTEXT: onAuthStateChanged - TENANT VALIDATION SUCCESS. Setting currentUser.");
           setCurrentUser({ ...userData, id: fbUser.uid });
-          if (userData.roleId) { const r = await getDoc(doc(db, "roles", userData.roleId)); if(r.exists()) setUserPermissions(r.data()?.permissions || []); else setUserPermissions([]); } else setUserPermissions([]);
+          // CAMBIADO userData.roleId a userData.role
+          if (userData.role) { 
+            const roleDocRef = doc(db, "roles", userData.role);
+            const roleDocSnap = await getDoc(roleDocRef); 
+            if(roleDocSnap.exists()) {
+              const roleData = roleDocSnap.data() as Role;
+              setUserPermissions(roleData.permissions || []); 
+              console.log("AUTH_CONTEXT: User permissions loaded:", roleData.permissions);
+            } else {
+              setUserPermissions([]);
+              console.warn("AUTH_CONTEXT: Role document not found for roleId:", userData.role);
+            }
+          } else {
+            setUserPermissions([]);
+            console.warn("AUTH_CONTEXT: No roleId found in userData.");
+          }
           console.log("AUTH_CONTEXT: Loading license for tenant:", actualTenantDocId);
           const l = await getDoc(doc(db, `tenants/${actualTenantDocId}/license/info`));
           if (l.exists()) { console.log("AUTH_CONTEXT: License data found:", l.data()); setLicenseInfo(l.data() as StoredLicenseInfo); } 
@@ -182,7 +181,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [toast]);
 
   const login = async (email: string, pass: string): Promise<FirebaseUser | null> => { setLoading(true); const slug = getSubdomainSlugFromClientHostname(); console.log("AUTH_CONTEXT: login attempt - slug:", slug); if (!slug) { toast({ title: "Login No Permitido", description: "Login solo desde URL de tenant.", variant: "destructive" }); setLoading(false); return null; } try { const uc = await signInWithEmailAndPassword(auth, email, pass); console.log("AUTH_CONTEXT: Firebase Auth login OK."); return uc.user; } catch (e: any) { toast({ title: "Error de Login", description: e.message, variant: "destructive" }); setLoading(false); return null; } };
-  const signup = async (email: string, pass: string, name: string, role: Role, admin?: User | null): Promise<FirebaseUser | null> => { setLoading(true); const slug = getSubdomainSlugFromClientHostname(); console.log("AUTH_CONTEXT: signup attempt - slug:", slug); if (!slug) { toast({ title: "Registro No Permitido", variant: "destructive" }); setLoading(false); return null; } let tenantId: string | null = null; try { const q = query(collection(db, "tenants"), where("domain", ">=", slug + "."), where("domain", "<=", slug + ".\uf8ff")); const ts = await getDocs(q); if (!ts.empty) { ts.forEach(ds => { if (ds.data().domain?.startsWith(slug + '.')) tenantId = ds.id; }); } if(tenantId) console.log("AUTH_CONTEXT: signup - resolved tenantId:", tenantId); else console.warn("AUTH_CONTEXT: signup - no tenantId from slug:", slug); } catch (e) { toast({ title: "Error Interno", variant: "destructive" }); setLoading(false); return null; } if (!tenantId) { toast({ title: "Tenant No Configurado", variant: "destructive" }); setLoading(false); return null; } if (admin) { if (!admin.tenantId || admin.tenantId !== tenantId) { toast({ title: "Acción No Permitida", variant: "destructive" }); setLoading(false); return null; } } try { const uc = await createUserWithEmailAndPassword(auth, email, pass); await updateProfile(uc.user, { displayName: name }); await setDoc(doc(db, "users", uc.user.uid), { id: uc.user.uid, email: uc.user.email!, name, tenantId, roleId: role.id, createdAt: new Date().toISOString() }); toast({ title: "Usuario Registrado" }); return uc.user; } catch (e:any) { let m="Error"; if(e.code==='auth/email-already-in-use')m="Correo ya en uso."; else if(e.code==='auth/weak-password')m="Contraseña débil."; toast({ title: "Error Registro", description:m, variant:"destructive" }); setLoading(false); return null; } };
+  
+  // Cambiado el nombre del parámetro 'role' a 'targetRole' para evitar conflicto con userData.role
+  const signup = async (email: string, pass: string, name: string, targetRole: Role, admin?: User | null): Promise<FirebaseUser | null> => { setLoading(true); const slug = getSubdomainSlugFromClientHostname(); console.log("AUTH_CONTEXT: signup attempt - slug:", slug); if (!slug) { toast({ title: "Registro No Permitido", variant: "destructive" }); setLoading(false); return null; } let tenantId: string | null = null; try { const q = query(collection(db, "tenants"), where("domain", ">=", slug + "."), where("domain", "<=", slug + ".\uf8ff")); const ts = await getDocs(q); if (!ts.empty) { ts.forEach(ds => { if (ds.data().domain?.startsWith(slug + '.')) tenantId = ds.id; }); } if(tenantId) console.log("AUTH_CONTEXT: signup - resolved tenantId:", tenantId); else console.warn("AUTH_CONTEXT: signup - no tenantId from slug:", slug); } catch (e) { toast({ title: "Error Interno", variant: "destructive" }); setLoading(false); return null; } if (!tenantId) { toast({ title: "Tenant No Configurado", variant: "destructive" }); setLoading(false); return null; } if (admin) { if (!admin.tenantId || admin.tenantId !== tenantId) { toast({ title: "Acción No Permitida", variant: "destructive" }); setLoading(false); return null; } } try { const uc = await createUserWithEmailAndPassword(auth, email, pass); await updateProfile(uc.user, { displayName: name }); await setDoc(doc(db, "users", uc.user.uid), { id: uc.user.uid, email: uc.user.email!, name, tenantId, role: targetRole.id, /* <--- CAMBIADO a role: targetRole.id */ createdAt: new Date().toISOString() }); toast({ title: "Usuario Registrado" }); return uc.user; } catch (e:any) { let m="Error"; if(e.code==='auth/email-already-in-use')m="Correo ya en uso."; else if(e.code==='auth/weak-password')m="Contraseña débil."; toast({ title: "Error Registro", description:m, variant:"destructive" }); setLoading(false); return null; } };
   const logout = async () => { console.log("AUTH_CONTEXT: logout."); await firebaseSignOut(auth); };
   const hasPermission = useCallback((p: string): boolean => userPermissions.includes(p), [userPermissions]);
 
