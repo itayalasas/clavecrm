@@ -1,122 +1,105 @@
 
-"use client"; 
+"use client";
 
-import * as React from 'react'; // Ensure React is imported for React.ReactNode
-import { useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/auth-context';
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/auth-context";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { AppHeader } from "@/components/layout/app-header";
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, ShieldAlert } from 'lucide-react';
+import { AppHeader } from "@/components/layout/app-header"; 
+import { Toaster } from "@/components/ui/toaster";
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, ShieldAlert, KeyRound, ExternalLink, Settings, XCircle, LogIn } from "lucide-react"; 
+import { Skeleton } from "@/components/ui/skeleton";
 
-// 
-export default function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const authContext = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
+function LicenseAccessDeniedBlock({ status, isAdmin, forBaseDomain }: { status: string, isAdmin: boolean, forBaseDomain?: boolean }) {
+  let title = "Acceso Denegado por Licencia";
+  let message = "Tu licencia no es válida, ha expirado, se ha excedido el límite de usuarios, o no está configurada.";
+  let IconComponent = AlertTriangle;
 
-  useEffect(() => {
-    if (!authContext.loading && !authContext.currentUser) {
-      router.push('/login');
+  if (forBaseDomain) {
+    title = "Acceso al Dominio Principal";
+    message = "Por favor, accede a través de la URL específica de tu tenant (ej. sunombre.tudominio.com) para iniciar sesión y usar la aplicación.";
+    IconComponent = LogIn;
+  } else {
+    switch (status) {
+      case 'expired': title = "Licencia Expirada"; message = "Tu licencia ha expirado."; IconComponent = ShieldAlert; break;
+      case 'no_license': title = "Licencia No Encontrada"; message = "No se encontró una licencia para tu tenant."; IconComponent = KeyRound; break;
+      case 'limit_reached': title = "Límite de Usuarios Excedido"; message = "Se ha excedido el límite de usuarios."; IconComponent = AlertTriangle; break;
+      case 'not_configured': title = "Tenant No Configurado o Sin Licencia"; message = "El tenant no está configurado correctamente o no tiene licencia."; IconComponent = Settings; break;
+      case 'cancelled': title = "Licencia Cancelada"; message = "La licencia ha sido cancelada."; IconComponent = XCircle; break;
+      default: IconComponent = AlertTriangle; break;
     }
-  }, [authContext.currentUser, authContext.loading, router]);
+  }
 
-  if (authContext.loading) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-muted/40 p-4">
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="text-center">
+          <IconComponent className={`mx-auto h-16 w-16 mb-4 ${forBaseDomain ? 'text-primary' : 'text-destructive'}`} />
+          <CardTitle className={`text-2xl font-bold ${forBaseDomain ? 'text-primary' : 'text-destructive'}`}>{title}</CardTitle>
+          <CardDescription className="text-md mt-2">{message}</CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          {isAdmin && !forBaseDomain && (
+            <>
+              <p className="text-sm text-muted-foreground mb-4">Como administrador, puedes gestionar la licencia.</p>
+              <Button asChild variant="default" size="lg"><Link href="/settings/license"><KeyRound className="mr-2 h-5 w-5" /> Ir a Configuración de Licencia</Link></Button>
+            </>
+          )}
+          {!isAdmin && !forBaseDomain && (
+            <p className="text-sm text-muted-foreground">Contacta al administrador de tu sistema.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const { currentUser, effectiveLicenseStatus, loading, isUserDataLoaded } = useAuth();
+  const pathname = usePathname();
+  const isAdminOnLicensePage = currentUser?.role === 'admin' && pathname === '/settings/license';
+
+  console.log("AppLayout: loading:", loading, "isUserDataLoaded:", isUserDataLoaded, "currentUser:", !!currentUser, "effectiveLicenseStatus:", effectiveLicenseStatus, "pathname:", pathname);
+
+  if (loading || !isUserDataLoaded) {
+    console.log("AppLayout: Mostrando Skeleton Loader (carga inicial)");
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="space-y-4 p-8">
-          <Skeleton className="h-12 w-12 rounded-full" />
-          <Skeleton className="h-4 w-[250px]" />
-          <Skeleton className="h-4 w-[200px]" />
-          <p className="text-sm text-muted-foreground">Cargando y verificando licencia...</p>
-        </div>
+      <div className="flex h-screen w-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><div className="space-y-2"><Skeleton className="h-4 w-[250px]" /><Skeleton className="h-4 w-[200px]" /></div></div>
       </div>
     );
   }
 
-  if (!authContext.currentUser) {
-    return null; 
+  // Caso 1: Usuario no autenticado (o en dominio base donde currentUser no se setea) Y ya terminó la carga.
+  // `effectiveLicenseStatus` será 'not_configured' si AuthContext funciona como se espera para dominio base.
+  if (!currentUser && isUserDataLoaded) {
+    console.log("AppLayout: No currentUser y datos cargados. Status Licencia:", effectiveLicenseStatus, ". Mostrando bloqueo para dominio base o no logueado.");
+    // El estado 'not_configured' es el que se espera del AuthContext cuando no hay slug o no hay tenant.
+    return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={false} forBaseDomain={true} />;
   }
 
-  // License Check and Blocking UI
-  if (authContext.effectiveLicenseStatus !== 'valid') {
-    const isAdminOnLicensePage = 
-      authContext.currentUser?.role === 'admin' && 
-      pathname === '/settings/license';
-
-    if (!isAdminOnLicensePage) {
-      let title = "Acceso Denegado por Licencia";
-      let description = "Tu licencia no es válida, ha expirado, se ha excedido el límite de usuarios, o no está configurada.";
-      let details = "Por favor, contacta al administrador del sistema para resolver este problema.";
-
-      switch (authContext.effectiveLicenseStatus) {
-        case 'expired':
-          description = "La licencia de la aplicación ha expirado.";
-          details = "Por favor, renueva tu licencia o contacta al administrador.";
-          break;
-        case 'user_limit_exceeded':
-          description = "Se ha excedido el número máximo de usuarios permitidos por tu licencia.";
-          details = "Contacta al administrador para actualizar tu plan de licencia.";
-          break;
-        case 'invalid_key':
-          description = "La clave de licencia ingresada no es válida.";
-          details = "Verifica la clave o contacta al administrador.";
-          break;
-        case 'mismatched_project_id':
-          description = "La clave de licencia es válida, pero para un proyecto diferente.";
-          details = "Asegúrate de estar usando la clave correcta para este proyecto o contacta al administrador.";
-          break;
-        case 'api_error':
-          description = "Hubo un error al verificar el estado de la licencia con el servidor.";
-          details = "Intenta de nuevo más tarde o contacta al soporte técnico.";
-          break;
-        case 'not_configured':
-          description = "La licencia de la aplicación no ha sido configurada.";
-          details = "Un administrador debe ingresar una clave de licencia válida en la sección de configuración.";
-          break;
-      }
-
-      return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-          <Card className="w-full max-w-md shadow-lg border-destructive">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <ShieldAlert className="h-6 w-6" /> {title}
-              </CardTitle>
-              <CardDescription>{description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>{details}</p>
-              {authContext.currentUser?.role === 'admin' && (
-                 <p className="mt-4 text-sm">
-                    Puedes gestionar la licencia en <Link href="/settings/license" className="text-primary underline hover:text-primary/80">Configuración de Licencia</Link>.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      );
-    }
+  // Caso 2: Usuario autenticado, pero hay un problema con la licencia Y no es un admin en la página de licencias.
+  const hasLicenseProblem = effectiveLicenseStatus !== 'active' && effectiveLicenseStatus !== 'trial' && effectiveLicenseStatus !== 'pending';
+  if (currentUser && hasLicenseProblem && !isAdminOnLicensePage) {
+    console.log("AppLayout: currentUser existe, hay problema de licencia y no es admin en pág. licencia. Bloqueando.");
+    return <LicenseAccessDeniedBlock status={effectiveLicenseStatus} isAdmin={currentUser.role === 'admin'} />;
   }
-
-
+  
+  // Si llegamos aquí, o el usuario no está (y es manejado por redirección de página), o tiene licencia válida, o es admin en pág. licencia
+  console.log("AppLayout: Renderizando contenido normal de la aplicación.");
   return (
-    <SidebarProvider defaultOpen={true}> 
-      <AppSidebar />
-      <SidebarInset> 
-        <AppHeader />
-        <main className="flex-1 p-4 sm:p-6 overflow-auto">
+    <div className="flex h-screen bg-background">
+      {currentUser && <AppSidebar />} 
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {currentUser && <AppHeader />} 
+        <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 ${!currentUser ? 'h-screen flex items-center justify-center' : ''}`}>
+          {/* Si no hay currentUser aquí, significa que la página es pública o no protegida por este layout general de app */} 
           {children}
         </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+      <Toaster />
+    </div>
   );
 }
