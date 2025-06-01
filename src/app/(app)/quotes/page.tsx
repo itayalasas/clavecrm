@@ -15,7 +15,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
-import { useRouter } from "next/navigation"; // Added import
+import { useRouter } from "next/navigation"; 
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -34,11 +35,11 @@ export default function QuotesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Quote['status']>("Todos");
 
   const quotesNavItem = NAV_ITEMS.find(item => item.href === '/quotes');
-  const { currentUser, loading: authLoading, getAllUsers, hasPermission } = useAuth();
+  // CAMBIO: getAllUsers eliminado de useAuth()
+  const { currentUser, loading: authLoading, hasPermission } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
-  // Permission check effect
   useEffect(() => {
     if (!authLoading) {
       if (!currentUser || !hasPermission('ver-cotizaciones')) {
@@ -46,7 +47,6 @@ export default function QuotesPage() {
       }
     }
   }, [currentUser, authLoading, hasPermission, router]);
-
 
   const fetchQuotes = useCallback(async () => {
     if (!currentUser) {
@@ -56,7 +56,6 @@ export default function QuotesPage() {
     setIsLoadingQuotes(true);
     try {
       const quotesCollectionRef = collection(db, "quotes");
-      // TODO: Add query filters based on user role if necessary
       const q = query(quotesCollectionRef, orderBy("createdAt", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedQuotes = querySnapshot.docs.map(docSnap => {
@@ -107,28 +106,34 @@ export default function QuotesPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers();
+      const fetchedUsers = await getAllUsers(); // CAMBIO: Usa la función importada
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para cotizaciones:", error);
+      toast({ title: "Error al Cargar Usuarios", description: "No se pudieron obtener los datos de los usuarios.", variant: "destructive" });
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [getAllUsers]);
-
+  }, [toast]); // CAMBIO: getAllUsers eliminado de dependencias
 
   useEffect(() => {
     if (!authLoading) {
-      fetchLeads();
-      fetchUsers();
-      if (currentUser) {
+      if (currentUser && hasPermission('ver-cotizaciones')) { // Asegurar permiso antes de cargar
+        fetchLeads();
+        fetchUsers();
         fetchQuotes();
-      } else {
+      } else if (!currentUser) { // Si no hay usuario (después de authLoading)
         setQuotes([]);
         setIsLoadingQuotes(false);
+        setLeads([]);
+        setIsLoadingLeads(false);
+        setUsers([]);
+        setIsLoadingUsers(false);
       }
+      // Si no tiene permiso, el otro useEffect ya lo redirigió.
     }
-  }, [authLoading, currentUser, fetchQuotes, fetchLeads, fetchUsers, hasPermission, router]);
+  // CAMBIO: fetchUsers ya no cambia su referencia innecesariamente
+  }, [authLoading, currentUser, fetchQuotes, fetchLeads, fetchUsers, hasPermission]);
 
   const handleSaveQuote = async (quoteData: Quote) => {
     if (!currentUser) {
@@ -141,7 +146,7 @@ export default function QuotesPage() {
     const firestoreSafeQuote = {
         ...quoteData,
         createdAt: Timestamp.fromDate(new Date(quoteData.createdAt)),
-        updatedAt: Timestamp.now(), // Always update this
+        updatedAt: Timestamp.now(),
         validUntil: quoteData.validUntil ? Timestamp.fromDate(new Date(quoteData.validUntil)) : null,
         preparedByUserId: quoteData.preparedByUserId || currentUser.id,
     };
@@ -150,7 +155,7 @@ export default function QuotesPage() {
       const quoteDocRef = doc(db, "quotes", quoteData.id);
       await setDoc(quoteDocRef, firestoreSafeQuote, { merge: true }); 
       
-      fetchQuotes(); // Re-fetch to update the list
+      fetchQuotes(); 
       toast({
         title: isEditing ? "Cotización Actualizada" : "Cotización Creada",
         description: `La cotización "${quoteData.quoteNumber}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
@@ -181,7 +186,7 @@ export default function QuotesPage() {
       try {
         const quoteDocRef = doc(db, "quotes", quoteId);
         await deleteDoc(quoteDocRef);
-        fetchQuotes(); // Re-fetch
+        fetchQuotes(); 
         toast({
           title: "Cotización Eliminada",
           description: `La cotización "${quoteToDelete.quoteNumber}" ha sido eliminada.`,
@@ -216,14 +221,26 @@ export default function QuotesPage() {
     ), [quotes, filterStatus, searchTerm, leads]);
 
   const pageIsLoading = authLoading || isLoadingQuotes || isLoadingLeads || isLoadingUsers;
+  
+  if (authLoading) {
+    return <div className="flex justify-center items-center h-screen"><p>Cargando autenticación...</p></div>;
+  }
+
+  // El useEffect de permisos se encarga de la redirección.
+  // Si llegamos aquí y no hay currentUser o no tiene permiso, es un estado intermedio o ya se redirigió.
+  // No renderizar nada o un loader mínimo si aún no se ha redirigido.
+  if (!currentUser || !hasPermission('ver-cotizaciones')) {
+    return <div className="flex justify-center items-center h-screen"><p>Verificando permisos...</p></div>;
+  }
 
   return (
-    <div className="flex flex-col gap-6">
+    // CAMBIO: Añadido w-full
+    <div className="flex flex-col gap-6 w-full">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{quotesNavItem?.label || "Cotizaciones"}</h2>
         <AddEditQuoteDialog
           trigger={
-            <Button onClick={openNewQuoteDialog} disabled={pageIsLoading || isSubmittingQuote}>
+            <Button onClick={openNewQuoteDialog} disabled={pageIsLoading || isSubmittingQuote || !hasPermission('crear-cotizacion')}>
               <PlusCircle className="mr-2 h-5 w-5" /> Añadir Cotización
             </Button>
           }
@@ -278,6 +295,9 @@ export default function QuotesPage() {
               preparedBy={users.find(u => u.id === quote.preparedByUserId)}
               onEdit={() => openEditQuoteDialog(quote)}
               onDelete={() => handleDeleteQuote(quote.id)}
+              // Asumiendo que QuoteListItem también podría necesitar estos permisos
+              canEdit={hasPermission('editar-cotizacion')}
+              canDelete={hasPermission('eliminar-cotizacion')}
             />
           ))}
         </div>
