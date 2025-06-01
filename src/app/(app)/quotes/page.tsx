@@ -234,7 +234,7 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 w-full">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{quotesNavItem?.label || "Cotizaciones"}</h2>
         <AddEditQuoteDialog
@@ -281,11 +281,11 @@ export default function QuotesPage() {
       </div>
 
       {pageIsLoading && quotes.length === 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
       ) : filteredQuotes.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full">
           {filteredQuotes.map(quote => (
             <QuoteListItem
               key={quote.id}
@@ -301,7 +301,7 @@ export default function QuotesPage() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-10 text-muted-foreground">
+        <div className="text-center py-10 text-muted-foreground w-full">
           <p className="text-lg">No se encontraron cotizaciones.</p>
           <p>Intenta ajustar tus filtros o añade una nueva cotización.</p>
         </div>
