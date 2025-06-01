@@ -15,9 +15,20 @@ interface InvoiceListItemProps {
   issuedBy?: User | null;
   onEdit: (invoice: Invoice) => void;
   onDelete: (invoiceId: string) => void;
+  canEdit: boolean; // Nuevo prop para controlar la edición
+  canDelete: boolean; // Nuevo prop para controlar la eliminación
 }
 
-export function InvoiceListItem({ invoice, order, lead, issuedBy, onEdit, onDelete }: InvoiceListItemProps) {
+export function InvoiceListItem({ 
+  invoice, 
+  order, 
+  lead, 
+  issuedBy, 
+  onEdit, 
+  onDelete,
+  canEdit,
+  canDelete 
+}: InvoiceListItemProps) {
   
   const getStatusBadge = (status: Invoice['status']) => {
     switch (status) {
@@ -31,7 +42,8 @@ export function InvoiceListItem({ invoice, order, lead, issuedBy, onEdit, onDele
   };
 
   return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow">
+    // CAMBIO: Añadido w-full para que el Card ocupe el ancho del contenedor padre
+    <Card className="shadow-sm hover:shadow-md transition-shadow w-full">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div>
@@ -41,12 +53,16 @@ export function InvoiceListItem({ invoice, order, lead, issuedBy, onEdit, onDele
             {lead && <CardDescription>Cliente: {lead.name} ({lead.company || 'N/A'})</CardDescription>}
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={() => onEdit(invoice)} className="h-8 w-8">
-              <Edit3 className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onDelete(invoice.id)} className="h-8 w-8 text-destructive hover:text-destructive">
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canEdit && (
+              <Button variant="ghost" size="icon" onClick={() => onEdit(invoice)} className="h-8 w-8">
+                <Edit3 className="h-4 w-4" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="ghost" size="icon" onClick={() => onDelete(invoice.id)} className="h-8 w-8 text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>

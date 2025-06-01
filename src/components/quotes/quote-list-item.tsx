@@ -14,9 +14,20 @@ interface QuoteListItemProps {
   preparedBy?: User | null;
   onEdit: (quote: Quote) => void;
   onDelete: (quoteId: string) => void;
+  // Añadiendo props de permisos
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
-export function QuoteListItem({ quote, lead, preparedBy, onEdit, onDelete }: QuoteListItemProps) {
+export function QuoteListItem({
+  quote, 
+  lead, 
+  preparedBy, 
+  onEdit, 
+  onDelete,
+  canEdit,
+  canDelete
+}: QuoteListItemProps) {
   
   const getStatusBadge = (status: Quote['status']) => {
     switch (status) {
@@ -30,7 +41,8 @@ export function QuoteListItem({ quote, lead, preparedBy, onEdit, onDelete }: Quo
   };
 
   return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow">
+    // CAMBIO: Añadido w-full
+    <Card className="shadow-sm hover:shadow-md transition-shadow w-full">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div>
@@ -40,12 +52,16 @@ export function QuoteListItem({ quote, lead, preparedBy, onEdit, onDelete }: Quo
             {lead && <CardDescription>Para: {lead.name} ({lead.company || 'N/A'})</CardDescription>}
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={() => onEdit(quote)} className="h-8 w-8">
-              <Edit3 className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onDelete(quote.id)} className="h-8 w-8 text-destructive hover:text-destructive">
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canEdit && (
+              <Button variant="ghost" size="icon" onClick={() => onEdit(quote)} className="h-8 w-8">
+                <Edit3 className="h-4 w-4" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="ghost" size="icon" onClick={() => onDelete(quote.id)} className="h-8 w-8 text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>

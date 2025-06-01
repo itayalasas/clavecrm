@@ -16,9 +16,21 @@ interface OrderListItemProps {
   placedBy?: User | null;
   onEdit: (order: Order) => void;
   onDelete: (orderId: string) => void;
+  // Asumiendo que podrías querer pasar permisos también, similar a InvoiceListItem
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
-export function OrderListItem({ order, lead, quote, placedBy, onEdit, onDelete }: OrderListItemProps) {
+export function OrderListItem({ 
+  order, 
+  lead, 
+  quote, 
+  placedBy, 
+  onEdit, 
+  onDelete,
+  canEdit,
+  canDelete 
+}: OrderListItemProps) {
   
   const getStatusBadge = (status: Order['status']) => {
     switch (status) {
@@ -32,7 +44,8 @@ export function OrderListItem({ order, lead, quote, placedBy, onEdit, onDelete }
   };
 
   return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow">
+    // CAMBIO: Añadido w-full para que el Card ocupe el ancho del contenedor padre
+    <Card className="shadow-sm hover:shadow-md transition-shadow w-full">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div>
@@ -42,12 +55,16 @@ export function OrderListItem({ order, lead, quote, placedBy, onEdit, onDelete }
             {lead && <CardDescription>Cliente: {lead.name} ({lead.company || 'N/A'})</CardDescription>}
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={() => onEdit(order)} className="h-8 w-8">
-              <Edit3 className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onDelete(order.id)} className="h-8 w-8 text-destructive hover:text-destructive">
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canEdit && (
+              <Button variant="ghost" size="icon" onClick={() => onEdit(order)} className="h-8 w-8">
+                <Edit3 className="h-4 w-4" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="ghost" size="icon" onClick={() => onDelete(order.id)} className="h-8 w-8 text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
