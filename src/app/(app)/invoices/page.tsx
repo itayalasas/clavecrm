@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -36,7 +37,8 @@ export default function InvoicesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Invoice['status']>("Todos");
 
   const invoicesNavItem = NAV_ITEMS.find(item => item.href === '/invoices');
-  const { currentUser, loading: authLoading, getAllUsers, hasPermission } = useAuth(); // Correctly destructure hasPermission
+  // CAMBIO: getAllUsers eliminado de useAuth()
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); 
   const { toast } = useToast();
   const router = useRouter();
 
@@ -57,7 +59,7 @@ export default function InvoicesPage() {
           ...data,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || undefined,
-          dueDate: (data.dueDate as Timestamp)?.toDate().toISOString() || '', // Ensure dueDate is string
+          dueDate: (data.dueDate as Timestamp)?.toDate().toISOString() || '',
           paymentDate: (data.paymentDate as Timestamp)?.toDate().toISOString() || undefined,
         } as Invoice;
       });
@@ -111,30 +113,29 @@ export default function InvoicesPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers();
+      const fetchedUsers = await getAllUsers(); // CAMBIO: Usa la función importada
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para facturas:", error);
+      // Considera un toast aquí si la carga de usuarios es crítica para la funcionalidad
+      toast({ title: "Error al Cargar Usuarios", description: "No se pudieron obtener los datos de los usuarios.", variant: "destructive" });
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [getAllUsers]);
+  }, [toast]); // CAMBIO: getAllUsers eliminado de dependencias
 
   useEffect(() => {
-    // Permission validation effect
     if (!authLoading) {
       if (!currentUser || !hasPermission('ver-facturas')) {
         router.push('/access-denied');
+        return; // Importante: salir temprano para evitar llamadas de fetch innecesarias
       }
-    }
-
-    // Data fetching effect
-    if (!authLoading && currentUser && hasPermission('ver-facturas')) { // Ensure currentUser and permission before fetching
+      // Solo fetchear si el usuario está autenticado y tiene permiso
       fetchOrders();
       fetchLeads();
       fetchUsers();
       fetchInvoices();
-    } else if (!authLoading && !currentUser) { // If not logged in, clear data
+    } else if (!authLoading && !currentUser) {
         setInvoices([]);
         setIsLoadingInvoices(false);
         setOrders([]);
@@ -144,6 +145,7 @@ export default function InvoicesPage() {
         setUsers([]);
         setIsLoadingUsers(false);
     }
+  // CAMBIO: fetchUsers ya no cambia su referencia innecesariamente
   }, [authLoading, currentUser, fetchInvoices, fetchOrders, fetchLeads, fetchUsers, hasPermission, router]);
 
   const handleSaveInvoice = async (invoiceData: Invoice) => {
@@ -167,7 +169,7 @@ export default function InvoicesPage() {
       const invoiceDocRef = doc(db, "invoices", invoiceData.id);
       await setDoc(invoiceDocRef, firestoreSafeInvoice, { merge: true });
       
-      fetchInvoices(); // Re-fetch
+      fetchInvoices();
       toast({
         title: isEditing ? "Factura Actualizada" : "Factura Creada",
         description: `La factura "${invoiceData.invoiceNumber}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
@@ -223,24 +225,24 @@ export default function InvoicesPage() {
 
   const pageIsLoading = authLoading || isLoadingInvoices || isLoadingOrders || isLoadingLeads || isLoadingUsers;
 
-  // Show loading indicator while authenticating or fetching initial data
   if (authLoading) {
-    return <div className="flex justify-center items-center h-screen"><p>Cargando...</p></div>;
+    return <div className="flex justify-center items-center h-screen"><p>Cargando autenticación...</p></div>; // Mensaje más específico
   }
 
-  // If user doesn't have permission, the effect will redirect them. Render null or a placeholder if needed.
-  // This check is secondary to the useEffect redirect but handles initial render before effect runs.
   if (!currentUser || !hasPermission('ver-facturas')) {
-    return null; // Or a custom access denied component if preferred.
+    // El useEffect ya debería haber redirigido, pero esto es un fallback.
+    // No renderizar nada o un mensaje mínimo mientras ocurre la redirección.
+    return <div className="flex justify-center items-center h-screen"><p>Verificando permisos...</p></div>;
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    // CAMBIO: Añadido w-full
+    <div className="flex flex-col gap-6 w-full">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{invoicesNavItem?.label || "Facturas"}</h2>
          <AddEditInvoiceDialog
           trigger={
-            <Button onClick={openNewInvoiceDialog} disabled={pageIsLoading || isSubmittingInvoice}>
+            <Button onClick={openNewInvoiceDialog} disabled={pageIsLoading || isSubmittingInvoice || !hasPermission('crear-factura')}>
               <PlusCircle className="mr-2 h-5 w-5" /> Añadir Factura
             </Button>
           }
@@ -297,6 +299,8 @@ export default function InvoicesPage() {
               issuedBy={users.find(u => u.id === invoice.issuedByUserId)}
               onEdit={() => openEditInvoiceDialog(invoice)}
               onDelete={() => handleDeleteInvoice(invoice.id)}
+              canEdit={hasPermission('editar-factura')}
+              canDelete={hasPermission('eliminar-factura')}
             />
           ))}
         </div>
