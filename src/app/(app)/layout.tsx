@@ -100,7 +100,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {currentUser && <AppSidebar />} 
         <div className="flex flex-1 flex-col overflow-hidden">
           {currentUser && <AppHeader />} 
-          <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 ${!currentUser ? 'h-screen flex items-center justify-center' : ''}`}>
+          <main className={`w-full flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 ${!currentUser ? 'h-screen flex items-center justify-center' : ''}`}>
             {children}
           </main>
         </div>
