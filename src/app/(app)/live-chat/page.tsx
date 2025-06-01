@@ -23,30 +23,30 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 export default function LiveChatPage() {
-  const { currentUser, loading, hasPermission } = useAuth();
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); // Corrected to authLoading
   const router = useRouter();
 
-  // Redirigir si no tiene permiso
   useEffect(() => {
-    if (!loading) {
+    if (!authLoading) { // Corrected to authLoading
       if (!currentUser || !hasPermission('ver-chat-vivo')) {
         router.push('/access-denied');
       }
     }
-  }, [currentUser, loading, hasPermission, router]);
+  }, [currentUser, authLoading, hasPermission, router]); // Corrected to authLoading
 
-  // Mientras carga, mostramos un spinner simple o texto
-  if (loading) {
-    return <div>Cargando...</div>;
-  }
-
-  // Buscamos el item de menú para usar su icono y etiqueta
   const navItem = NAV_ITEMS
-    .flatMap(item => item.subItems || item)  // aplana subitems o el propio
+    .flatMap(item => item.subItems || item)  
     .find(item => item.href === '/live-chat');
   const PageIcon = navItem?.icon || MessagesSquare;
 
-  // Función para renderizar cada tarjeta de característica
+  if (authLoading) { // Corrected to authLoading
+    return <div className="flex justify-center items-center h-screen w-full"><p>Cargando...</p></div>;
+  }
+
+  if (!currentUser || !hasPermission('ver-chat-vivo')) {
+    return <div className="flex justify-center items-center h-screen w-full"><p>Verificando permisos...</p></div>; 
+  }
+
   const renderFeatureCard = (
     title: string,
     Icon: React.ElementType,
@@ -76,12 +76,12 @@ export default function LiveChatPage() {
       badgeVariant = 'outline';
       badgeText = 'En Desarrollo';
       badgeClass = 'border-blue-500 text-blue-600';
-      cardClass = 'bg-yellow-50 border-yellow-200';
-      titleClass = 'text-yellow-700';
+      cardClass = 'bg-yellow-50 border-yellow-200'; // Consider changing this if it clashes with 'parcial'
+      titleClass = 'text-yellow-700'; // Consider changing this if it clashes
     }
 
     return (
-      <Card className={cardClass} key={title}>
+      <Card className={`${cardClass} w-full`} key={title}> {/* Added w-full here */}
         <CardHeader>
           <CardTitle className={`flex items-center gap-2 text-lg ${titleClass}`}>
             <Icon className="h-5 w-5" />
@@ -104,9 +104,8 @@ export default function LiveChatPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Cabecera */}
-      <Card className="shadow-lg">
+    <div className="flex flex-col gap-6 w-full"> {/* Added w-full */}
+      <Card className="shadow-lg w-full"> {/* Added w-full */}
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
             <div>
@@ -120,12 +119,14 @@ export default function LiveChatPage() {
                 integración con WhatsApp Business API también se gestiona aquí.
               </CardDescription>
             </div>
-            <Button asChild>
-              <Link href="/live-chat/agent-panel" className="flex items-center">
-                <LayoutGrid className="mr-2 h-4 w-4" />
-                Ir al Panel de Agente
-              </Link>
-            </Button>
+            {hasPermission('acceder-panel-agente') && (
+              <Button asChild>
+                <Link href="/live-chat/agent-panel" className="flex items-center">
+                  <LayoutGrid className="mr-2 h-4 w-4" />
+                  Ir al Panel de Agente
+                </Link>
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -148,8 +149,7 @@ export default function LiveChatPage() {
         </CardContent>
       </Card>
 
-      {/* Grilla de características */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 w-full"> {/* Added w-full */}
         {renderFeatureCard(
           'Widget de Chat en Vivo',
           MessageCircle,

@@ -3,41 +3,47 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { NAV_ITEMS } from "@/lib/constants";
-import { LayoutTemplate } from "lucide-react";
+import { LayoutTemplate, MessageSquare } from "lucide-react"; // Added MessageSquare as a fallback
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function LandingPagesPage() {
-  const { currentUser, loading, hasPermission } = useAuth();
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); // Corrected to authLoading
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
+    if (!authLoading) { // Corrected to authLoading
       if (!currentUser || !hasPermission('ver-paginas-aterrizaje')) {
         router.push('/access-denied');
       }
     }
-  }, [currentUser, loading, hasPermission, router]);
+  }, [currentUser, authLoading, hasPermission, router]); // Corrected to authLoading
 
   const navItem = NAV_ITEMS.find(item => item.href === '/landing-pages');
-  const PageIcon = navItem?.icon || LayoutTemplate;
+  // Use MessageSquare as a fallback if LayoutTemplate is specific and not found, or use navItem?.icon
+  const PageIcon = navItem?.icon || LayoutTemplate; 
+
+  if (authLoading) { // Corrected to authLoading
+    return <div className="flex justify-center items-center h-screen w-full"><p>Cargando...</p></div>;
+  }
+
+  // No renderizar nada si no tiene permiso, el useEffect ya redirige.
+  if (!currentUser || !hasPermission('ver-paginas-aterrizaje')) {
+    return <div className="flex justify-center items-center h-screen w-full"><p>Verificando permisos...</p></div>; 
+  }
 
   return (
-    <div className="flex flex-col gap-6">\
-      <Card className="shadow-lg">
+    <div className="flex flex-col gap-6 w-full"> {/* Added w-full */}
+      <Card className="shadow-lg w-full"> {/* Added w-full */}
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
-            {loading && <div>Cargando...</div>}
-            {(!loading && (!currentUser || !hasPermission('ver-paginas-aterrizaje'))) && null} {/* Render nothing if access is denied */}
-            {(!loading && currentUser && hasPermission('ver-paginas-aterrizaje')) && (
-              <>
-            {(!loading && currentUser && hasPermission('ver-paginas-aterrizaje')) && (\
-              <>
             <PageIcon className="h-6 w-6 text-primary" />
             {navItem?.label || "Landing Pages y Formularios"}
           </CardTitle>
-<CardDescription>
+          <CardDescription>
             Diseña landing pages y formularios web para capturar leads directamente en tu CRM.
           </CardDescription>
         </CardHeader>
@@ -58,8 +64,6 @@ export default function LandingPagesPage() {
               Esta sección está actualmente en desarrollo. Vuelve pronto para ver las actualizaciones.
             </p>
           </div>
-           )}
-
         </CardContent>
       </Card>
     </div>

@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { INITIAL_PIPELINE_STAGES } from "@/lib/constants"; // Keep stages static for now
+import { INITIAL_PIPELINE_STAGES } from "@/lib/constants"; 
 import type { Lead, PipelineStage, Task } from "@/lib/types";
 import { DollarSign, Users, TrendingUp, CheckCircle2, ListTodo, Target, Activity, CalendarClock, AlertTriangle } from 'lucide-react';
 import { es } from 'date-fns/locale';
@@ -14,20 +14,19 @@ import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firesto
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D'];
 const MONTH_NAMES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 const parseDateField = (fieldValue: any): string | undefined => {
     if (!fieldValue) return undefined;
-    if (fieldValue instanceof Timestamp) { // Firestore Timestamp
+    if (fieldValue instanceof Timestamp) { 
         return fieldValue.toDate().toISOString();
     }
-    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
+    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { 
         return fieldValue;
     }
-    // Handle cases where it might be a Firestore serverTimestamp pending write (less likely for reads)
-    // or an old format. For reads, it should typically be a Timestamp or already a string.
     console.warn("Unexpected date format in parseDateField:", fieldValue);
     return undefined; 
 };
@@ -35,6 +34,7 @@ const parseDateField = (fieldValue: any): string | undefined => {
 
 export default function DashboardPage() {
   const { currentUser, loading: authLoading, hasPermission } = useAuth();
+  const router = useRouter(); // Initialize router
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>(INITIAL_PIPELINE_STAGES);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -43,10 +43,14 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   const fetchLeadsAndTasks = useCallback(async () => {
+    if (!currentUser) { // Check if currentUser is available
+        setIsLoadingLeads(false);
+        setIsLoadingTasks(false);
+        return;
+    }
     setIsLoadingLeads(true);
     setIsLoadingTasks(true);
     try {
-      // Fetch Leads
       const leadsCollectionRef = collection(db, "leads");
       const leadsQuery = query(leadsCollectionRef, orderBy("createdAt", "desc"));
       const leadsSnapshot = await getDocs(leadsQuery);
@@ -61,7 +65,6 @@ export default function DashboardPage() {
       });
       setLeads(fetchedLeads);
 
-      // Fetch Tasks
       const tasksCollectionRef = collection(db, "tasks");
       const tasksQuery = query(tasksCollectionRef, orderBy("createdAt", "desc"));
       const tasksSnapshot = await getDocs(tasksQuery);
@@ -87,22 +90,22 @@ export default function DashboardPage() {
       setIsLoadingLeads(false);
       setIsLoadingTasks(false);
     }
-  }, [toast]);
+  }, [toast, currentUser]); // Added currentUser as dependency
 
   useEffect(() => {
-    // Redirect if not authenticated or lacks permission after loading
-    if (!authLoading && (!currentUser || !hasPermission('ver-dashboard'))) {
-      // TODO: Replace with your actual redirect logic, e.g., using Next.js router
-      // window.location.href = '/access-denied'; // Simple redirect example
-       console.warn("Access Denied: User does not have 'ver-dashboard' permission.");
-       // For now, just log, you'll integrate actual router redirect
-       // import { useRouter } from 'next/navigation';
-       // const router = useRouter();
-       // router.push('/access-denied');
+    if (!authLoading) {
+      if (!currentUser || !hasPermission('ver-dashboard')) {
+       router.push('/access-denied');
+       return; 
+      }
+      fetchLeadsAndTasks();
+    } else if (!authLoading && !currentUser){
+        setLeads([]);
+        setTasks([]);
+        setIsLoadingLeads(false);
+        setIsLoadingTasks(false);
     }
-
-    fetchLeadsAndTasks();
-  }, [fetchLeadsAndTasks]);
+  }, [authLoading, currentUser, hasPermission, router, fetchLeadsAndTasks]);
 
   const totalLeads = leads.length;
   const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
@@ -141,35 +144,28 @@ export default function DashboardPage() {
       name: lead.name,
     })).slice(0, 10);
 
-  const isLoading = isLoadingLeads || isLoadingTasks;
-  const pageLoading = authLoading || isLoading; // Consider auth loading as part of page loading
-  if (isLoading && leads.length === 0 && tasks.length === 0) {
+  const isLoading = isLoadingLeads || isLoadingTasks; 
+
+  if (authLoading || (!currentUser && !hasPermission('ver-dashboard'))) {
     return (
-      <div className="flex flex-col gap-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
+        <div className="flex items-center justify-center h-screen w-full">
+            <Skeleton className="h-12 w-12 rounded-full" />
+            <div className="space-y-2 ml-4">
+                <Skeleton className="h-4 w-[250px]" />
+                <Skeleton className="h-4 w-[200px]" />
+            </div>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-[350px] w-full" />
-          <Skeleton className="h-[350px] w-full" />
-        </div>
-         <Skeleton className="h-40 w-full" />
-      </div>
     );
+  }
+    if (!currentUser || !hasPermission('ver-dashboard')) {
+     return <div className="flex justify-center items-center h-screen w-full"><p>Verificando permisos...</p></div>;
   }
 
-   if (authLoading) {
-    return (
-        <div className="flex items-center justify-center h-screen">
-            <p>Cargando autenticación...</p>
-        </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 w-full"> {/* Added w-full */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
             <Users className="h-5 w-5 text-muted-foreground" />
@@ -179,7 +175,7 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">+10% desde el mes pasado</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Valor del Embudo</CardTitle>
             <DollarSign className="h-5 w-5 text-muted-foreground" />
@@ -189,7 +185,7 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">+5.2% desde el mes pasado</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Tasa de Conversión</CardTitle>
             <Target className="h-5 w-5 text-muted-foreground" />
@@ -199,7 +195,7 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">+2.1% desde el mes pasado</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Negocios Activos</CardTitle>
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
@@ -212,7 +208,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader>
             <CardTitle>Pronóstico de Ventas (Ponderado)</CardTitle>
             <CardDescription>Valor estimado de cierre por mes basado en probabilidad.</CardDescription>
@@ -236,7 +232,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader>
             <CardTitle>Leads por Etapa</CardTitle>
             <CardDescription>Distribución de leads en el embudo de ventas.</CardDescription>
@@ -261,7 +257,7 @@ export default function DashboardPage() {
       </div>
       
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader>
             <CardTitle>Valor del Embudo por Fecha de Cierre</CardTitle>
             <CardDescription>Próximos cierres esperados (primeros 10).</CardDescription>
@@ -285,7 +281,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="w-full"> {/* Added w-full */}
           <CardHeader>
             <CardTitle>Estado de Tareas</CardTitle>
             <CardDescription>Resumen de tareas abiertas y completadas.</CardDescription>
@@ -320,7 +316,7 @@ export default function DashboardPage() {
         </Card>
       </div>
       
-      <Card>
+      <Card className="w-full"> {/* Added w-full */}
         <CardHeader>
           <CardTitle>Actividad Reciente</CardTitle>
           <CardDescription>Últimas actualizaciones e interacciones.</CardDescription>
@@ -365,7 +361,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-       <Card className="mt-4 bg-amber-50 border-amber-200">
+       <Card className="mt-4 bg-amber-50 border-amber-200 w-full"> {/* Added w-full */}
         <CardHeader>
           <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
             <AlertTriangle className="h-5 w-5" />

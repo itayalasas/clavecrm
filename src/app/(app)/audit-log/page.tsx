@@ -17,10 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { useRouter } from "next/navigation"; // Import useRouter
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
     Lead: Users,
-    Task: FileText, // Using FileText as ListChecks is for navigation
+    Task: FileText, 
     Ticket: Ticket,
     User: UserCircle,
     Document: FileText,
@@ -32,7 +34,6 @@ const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
     Meeting: CalendarDays,
     ContactList: Users2,
     EmailTemplate: FileText,
-    // Add more as needed
     Default: HistoryIcon,
 };
 
@@ -57,39 +58,42 @@ export default function AuditLogPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
 
-  const { currentUser, hasPermission, getAllUsers } = useAuth();
+  // CAMBIO: getAllUsers eliminado de useAuth()
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); 
   const { toast } = useToast();
+  const router = useRouter(); // Initialize router
 
   const parseTimestampField = (fieldValue: any): string => {
-    if (fieldValue && typeof fieldValue.toDate === 'function') { // Firestore Timestamp
+    if (fieldValue && typeof fieldValue.toDate === 'function') { 
       return (fieldValue as Timestamp).toDate().toISOString();
     }
-    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { // ISO String
+    if (typeof fieldValue === 'string' && isValid(parseISO(fieldValue))) { 
       return fieldValue;
     }
-    // Check for Firestore serverTimestamp sentinel object if it's a pending write
-    // This case usually happens with onSnapshot for local changes before server confirms
-    // For getDocs, this is less likely, but good to be aware
     if (fieldValue && typeof fieldValue === 'object' && fieldValue.hasOwnProperty('_methodName') && fieldValue._methodName === 'serverTimestamp') {
-        return new Date().toISOString(); // Or handle as "Pending"
+        return new Date().toISOString(); 
     }
-    return new Date().toISOString(); // Fallback
+    return new Date().toISOString(); 
   };
 
-  const fetchAuditLogs = useCallback(async () => {
+  const fetchAuditLogsAndUsers = useCallback(async () => {
     if (!currentUser) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const q = query(
-        collection(db, "activityLogs"),
-        where("category", "==", "system_audit"),
-        orderBy("timestamp", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      const fetchedLogs = querySnapshot.docs.map(docSnap => {
+      // CAMBIO: Llamar a getAllUsers importada
+      const [auditLogsSnapshot, allUsersData] = await Promise.all([
+        getDocs(query(
+          collection(db, "activityLogs"),
+          where("category", "==", "system_audit"),
+          orderBy("timestamp", "desc")
+        )),
+        getAllUsers() 
+      ]);
+
+      const fetchedLogs = auditLogsSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         return {
           id: docSnap.id,
@@ -99,60 +103,58 @@ export default function AuditLogPage() {
         } as ActivityLog;
       });
       setAuditLogs(fetchedLogs);
+
+      const map: Record<string, string> = {};
+      allUsersData.forEach(user => {
+        if(user.name) map[user.id] = user.name;
+      });
+      setUsersMap(map);
+
     } catch (error) {
-      console.error("Error al obtener historial de auditoría:", error);
-      toast({ title: "Error al Cargar Historial de Auditoría", description: String(error), variant: "destructive" });
+      console.error("Error al obtener historial de auditoría o usuarios:", error);
+      toast({ title: "Error al Cargar Datos", description: String(error), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
+  // CAMBIO: dependencias ajustadas
   }, [currentUser, toast]);
 
-  const fetchUsersMap = useCallback(async () => {
-    try {
-        const allUsers = await getAllUsers();
-        const map: Record<string, string> = {};
-        allUsers.forEach(user => {
-            map[user.id] = user.name;
-        });
-        setUsersMap(map);
-    } catch (error) {
-        console.error("Error al obtener mapa de usuarios para historial de auditoría:", error);
-    }
-  }, [getAllUsers]);
-
   useEffect(() => {
-    if (!isLoading && currentUser && hasPermission('ver-registro-auditoria')) {
-        fetchAuditLogs();
-        fetchUsersMap();
-    } else {
+    if(!authLoading){
+      if (!currentUser || !hasPermission('ver-registro-auditoria')) {
+        router.push('/access-denied');
+        return;
+      }
+      fetchAuditLogsAndUsers();
+    } else if (!authLoading && !currentUser) {
+        setAuditLogs([]);
+        setUsersMap({});
         setIsLoading(false);
-        setAuditLogs([]); // Clear logs if not authorized
     }
-  }, [fetchAuditLogs, fetchUsersMap, currentUser]);
+  // CAMBIO: fetchAuditLogsAndUsers es ahora estable
+  }, [authLoading, currentUser, hasPermission, router, fetchAuditLogsAndUsers]);
  
- if (isLoading) {
+ if (authLoading) { // Mostrar loader si la autenticación está en curso
     return (
-      <div className="flex flex-grow items-center justify-center">
+      <div className="flex flex-col gap-6 w-full p-6 items-center justify-center h-screen">
+        <Skeleton className="h-12 w-12 rounded-full" />
         <div className="space-y-2">
-         <Skeleton className="h-8 w-64" />
-         <Skeleton className="h-64 w-full" />
-         <Skeleton className="h-4 w-48" />
+          <Skeleton className="h-4 w-[250px]" />
+          <Skeleton className="h-4 w-[200px]" />
         </div>
       </div>
    );
   }
 
+  // Si después de cargar auth, no hay currentUser o no tiene permiso, el useEffect ya redirigió.
+  // Este es un fallback para el estado inicial antes de que el efecto se ejecute.
   if (!currentUser || !hasPermission('ver-registro-auditoria')) {
     return (
-        <Card className="m-auto mt-10 max-w-md">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-6 w-6 text-destructive"/>Acceso Denegado</CardTitle>
-                <CardDescription>No tienes permisos para ver el historial de auditoría.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p>Esta sección es solo para administradores y supervisores.</p>
-            </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center h-screen w-full p-6 text-center">
+            <ShieldAlert size={48} className="text-destructive mb-4" />
+            <h2 className="text-xl font-semibold">Acceso Denegado</h2>
+            <p className="text-muted-foreground">No tienes permisos para ver el historial de auditoría.</p>
+        </div>
     );
   }
 
@@ -165,8 +167,9 @@ export default function AuditLogPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="shadow-lg">
+    // CAMBIO: Añadido w-full
+    <div className="flex flex-col gap-6 w-full">
+      <Card className="shadow-lg w-full"> {/* Card principal ocupa todo el ancho */} 
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
@@ -187,12 +190,14 @@ export default function AuditLogPage() {
                     className="pl-8 w-full"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={isLoading} // Deshabilitar si está cargando inicialmente
                 />
             </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[calc(100vh-var(--header-height,4rem)-18rem)]"> {/* Adjust height as needed */}
-            {isLoading ? (
+          {/* Ajustar altura de ScrollArea dinámicamente o un valor fijo alto */} 
+          <ScrollArea className="h-[calc(100vh-var(--header-height,4rem)-19rem)] xl:h-[calc(100vh-var(--header-height,4rem)-16rem)]"> 
+            {isLoading && auditLogs.length === 0 ? (
               <div className="space-y-4">
                 {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
               </div>
