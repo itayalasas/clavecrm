@@ -9,7 +9,7 @@ import { AddEditTaskDialog } from "@/components/tasks/add-edit-task-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Search, Filter } from "lucide-react";
+import { PlusCircle, Search, Filter, ListChecks } from "lucide-react"; // Reemplazado el icono por defecto si no se encuentra
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -18,9 +18,9 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, writeBatch } from "firebase/firestore";
 import { addMonths, setDate, startOfMonth, format, parseISO } from "date-fns";
 import { es } from 'date-fns/locale';
-import { logSystemEvent } from "@/lib/auditLogger"; // Import audit logger
-import { useRouter } from "next/navigation"; // Import useRouter
-
+import { logSystemEvent } from "@/lib/auditLogger";
+import { useRouter } from "next/navigation"; 
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -38,9 +38,12 @@ export default function TasksPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
   const [filterPriority, setFilterPriority] = useState<"all" | Task['priority']>("all");
 
-  const tasksNavItem = NAV_ITEMS.find(item => item.href === '/tasks');
-  const { getAllUsers, currentUser, loading: authLoading, hasPermission } = useAuth(); // Destructure hasPermission
-  const router = useRouter(); // Initialize useRouter
+  const tasksNavItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/tasks');
+  const PageIcon = tasksNavItem?.icon || ListChecks; // Usar un icono por defecto si no se encuentra
+  
+  // CAMBIO: getAllUsers eliminado de useAuth()
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); 
+  const router = useRouter(); 
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
@@ -109,7 +112,7 @@ export default function TasksPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers();
+      const fetchedUsers = await getAllUsers(); // CAMBIO: Usa la función importada
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para la página de tareas:", error);
@@ -121,29 +124,27 @@ export default function TasksPage() {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [getAllUsers, toast]);
+  }, [toast]); // CAMBIO: getAllUsers eliminado de dependencias
 
   useEffect(() => {
-    // Check permissions and redirect if necessary
-    if (!authLoading && !hasPermission('ver-tareas')) {
-      router.push('/access-denied');
+    if (!authLoading) {
+      if (!currentUser || !hasPermission('ver-tareas')) {
+        router.push('/access-denied');
+        return; 
+      }
+      fetchUsers();
+      fetchLeads();
+      fetchTasks();
+    } else if (!authLoading && !currentUser) {
+        setTasks([]);
+        setIsLoadingTasks(false);
+        setLeads([]);
+        setIsLoadingLeads(false);
+        setUsers([]);
+        setIsLoadingUsers(false);
     }
-  }, [authLoading, hasPermission, router]);
-
-
-  useEffect(() => {
-    if (!authLoading) { 
-        fetchUsers();
-        fetchLeads();
-        if (currentUser) { 
-          fetchTasks();
-        } else { 
-          setTasks([]);
-          setIsLoadingTasks(false);
-        }
-    }
-  }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTasks]);
-
+  // CAMBIO: fetchUsers ya no cambia su referencia innecesariamente
+  }, [authLoading, currentUser, hasPermission, router, fetchUsers, fetchLeads, fetchTasks]);
 
   const handleSaveTask = async (taskData: Task) => {
     if (!currentUser) {
@@ -152,9 +153,7 @@ export default function TasksPage() {
     }
     setIsSubmittingTask(true);
     const isEditing = !!taskData.id && tasks.some(t => t.id === taskData.id);
-    
     const taskId = taskData.id || doc(collection(db, "tasks")).id; 
-
     const taskToSave: Task = {
       ...taskData, 
       id: taskId,
@@ -164,7 +163,6 @@ export default function TasksPage() {
       reporterUserId: taskData.reporterUserId || currentUser.id,
       createdAt: taskData.createdAt || new Date().toISOString(),
     };
-    
     try {
       const taskDocRef = doc(db, "tasks", taskId);
       const firestoreSafeTask = {
@@ -172,22 +170,17 @@ export default function TasksPage() {
         createdAt: Timestamp.fromDate(new Date(taskToSave.createdAt)),
         dueDate: taskToSave.dueDate ? Timestamp.fromDate(new Date(taskToSave.dueDate)) : null,
       };
-      
       await setDoc(taskDocRef, firestoreSafeTask, { merge: true }); 
-
       fetchTasks(); 
-      
       toast({
         title: isEditing ? "Tarea Actualizada" : "Tarea Creada",
         description: `La tarea "${taskToSave.title}" ha sido ${isEditing ? 'actualizada' : 'creada'} exitosamente.`,
       });
-
       const actionType = isEditing ? 'update' : 'create';
       const actionDetails = isEditing ? 
         `Tarea "${taskToSave.title}" actualizada.` : 
         `Tarea "${taskToSave.title}" creada.`;
       await logSystemEvent(currentUser, actionType, 'Task', taskId, actionDetails);
-
       setEditingTask(null);
       setIsTaskDialogOpen(false);
     } catch (error) {
@@ -205,22 +198,16 @@ export default function TasksPage() {
   const handleToggleComplete = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task || !currentUser) return;
-
     const updatedTask = { ...task, completed: !task.completed };
     const batch = writeBatch(db);
-
     try {
       const taskDocRef = doc(db, "tasks", taskId);
       batch.update(taskDocRef, { completed: updatedTask.completed });
-
       let newRecurringTaskInstance: Task | null = null;
-
       if (updatedTask.completed && task.isMonthlyRecurring && task.dueDate) {
           const originalDueDate = parseISO(task.dueDate);
-          
           let nextMonthDate = addMonths(originalDueDate, 1);
           const nextDueDate = startOfMonth(nextMonthDate);
-
           const newTaskId = doc(collection(db, "tasks")).id;
           newRecurringTaskInstance = {
             ...task,
@@ -231,7 +218,6 @@ export default function TasksPage() {
             solutionDescription: "", 
             attachments: [], 
           };
-          
           const newRecurringTaskDocRef = doc(db, "tasks", newRecurringTaskInstance.id);
           const firestoreSafeNewRecurringTask = {
               ...newRecurringTaskInstance,
@@ -240,16 +226,12 @@ export default function TasksPage() {
           }
           batch.set(newRecurringTaskDocRef, firestoreSafeNewRecurringTask);
       }
-
-
       await batch.commit();
       fetchTasks(); 
-
       toast({
         title: "Tarea Actualizada",
         description: `La tarea "${task.title}" ha sido marcada como ${updatedTask.completed ? 'completada' : 'pendiente'}.`,
       });
-
       await logSystemEvent(currentUser, 'update', 'Task', taskId, `Estado de tarea "${task.title}" cambiado a ${updatedTask.completed ? 'completada' : 'pendiente'}.`);
       if (newRecurringTaskInstance && newRecurringTaskInstance.dueDate) {
         toast({
@@ -258,7 +240,6 @@ export default function TasksPage() {
         });
         await logSystemEvent(currentUser, 'create', 'Task', newRecurringTaskInstance.id, `Tarea recurrente "${newRecurringTaskInstance.title}" creada.`);
       }
-
     } catch (error) {
       console.error("Error al cambiar estado de tarea completa y/o crear recurrencia:", error);
       toast({
@@ -272,10 +253,8 @@ export default function TasksPage() {
   const handleDeleteTask = async (taskId: string) => {
     const taskToDelete = tasks.find(t => t.id === taskId);
     if (!taskToDelete || !currentUser) return;
-
     if (window.confirm(`¿Estás seguro de que quieres eliminar la tarea "${taskToDelete.title}"?`)) {
       try {
-        // TODO: Delete attachments from Firebase Storage if any
         const taskDocRef = doc(db, "tasks", taskId);
         await deleteDoc(taskDocRef);
         fetchTasks(); 
@@ -297,10 +276,10 @@ export default function TasksPage() {
 
   const filteredTasks = useMemo(() => {
     if (!currentUser) return []; 
-
     return tasks 
       .filter(task => { 
-        if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
+        // CAMBIO: Usar hasPermission para admin/supervisor o verificar si es reporter/assignee
+        if (hasPermission('ver-todas-tareas') || hasPermission('admin_tasks')) { // Asumiendo un permiso general para ver todas las tareas
           return true;
         }
         return task.reporterUserId === currentUser.id || task.assigneeUserId === currentUser.id;
@@ -319,7 +298,7 @@ export default function TasksPage() {
         (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
       .sort((a, b) => Number(a.completed) - Number(b.completed) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [tasks, searchTerm, filterStatus, filterPriority, currentUser]);
+  }, [tasks, searchTerm, filterStatus, filterPriority, currentUser, hasPermission]);
 
   const openDialogForNewTask = () => {
     setEditingTask(null); 
@@ -333,19 +312,33 @@ export default function TasksPage() {
 
    if (authLoading) {
     return (
-        <div className="flex flex-grow items-center justify-center h-full"><p>Cargando...</p></div>
+        <div className="flex flex-col gap-6 w-full p-6 items-center justify-center h-screen">
+            <Skeleton className="h-12 w-1/4 self-start" /> 
+            <Skeleton className="h-8 w-full" /> 
+            <Skeleton className="h-20 w-full" /> 
+            <Skeleton className="h-20 w-full" /> 
+            <Skeleton className="h-20 w-full" /> 
+        </div>
     );
-  };
+  }
 
-  const isLoading = authLoading || isLoadingTasks || isLoadingUsers || isLoadingLeads;
+  if (!currentUser || !hasPermission('ver-tareas')) {
+    // El useEffect ya se encarga de la redirección.
+    // Este es un fallback para el estado inicial antes de que el efecto se ejecute.
+    return <div className="flex justify-center items-center h-screen w-full"><p>Verificando permisos...</p></div>;
+  }
+
+  const isLoading = isLoadingTasks || isLoadingUsers || isLoadingLeads; // isLoading ya no depende de authLoading aquí
 
   return (
-    <div className="flex flex-col gap-6">
+    // CAMBIO: Añadido w-full
+    <div className="flex flex-col gap-6 w-full">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h2 className="text-2xl font-semibold">{tasksNavItem ? tasksNavItem.label : "Gestión de Tareas"}</h2>
+        <h2 className="text-2xl font-semibold">{tasksNavItem?.label || "Gestión de Tareas"}</h2>
          <AddEditTaskDialog
             trigger={
-              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers || isSubmittingTask || isLoadingLeads}>
+              // CAMBIO: Usar hasPermission para el botón
+              <Button onClick={openDialogForNewTask} disabled={isLoadingUsers || isSubmittingTask || isLoadingLeads || !hasPermission('crear-tarea')}>
                 <PlusCircle className="mr-2 h-5 w-5" /> Añadir Tarea
               </Button>
             }
@@ -356,6 +349,7 @@ export default function TasksPage() {
             users={users} 
             onSave={handleSaveTask}
             isSubmitting={isSubmittingTask}
+            currentUser={currentUser}
           />
       </div>
 
@@ -395,7 +389,7 @@ export default function TasksPage() {
         </TabsList>
       </Tabs>
 
-      {isLoading ? (
+      {isLoading && tasks.length === 0 ? (
         <div className="space-y-4">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
@@ -412,6 +406,12 @@ export default function TasksPage() {
               onToggleComplete={handleToggleComplete}
               onEdit={() => openDialogForEditTask(task)}
               onDelete={handleDeleteTask}
+              // CAMBIO: Usar hasPermission para acciones en TaskItem
+              canEditTask={hasPermission('editar-tarea')}
+              canDeleteTask={hasPermission('eliminar-tarea')}
+              canCompleteTask={hasPermission('completar-tarea')}
+              canAssignTask={hasPermission('asignar-tarea')} 
+              currentUser={currentUser} // Pasar currentUser a TaskItem para lógica de asignación/edición
             />
           ))}
         </div>

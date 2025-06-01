@@ -27,77 +27,90 @@ import {
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/contexts/auth-context";
-import { Loader2, Pen, Trash2 } from "lucide-react";
+import { Loader2, Pen, Trash2, Users as UsersIcon } from "lucide-react"; // Added UsersIcon
 import type { User, Role as UserRoleType } from "@/lib/types";
-import { AddEditUserDialog, type UserFormValues } from "@/components/user-management/add-edit-user-dialog";
+import { AddEditUserDialog, type UserFormValues, editUserFormSchema } from "@/components/user-management/add-edit-user-dialog";
 import { UsersTable } from "@/components/user-management/users-table";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { fetchSignInMethodsForEmail } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { generateInitialsAvatar, dataUriToBlob, getRandomColor, getUserInitials } from "@/lib/utils";
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
+import { NAV_ITEMS } from "@/lib/constants"; // Import NAV_ITEMS
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"; // Import Card components
+import { useRouter } from "next/navigation"; // Import useRouter
 
-// Define the schema for adding a new user
+// Define the schema for adding a new user (ensure it's defined if not imported from dialog component)
 const addUserFormSchema = z.object({
     name: z.string().min(1, "El nombre es requerido"),
     email: z.string().email("Correo electrónico no válido"),
     password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-    role: z.string().min(1, "El rol es requerido"), // This is the roleId
+    role: z.string().min(1, "El rol es requerido"), 
 });
 
 
-// Componente de página principal para la gestión de usuarios
 export default function UserManagementPage() {
-    const [users, setUsers] = useState<User[]>([]);
+    const [usersData, setUsersData] = useState<User[]>([]); // Renamed to avoid conflict with Card's users prop if any
     const [roles, setRoles] = useState<UserRoleType[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingData, setIsLoadingData] = useState(true); // Combined loading state
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [userToEdit, setUserToEdit] = useState<User | null>(null);
-    const { currentUser: adminUser, signup, updateUserInFirestore } = useAuth();
+    
+    // CAMBIO: getAllUsers eliminado de useAuth()
+    const { currentUser: adminUser, signup, updateUserInFirestore, loading: authLoading, hasPermission } = useAuth();
     const { toast } = useToast();
+    const router = useRouter();
 
-    const fetchUsers = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const usersCollection = collection(db, "users");
-            const usersSnapshot = await getDocs(usersCollection);
-            const rolesCollectionRef = collection(db, "roles"); // Renamed for clarity
-            const rolesSnapshot = await getDocs(rolesCollectionRef);
-            const rolesMap = new Map(rolesSnapshot.docs.map(docSnap => [docSnap.id, docSnap.data().name]));
+    const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/user-management');
+    const PageIcon = navItem?.icon || UsersIcon;
 
-            const usersList = usersSnapshot.docs.map(docSnap => {
-                const data = docSnap.data();
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    roleName: rolesMap.get(data.role) || data.role
-                } as User;
-            });
-            setUsers(usersList);
-        } catch (error: any) {
-            console.error("Error fetching users:", error);
-            toast({ title: "Error al cargar usuarios", description: error.message || "No se pudieron cargar los usuarios.", variant: "destructive" });
-        } finally {
-            setIsLoading(false);
+    const fetchPageData = useCallback(async () => {
+        if (!adminUser) {
+            setIsLoadingData(false);
+            return;
         }
-    }, [toast]);
-
-    const fetchRoles = useCallback(async () => {
+        setIsLoadingData(true);
         try {
-            const rolesCollectionRef = collection(db, "roles");
-            const rolesSnapshot = await getDocs(rolesCollectionRef);
+            // CAMBIO: Llamar a getAllUsers importada
+            const [fetchedUsers, rolesSnapshot] = await Promise.all([
+                getAllUsers(),
+                getDocs(collection(db, "roles"))
+            ]);
+            
             const rolesList = rolesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })) as UserRoleType[];
             setRoles(rolesList);
+
+            const rolesMap = new Map(rolesList.map(role => [role.id, role.name]));
+            const usersWithRoleNames = fetchedUsers.map(user => ({
+                ...user,
+                roleName: rolesMap.get(user.role) || user.role // Fallback to role ID if name not found
+            }));       
+            setUsersData(usersWithRoleNames);
+
         } catch (error: any) {
-            console.error("Error fetching roles:", error);
-            toast({ title: "Error al cargar roles", description: error.message || "No se pudieron cargar los roles.", variant: "destructive" });
+            console.error("Error fetching page data:", error);
+            toast({ title: "Error al cargar datos", description: error.message || "No se pudieron cargar los datos necesarios.", variant: "destructive" });
+        } finally {
+            setIsLoadingData(false);
         }
-    }, [toast]);
+    // CAMBIO: dependencias ajustadas
+    }, [adminUser, toast]);
 
     useEffect(() => {
-        fetchUsers();
-        fetchRoles();
-    }, [fetchUsers, fetchRoles]);
+        if (!authLoading) {
+            if (!adminUser || !hasPermission('ver-usuarios')) { // Asumiendo permiso 'ver-usuarios'
+                router.push('/access-denied');
+                return;
+            }
+            fetchPageData();
+        } else if (!authLoading && !adminUser) {
+            setUsersData([]);
+            setRoles([]);
+            setIsLoadingData(false);
+        }
+    // CAMBIO: fetchPageData ahora es estable en sus dependencias
+    }, [authLoading, adminUser, hasPermission, router, fetchPageData]);
 
     const handleEditUser = useCallback((user: User) => {
         setUserToEdit(user);
@@ -105,6 +118,10 @@ export default function UserManagementPage() {
     }, []);
 
     const handleAddUser = () => {
+        if (!hasPermission('crear-usuario')) { // Asumiendo permiso 'crear-usuario'
+            toast({ title: "Acción no permitida", description: "No tienes permisos para crear usuarios.", variant: "destructive" });
+            return;
+        }
         setUserToEdit(null);
         setIsDialogOpen(true);
     };
@@ -115,119 +132,158 @@ export default function UserManagementPage() {
     };
 
     const handleDeleteUser = async (userId: string, userName: string) => {
-        if (!adminUser) {
-             toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive" });
+        if (!adminUser || !hasPermission('eliminar-usuario')) { // Asumiendo permiso 'eliminar-usuario'
+             toast({ title: "Acción no permitida", description: "No tienes permisos para eliminar usuarios.", variant: "destructive" });
              return;
         }
          if (window.confirm(`¿Estás seguro de que quieres eliminar a ${userName}? Esta acción no se puede deshacer.`)) {
             try {
                  await deleteDoc(doc(db, "users", userId));
-                 toast({ title: "Usuario Eliminado de Firestore", description: `${userName} ha sido eliminado de la base de datos.` });
-                 fetchUsers();
+                 toast({ title: "Usuario Eliminado", description: `${userName} ha sido eliminado de la base de datos.` });
+                 fetchPageData(); // Re-fetch data
             } catch (error: any) {
                 console.error("Error deleting user from Firestore:", error);
-                toast({ title: "Error al Eliminar Usuario", description: error.message || "No se pudo eliminar el usuario de Firestore.", variant: "destructive" });
+                toast({ title: "Error al Eliminar Usuario", description: error.message || "No se pudo eliminar el usuario.", variant: "destructive" });
             }
          }
     };
 
     const handleSaveUserWithAvatar = async (userData: UserFormValues) => {
         if (!adminUser) {
-            toast({ title: "Error de autenticación", description: "No se pudo verificar el administrador.", variant: "destructive" });
+            toast({ title: "Error de autenticación", variant: "destructive" });
             throw new Error("Usuario administrador no autenticado.");
         }
-        setIsLoading(true);
+        setIsLoadingData(true); // Usar el loading state general para el submit también
         try {
-            if (userToEdit && userToEdit.id) { // Modo Edición
-                const editData = userData as z.infer<typeof editUserFormSchema>; // Explicit type assertion
+            if (userToEdit && userToEdit.id) { 
+                if (!hasPermission('editar-usuario')) { // Asumiendo permiso 'editar-usuario'
+                    toast({ title: "Acción no permitida", description: "No tienes permisos para editar usuarios.", variant: "destructive" });
+                    throw new Error("Permiso denegado para editar usuario.");
+                }
+                const editData = userData as z.infer<typeof editUserFormSchema>; 
                 const roleIdToUpdate = editData.role;
-                
                 const updatedUserData: Partial<User> = {
                     name: editData.name,
                     role: roleIdToUpdate,
                 };
                 await updateUserInFirestore(userToEdit.id, updatedUserData, adminUser);
                 toast({ title: "Usuario Actualizado", description: `Los datos de ${editData.name} han sido actualizados.` });
-            } else { // Modo Añadir
-                const addData = userData as z.infer<typeof addUserFormSchema>; // Explicit type assertion
-
-                // Check if email already exists
+            } else { 
+                 if (!hasPermission('crear-usuario')) { // Doble chequeo
+                    toast({ title: "Acción no permitida", description: "No tienes permisos para crear usuarios.", variant: "destructive" });
+                    throw new Error("Permiso denegado para crear usuario.");
+                }
+                const addData = userData as z.infer<typeof addUserFormSchema>; 
                 const signInMethods = await fetchSignInMethodsForEmail(auth, addData.email);
                 if (signInMethods.length > 0) {
                   toast({ title: "Error", description: "El correo electrónico ya está registrado.", variant: "destructive" });
-                  setIsLoading(false); // Reset loading state
-                  return; // Stop submission
+                  setIsLoadingData(false);
+                  return;
                 }
-                
-                const newFirebaseUser = await signup(addData.email, addData.password, addData.name, addData.role);
+                // Asegúrate que el signup en AuthContext use el tenantId del adminUser si es necesario
+                const newFirebaseUser = await signup(addData.email, addData.password, addData.name, roles.find(r => r.id === addData.role)!, adminUser);
 
                 if (newFirebaseUser && newFirebaseUser.uid) {
-                    const initials = getUserInitials(addData.name); // Use full name
- // Corrected function name
+                    const initials = getUserInitials(addData.name); 
                     const avatarColor = getRandomColor();
- // Corrected function name
                     const avatarDataUri = generateInitialsAvatar(initials, avatarColor);
- // Corrected function name
                     const avatarBlob = dataUriToBlob(avatarDataUri);
                     const storage = getStorage();
                     const avatarRef = storageRef(storage, `avatars/${newFirebaseUser.uid}.png`);
-
                     await uploadBytes(avatarRef, avatarBlob);
                     const avatarUrl = await getDownloadURL(avatarRef);
-
                     const userDocRef = doc(db, "users", newFirebaseUser.uid);
-                    await updateDoc(userDocRef, { avatarUrl: avatarUrl });
-
-                    toast({ title: "Usuario Creado", description: `El usuario ${addData.name} ha sido creado con avatar.` });
+                    // Almacenar el tenantId del admin que crea el usuario, o el del tenant actual si es diferente.
+                    // Esto es crucial para la lógica multi-tenant.
+                    await updateDoc(userDocRef, { avatarUrl: avatarUrl, tenantId: adminUser.tenantId }); 
+                    toast({ title: "Usuario Creado", description: `El usuario ${addData.name} ha sido creado.` });
                 } else {
-                   // Handle case where signup might not return a user or uid, though signup should throw if it fails
-                   throw new Error("La creación del usuario en Firebase Authentication falló o no devolvió un UID.");
- // Remove this throw
- toast({ title: "Error de Creación de Usuario", description: "La creación del usuario falló o no se recibió un ID de usuario.", variant: "destructive" }); // Add this toast
- // You might want to add a return here if you don't want fetchUsers and handleCloseDialog to run
- return;
- }
+                   toast({ title: "Error de Creación", description: "La creación del usuario falló.", variant: "destructive" });
+                   return;
+                }
             }
-            fetchUsers();
+            fetchPageData(); // Re-fetch data
             handleCloseDialog();
         } catch (error: any) {
             console.error("Error guardando usuario:", error);
             toast({ title: "Error al Guardar Usuario", description: error.message || "Ocurrió un error.", variant: "destructive" });
-            // Do not re-throw here if you want the dialog to potentially stay open or manage loading state differently
         } finally {
-            setIsLoading(false);
+            setIsLoadingData(false);
         }
-    }; // Ensure this function is correctly closed
+    }; 
+
+    if (authLoading) {
+        return (
+            <div className="flex flex-col gap-6 w-full p-6 items-center justify-center h-screen">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p>Cargando autenticación...</p>
+            </div>
+        );
+    }
+
+    if (!adminUser || !hasPermission('ver-usuarios')) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen w-full p-6 text-center">
+                <UsersIcon size={48} className="text-muted-foreground mb-4" />
+                <h2 className="text-xl font-semibold">Acceso Denegado</h2>
+                <p className="text-muted-foreground">No tienes permisos para ver la gestión de usuarios.</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="container mx-auto py-10">
-            <h1 className="text-2xl font-bold mb-6">Gestión de Usuarios</h1>
-
-            <Button onClick={handleAddUser} className="mb-4">Añadir Nuevo Usuario</Button>
-
-            {isLoading && users.length === 0 ? (
-                <div className="flex justify-center items-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="ml-2">Cargando usuarios...</p>
-                </div>
-            ) : (
-                <UsersTable
-                    users={users}
-                    isLoading={isLoading}
-                    onEditUser={handleEditUser}
-                    onDeleteUser={(userId) => {
-                        const user = users.find(u => u.id === userId);
-                        if (user) handleDeleteUser(userId, user.name);
-                    }}
-                />
-            )}
+        // CAMBIO: Añadido w-full y estructura de Card
+        <div className="flex flex-col gap-6 w-full">
+            <Card className="shadow-lg w-full">
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                            <CardTitle className="flex items-center gap-2 text-2xl">
+                                <PageIcon className="h-6 w-6 text-primary" />
+                                {navItem?.label || "Gestión de Usuarios"}
+                            </CardTitle>
+                            <CardDescription>
+                                Administra los usuarios del sistema, sus roles y permisos.
+                            </CardDescription>
+                        </div>
+                        {hasPermission('crear-usuario') && (
+                            <Button onClick={handleAddUser} className="mt-4 sm:mt-0">
+                                Añadir Nuevo Usuario
+                            </Button>
+                        )}
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingData && usersData.length === 0 ? (
+                        <div className="flex justify-center items-center h-64">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <p className="ml-2">Cargando usuarios...</p>
+                        </div>
+                    ) : (
+                        <UsersTable
+                            users={usersData}
+                            isLoading={isLoadingData}
+                            onEditUser={handleEditUser} 
+                            onDeleteUser={(userId) => {
+                                const user = usersData.find(u => u.id === userId);
+                                if (user && user.name) handleDeleteUser(userId, user.name);
+                                else if (user) handleDeleteUser(userId, "este usuario") // Fallback si el nombre no está
+                            }}
+                            // Pasar permisos para acciones en la tabla
+                            canEditUsers={hasPermission('editar-usuario')}
+                            canDeleteUsers={hasPermission('eliminar-usuario')}
+                        />
+                    )}
+                </CardContent>
+            </Card>
 
             <AddEditUserDialog
                 isOpen={isDialogOpen}
-                onOpenChange={setIsDialogOpen} // This will call handleCloseDialog implicitly on close
+                onOpenChange={setIsDialogOpen}
                 userToEdit={userToEdit}
                 roles={roles}
                 onSave={handleSaveUserWithAvatar}
+                isLoadingSubmit={isLoadingData} // Pasar el estado de carga al diálogo
             />
         </div>
     );

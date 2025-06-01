@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 export default function CalendarPage() {
   const navItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/calendar');
@@ -37,22 +38,19 @@ export default function CalendarPage() {
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
 
   const { toast } = useToast();
-  const { currentUser, getAllUsers } = useAuth();
+  // CAMBIO: getAllUsers eliminado de useAuth()
+  const { currentUser, loading: authLoading, hasPermission } = useAuth(); 
   const router = useRouter();
 
-  const { loading, hasPermission } = useAuth(); // Get loading and hasPermission from auth context
-
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined; // Declare unsubscribe here
-    // Check permissions after authentication state is loaded
-    if (!loading) {
+    let unsubscribe: (() => void) | undefined;
+    if (!authLoading) {
       if (!currentUser || !hasPermission('ver-calendario')) {
-        router.push('/access-denied'); // Redirect if no permission
+        router.push('/access-denied');
       } else {
-        // If user is logged in and has permission, fetch meetings
-        setIsLoadingMeetings(false);
-              const q = query(collection(db, "meetings"), orderBy("createdAt", "desc")); // Define q inside the block
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        setIsLoadingMeetings(true); // Mover isLoading a true antes de la suscripción
+        const q = query(collection(db, "meetings"), orderBy("createdAt", "desc"));
+        unsubscribe = onSnapshot(q, (querySnapshot) => {
             const fetchedMeetings = querySnapshot.docs.map(docSnap => {
                 const data = docSnap.data();
                 return {
@@ -71,31 +69,27 @@ export default function CalendarPage() {
             toast({ title: "Error al Cargar Reuniones", variant: "destructive" });
             setIsLoadingMeetings(false);
         });
-
       }
     } else {
-        // Still loading, set loading state to true
         setIsLoadingMeetings(true);
     }
-
-    // Cleanup function
-    return () => { unsubscribe?.(); }; // Call unsubscribe only if it's defined
-  }, [currentUser, loading, hasPermission, router, toast]); // Added loading, hasPermission, router to dependencies
-
+    return () => { unsubscribe?.(); };
+  }, [currentUser, authLoading, hasPermission, router, toast]);
 
   const fetchSupportData = useCallback(async () => {
     setIsLoadingSupportData(true);
     try {
-      const [leadsSnapshot, contactsSnapshot, allUsers, resourcesData] = await Promise.all([
+      // CAMBIO: Llamar a getAllUsers importada
+      const [leadsSnapshot, contactsSnapshot, allUsersData, resourcesData] = await Promise.all([
         getDocs(collection(db, "leads")),
         getDocs(collection(db, "contacts")),
-        getAllUsers(),
+        getAllUsers(), 
         Promise.resolve(INITIAL_RESOURCES) 
       ]);
 
       setLeads(leadsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Lead)));
       setContacts(contactsSnapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as Contact)));
-      setUsers(allUsers);
+      setUsers(allUsersData); // CAMBIO: Usar el resultado de getAllUsers()
       setResources(resourcesData as Resource[]); 
       
     } catch (error) {
@@ -104,12 +98,16 @@ export default function CalendarPage() {
     } finally {
       setIsLoadingSupportData(false);
     }
-  }, [getAllUsers, toast]);
-
+  // CAMBIO: getAllUsers eliminado de dependencias
+  }, [toast]);
 
   useEffect(() => {
-    fetchSupportData();
-  }, [fetchSupportData]);
+    // Solo llamar a fetchSupportData si no estamos cargando la autenticación
+    // y el usuario está presente (implica que tiene permiso por el primer useEffect)
+    if(!authLoading && currentUser) {
+        fetchSupportData();
+    }
+  }, [authLoading, currentUser, fetchSupportData]); // fetchSupportData es ahora estable
 
   const handleSendGridEvents = async (meetingDataFromDialog: Omit<Meeting, 'id' | 'createdAt' | 'createdByUserId'>, existingMeetingId?: string) => {
     if (!currentUser) {
@@ -193,21 +191,27 @@ export default function CalendarPage() {
     setIsMeetingDialogOpen(true);
   };
 
-  const isLoading = isLoadingMeetings || isLoadingSupportData;
+  const isLoadingPage = authLoading || isLoadingMeetings || isLoadingSupportData; // CAMBIO: Usar authLoading
 
-    // Show a loading state or redirect based on auth and permissions
-  if (loading) {
+  if (authLoading) { // Mostrar loader principal si auth está cargando
     return (
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6 p-6 w-full">
         <Skeleton className="h-12 w-1/4" />
         <Skeleton className="h-80 w-full" />
       </div>
     );
   }
+  // Si llegamos aquí, authLoading es false.
+  // El primer useEffect ya manejó la redirección si no hay currentUser o no hay permiso.
+  // Si no hay currentUser en este punto (y authLoading es false), es un estado anómalo o ya redirigido.
+  if (!currentUser) {
+      return <div className="flex justify-center items-center h-screen w-full"><p>Verificando sesión...</p></div>;
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="shadow-lg">
+    // CAMBIO: Añadido w-full
+    <div className="flex flex-col gap-6 w-full">
+      <Card className="shadow-lg w-full"> {/* Asegurar que Card también pueda expandirse */} 
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
@@ -219,9 +223,12 @@ export default function CalendarPage() {
                 Gestiona tu agenda, programa reuniones, envía invitaciones y recibe recordatorios.
               </CardDescription>
             </div>
-            <Button onClick={openNewMeetingDialog} disabled={isLoading}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Nueva Reunión
-            </Button>
+            {/* Verificar permiso para crear reunión */} 
+            {hasPermission('crear-reunion') && (
+              <Button onClick={openNewMeetingDialog} disabled={isLoadingPage}> 
+                <PlusCircle className="mr-2 h-4 w-4" /> Nueva Reunión
+              </Button>
+            )}
           </div>
         </CardHeader>
       </Card>
@@ -232,7 +239,7 @@ export default function CalendarPage() {
           <TabsTrigger value="list"><List className="mr-2 h-4 w-4" />Lista de Reuniones</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar">
-           {isLoading ? (
+           {isLoadingPage ? ( // CAMBIO: Usar isLoadingPage
              <div className="space-y-4 mt-4">
                 <Skeleton className="h-80 w-full rounded-md" />
             </div>
@@ -264,11 +271,14 @@ export default function CalendarPage() {
                   resources={resources}
                   onEdit={openEditMeetingDialog}
                   onDelete={handleDeleteMeeting}
+                  // Asumiendo que MeetingListItem puede necesitar estos permisos
+                  canEdit={hasPermission('editar-reunion')}
+                  canDelete={hasPermission('eliminar-reunion')}
                 />
               ))}
             </div>
           ) : (
-            <Card className="mt-4">
+            <Card className="mt-4 w-full"> {/* Asegurar que Card también pueda expandirse */} 
               <CardContent className="pt-6 text-center text-muted-foreground">
                 No hay reuniones programadas.
               </CardContent>
@@ -277,7 +287,7 @@ export default function CalendarPage() {
         </TabsContent>
       </Tabs>
       
-       <Card className="mt-4 bg-amber-50 border-amber-200">
+       <Card className="mt-4 bg-amber-50 border-amber-200 w-full"> {/* Asegurar que Card también pueda expandirse */} 
         <CardHeader>
           <CardTitle className="flex items-center text-amber-700 text-lg gap-2">
             <AlertTriangle className="h-5 w-5" />
