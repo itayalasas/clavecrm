@@ -234,7 +234,7 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 w-full">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{quotesNavItem?.label || "Cotizaciones"}</h2>
         <AddEditQuoteDialog
