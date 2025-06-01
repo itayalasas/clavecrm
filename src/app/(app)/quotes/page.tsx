@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation"; 
-import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
+import { getAllUsers } from "@/lib/userUtils";
 
 export default function QuotesPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -35,7 +35,6 @@ export default function QuotesPage() {
   const [filterStatus, setFilterStatus] = useState<"Todos" | Quote['status']>("Todos");
 
   const quotesNavItem = NAV_ITEMS.find(item => item.href === '/quotes');
-  // CAMBIO: getAllUsers eliminado de useAuth()
   const { currentUser, loading: authLoading, hasPermission } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -106,7 +105,7 @@ export default function QuotesPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers(); // CAMBIO: Usa la función importada
+      const fetchedUsers = await getAllUsers(); 
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para cotizaciones:", error);
@@ -114,15 +113,15 @@ export default function QuotesPage() {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [toast]); // CAMBIO: getAllUsers eliminado de dependencias
+  }, [toast]); 
 
   useEffect(() => {
     if (!authLoading) {
-      if (currentUser && hasPermission('ver-cotizaciones')) { // Asegurar permiso antes de cargar
+      if (currentUser && hasPermission('ver-cotizaciones')) { 
         fetchLeads();
         fetchUsers();
         fetchQuotes();
-      } else if (!currentUser) { // Si no hay usuario (después de authLoading)
+      } else if (!currentUser) { 
         setQuotes([]);
         setIsLoadingQuotes(false);
         setLeads([]);
@@ -130,9 +129,7 @@ export default function QuotesPage() {
         setUsers([]);
         setIsLoadingUsers(false);
       }
-      // Si no tiene permiso, el otro useEffect ya lo redirigió.
     }
-  // CAMBIO: fetchUsers ya no cambia su referencia innecesariamente
   }, [authLoading, currentUser, fetchQuotes, fetchLeads, fetchUsers, hasPermission]);
 
   const handleSaveQuote = async (quoteData: Quote) => {
@@ -223,18 +220,15 @@ export default function QuotesPage() {
   const pageIsLoading = authLoading || isLoadingQuotes || isLoadingLeads || isLoadingUsers;
   
   if (authLoading) {
-    return <div className="flex justify-center items-center h-screen"><p>Cargando autenticación...</p></div>;
+    return <div className="flex justify-center items-center h-screen w-full"><p>Cargando autenticación...</p></div>;
   }
 
-  // El useEffect de permisos se encarga de la redirección.
-  // Si llegamos aquí y no hay currentUser o no tiene permiso, es un estado intermedio o ya se redirigió.
-  // No renderizar nada o un loader mínimo si aún no se ha redirigido.
   if (!currentUser || !hasPermission('ver-cotizaciones')) {
-    return <div className="flex justify-center items-center h-screen"><p>Verificando permisos...</p></div>;
+    return <div className="flex justify-center items-center h-screen w-full"><p>Verificando permisos...</p></div>;
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 w-full"> {/* Asegurado w-full */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold">{quotesNavItem?.label || "Cotizaciones"}</h2>
         <AddEditQuoteDialog
@@ -294,7 +288,6 @@ export default function QuotesPage() {
               preparedBy={users.find(u => u.id === quote.preparedByUserId)}
               onEdit={() => openEditQuoteDialog(quote)}
               onDelete={() => handleDeleteQuote(quote.id)}
-              // Asumiendo que QuoteListItem también podría necesitar estos permisos
               canEdit={hasPermission('editar-cotizacion')}
               canDelete={hasPermission('eliminar-cotizacion')}
             />
