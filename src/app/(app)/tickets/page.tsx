@@ -23,6 +23,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useSearchParams, useRouter } from "next/navigation";
+import { getAllUsers } from "@/lib/userUtils"; // <-- AÑADIDO: Importar la nueva función
 
 
 // Helper function to safely parse date fields from Firestore
@@ -70,7 +71,8 @@ export default function TicketsPage() {
   const [ticketToOpen, setTicketToOpen] = useState<string | null>(null); 
 
  const { toast } = useToast();
-  const { getAllUsers, currentUser, loading: authLoading } = useAuth();
+  // CAMBIO: getAllUsers eliminado de useAuth()
+  const { currentUser, loading: authLoading, hasPermission, loading: permissionsLoading } = useAuth();
   const ticketsNavItem = NAV_ITEMS.flatMap(item => item.subItems || item).find(item => item.href === '/tickets');
   const PageIcon = ticketsNavItem?.icon || ClipboardList;
   const searchParams = useSearchParams();
@@ -95,7 +97,7 @@ export default function TicketsPage() {
             description: data.description,
             status: data.status,
             priority: data.priority,
-            createdAt: parseFirestoreDate(data.createdAt) || new Date(0).toISOString(), // Fallback for createdAt
+            createdAt: parseFirestoreDate(data.createdAt) || new Date(0).toISOString(), 
             updatedAt: parseFirestoreDate(data.updatedAt),
             reporterUserId: data.reporterUserId,
             assigneeUserId: data.assigneeUserId || undefined,
@@ -145,7 +147,7 @@ export default function TicketsPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const fetchedUsers = await getAllUsers();
+      const fetchedUsers = await getAllUsers(); // CAMBIO: Usa la función importada
       setUsers(fetchedUsers);
     } catch (error) {
       console.error("Error al obtener usuarios para la página de tickets:", error);
@@ -157,7 +159,7 @@ export default function TicketsPage() {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [getAllUsers, toast]);
+  }, [toast]); // CAMBIO: getAllUsers eliminado de dependencias
 
   const fetchLeads = useCallback(async () => {
     setIsLoadingLeads(true);
@@ -196,22 +198,13 @@ export default function TicketsPage() {
     }
   }, [toast]);
 
-
-  // Permission validation
-  const { hasPermission, loading: permissionsLoading } = useAuth();
-
   useEffect(() => {
-    // Wait until both auth and permissions are loaded
     if (!authLoading && !permissionsLoading) {
-      // Check if the user is authenticated and has the 'ver-tickets' permission
       if (!currentUser || !hasPermission('ver-tickets')) {
-        // If not, redirect to the access denied page
         router.push('/access-denied'); 
       }
     }
   }, [currentUser, authLoading, permissionsLoading, hasPermission, router]);
-
-
 
   useEffect(() => {
     let unsubscribeTickets: (() => void) | undefined;
@@ -235,7 +228,8 @@ export default function TicketsPage() {
         unsubscribeTickets();
       }
     };
-  }, [authLoading, currentUser, fetchUsers, fetchLeads, fetchTickets, fetchSlasAndQueues]);
+  // CAMBIO: fetchUsers ya no cambia su referencia si getAllUsers es importado directamente
+  }, [authLoading, currentUser, fetchLeads, fetchTickets, fetchSlasAndQueues, fetchUsers]);
 
   useEffect(() => {
     const ticketIdFromQuery = searchParams.get('ticketId');
@@ -243,18 +237,13 @@ export default function TicketsPage() {
         const ticketToAutoOpen = tickets.find(t => t.id === ticketIdFromQuery);
         if (ticketToAutoOpen) {
             setTicketToOpen(ticketIdFromQuery);
-             // Optionally clear the query parameter after use
-            // const current = new URLSearchParams(Array.from(searchParams.entries()));
-            // current.delete('ticketId');
-            // router.replace(`${pathname}?${current.toString()}`);
         } else {
-            setTicketToOpen(null); // Ticket ID from query not found in list
+            setTicketToOpen(null); 
         }
     } else if (!ticketIdFromQuery) {
-        setTicketToOpen(null); // No ticketId in query
+        setTicketToOpen(null); 
     }
   }, [searchParams, tickets, router]);
-
 
   const handleSaveTicket = async (ticketData: Ticket) => {
     if (!currentUser) {
@@ -263,14 +252,12 @@ export default function TicketsPage() {
     }
     setIsSubmittingTicket(true);
     const isEditing = tickets.some(t => t.id === ticketData.id);
-
-    const ticketToSave: Partial<Ticket> = { // Use Partial<Ticket> for flexibility
+    const ticketToSave: Partial<Ticket> = {
       ...ticketData,
       solutionDescription: ticketData.solutionDescription || "",
       solutionAttachments: ticketData.solutionAttachments || [],
       updatedAt: new Date().toISOString(),
     };
-     
     if (ticketData.status === 'Resuelto' && (!ticketData.resolvedAt || !isEditing)) {
         ticketToSave.resolvedAt = new Date().toISOString();
     }
@@ -280,11 +267,8 @@ export default function TicketsPage() {
             ticketToSave.resolvedAt = new Date().toISOString();
         }
     }
-
-
     try {
       const ticketDocRef = doc(db, "tickets", ticketToSave.id!);
-      
       const firestoreData:any = {};
       for (const key in ticketToSave) {
         if (ticketToSave[key as keyof Ticket] !== undefined) {
@@ -303,7 +287,6 @@ export default function TicketsPage() {
           }
         }
       }
-      // Ensure potentially null-ish fields are explicitly null for Firestore if they are not set
       firestoreData.assigneeUserId = firestoreData.assigneeUserId || null;
       firestoreData.relatedLeadId = firestoreData.relatedLeadId || null;
       firestoreData.slaId = firestoreData.slaId || null;
@@ -312,10 +295,7 @@ export default function TicketsPage() {
       firestoreData.solutionAttachments = firestoreData.solutionAttachments || [];
       firestoreData.comments = firestoreData.comments || [];
       firestoreData.appliedEscalationRuleIds = firestoreData.appliedEscalationRuleIds || [];
-
-
       await setDoc(ticketDocRef, firestoreData, { merge: true });
-
       toast({
         title: isEditing ? "Ticket Actualizado" : "Ticket Creado",
         description: `El ticket "${ticketToSave.title}" ha sido ${isEditing ? 'actualizado' : 'creado'} exitosamente.`,
@@ -343,9 +323,7 @@ export default function TicketsPage() {
     if (!ticketToDelete) return;
     const ticketId = ticketToDelete.id;
     const ticketTitle = ticketToDelete.title;
-
     setIsDeleteDialogOpen(false);
-
     try {
       if (ticketToDelete.attachments && ticketToDelete.attachments.length > 0) {
         for (const attachment of ticketToDelete.attachments) {
@@ -361,11 +339,9 @@ export default function TicketsPage() {
           } catch (e) { console.warn("Falló al eliminar adjunto de la solución", attachment.url, e); }
         }
       }
-
       const commentsColRef = collection(db, "tickets", ticketId, "comments");
       const commentsSnapshot = await getDocs(commentsColRef);
       const batch = writeBatch(db);
-
       for (const commentDoc of commentsSnapshot.docs) {
           const commentData = commentDoc.data() as Comment;
           if (commentData.attachments) {
@@ -379,10 +355,8 @@ export default function TicketsPage() {
           batch.delete(commentDoc.ref);
       }
       await batch.commit();
-
       const ticketDocRef = doc(db, "tickets", ticketId);
       await deleteDoc(ticketDocRef);
-
       toast({
         title: "Ticket Eliminado",
         description: `El ticket "${ticketTitle}" ha sido eliminado exitosamente.`,
@@ -407,7 +381,6 @@ export default function TicketsPage() {
     }
     const ticket = tickets.find(t => t.id === ticketId);
     if (!ticket) return;
-
     const newComment: Omit<Comment, 'id'> & { createdAt: Timestamp } = {
       userId: currentUser.id,
       userName: currentUser.name || "Usuario Anónimo",
@@ -416,11 +389,9 @@ export default function TicketsPage() {
       createdAt: Timestamp.now(),
       attachments: commentAttachments,
     };
-
     try {
       const commentDocRef = doc(collection(db, "tickets", ticketId, "comments"));
       await setDoc(commentDocRef, newComment);
-
       const ticketDocRef = doc(db, "tickets", ticketId);
       const updateData: Partial<Ticket> = { updatedAt: new Date().toISOString() };
       if (currentUser.id !== ticket.reporterUserId && !ticket.firstResponseAt) {
@@ -435,7 +406,6 @@ export default function TicketsPage() {
         ...(updateData.firstResponseAt && { firstResponseAt: Timestamp.fromDate(new Date(updateData.firstResponseAt)) }),
         ...(updateData.status && { status: updateData.status })
       });
-
       toast({title: "Comentario Añadido", description: "Tu comentario ha sido añadido al ticket."});
     } catch (error) {
       console.error("Error al añadir comentario:", error);
@@ -458,19 +428,16 @@ export default function TicketsPage() {
        toast({title: "Error", description: "Ticket no encontrado.", variant: "destructive"});
        return;
     }
-
     if (currentUser.id !== ticketToUpdate.assigneeUserId && currentUser?.role !== 'admin' && currentUser?.role !== 'supervisor') {
         toast({title: "Acción no permitida", description: "Solo el usuario asignado o un administrador/supervisor puede registrar la solución.", variant: "destructive"});
         return;
     }
-
     const updatedTicketData: any = {
         solutionDescription: solutionDescriptionParam,
         solutionAttachments: solutionAttachmentsParam,
         status: statusParam,
         updatedAt: Timestamp.now(),
     };
-
     if (statusParam === 'Resuelto' && !parseFirestoreDate(ticketToUpdate.resolvedAt)) {
       updatedTicketData.resolvedAt = Timestamp.now();
     }
@@ -480,8 +447,6 @@ export default function TicketsPage() {
         updatedTicketData.resolvedAt = Timestamp.now();
       }
     }
-
-
     try {
         const ticketDocRef = doc(db, "tickets", ticketId);
         await updateDoc(ticketDocRef, updatedTicketData ); 
@@ -491,7 +456,6 @@ export default function TicketsPage() {
         toast({title: "Error al Guardar Solución", description: "No se pudo guardar la solución del ticket.", variant: "destructive"});
     }
   };
-
 
   const openNewTicketDialog = () => {
     setEditingTicket(null);
@@ -505,7 +469,6 @@ export default function TicketsPage() {
 
   const filteredTickets = useMemo(() => {
     if (!currentUser) return [];
-
     return tickets
       .filter(ticket => {
         if (currentUser.role === 'admin' || currentUser.role === 'supervisor') {
@@ -533,7 +496,8 @@ export default function TicketsPage() {
  const isLoading = authLoading || permissionsLoading || isLoadingUsers || isLoadingTickets || isLoadingLeads || isLoadingSlasAndQueues;
 
   return (
-    <div className="flex flex-col gap-6">
+    // CAMBIO: Añadido w-full
+    <div className="flex flex-col gap-6 w-full">
       <Card className="shadow-lg">
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
