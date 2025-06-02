@@ -11,7 +11,7 @@ const featureCards = [
   {
     title: "Complemento Smart Docs",
     description: "Cierra tratos más rápido con nuestra gestión de documentos.",
-    icon: FileText,
+    icon: "/smart-doc.png", // Changed from FileText
     dataAiHint: "document management",
   },
   {
@@ -87,7 +87,7 @@ export default function HomePage() {
                   <CardHeader>
                     <div className="flex items-center justify-center mb-4">
                        <Image 
-                        src={`https://placehold.co/80x80.png?text=${feature.icon.displayName || 'Icon'}`} 
+                        src={typeof feature.icon === 'string' ? feature.icon : `https://placehold.co/80x80.png?text=${feature.icon.displayName || 'Icon'}`} 
                         alt={`${feature.title} icon`} 
                         width={64} 
                         height={64} 
